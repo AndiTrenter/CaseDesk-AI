@@ -14,6 +14,7 @@ const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'nav.dashboard' },
   { path: '/documents', icon: FileText, label: 'nav.documents' },
   { path: '/cases', icon: Briefcase, label: 'nav.cases' },
+  { path: '/emails', icon: Mail, label: 'nav.emails' },
   { path: '/tasks', icon: CheckSquare, label: 'nav.tasks' },
   { path: '/calendar', icon: Calendar, label: 'nav.calendar' },
   { path: '/ai', icon: Bot, label: 'nav.aiChat' },

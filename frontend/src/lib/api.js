@@ -179,9 +179,38 @@ export const mailAPI = {
   deleteAccount: (id) => api.delete(`/mail/accounts/${id}`),
 };
 
+// Emails
+export const emailsAPI = {
+  list: (params) => api.get('/emails', { params }),
+  get: (id) => api.get(`/emails/${id}`),
+  fetch: (accountId) => api.post(`/emails/fetch/${accountId}`),
+  process: (id) => api.post(`/emails/${id}/process`),
+  link: (id, caseId) => {
+    const formData = new FormData();
+    formData.append('case_id', caseId);
+    return api.post(`/emails/${id}/link`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  importAttachment: (emailId, attachmentId, caseId) => {
+    const formData = new FormData();
+    if (caseId) formData.append('case_id', caseId);
+    return api.post(`/emails/${emailId}/import-attachment/${attachmentId}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  delete: (id) => api.delete(`/emails/${id}`),
+};
+
 // Dashboard
 export const dashboardAPI = {
   getStats: () => api.get('/dashboard/stats'),
+};
+
+// Export
+export const exportAPI = {
+  all: () => api.get('/export/all'),
+  case: (caseId) => api.get(`/export/case/${caseId}`),
 };
 
 // Health

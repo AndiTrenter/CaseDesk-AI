@@ -1336,6 +1336,7 @@ async def get_dashboard_stats(user: dict = Depends(require_auth)):
     open_cases = await db.cases.count_documents({"user_id": user_id, "status": CaseStatus.OPEN})
     documents_count = await db.documents.count_documents({"user_id": user_id})
     pending_tasks = await db.tasks.count_documents({"user_id": user_id, "status": {"$ne": TaskStatus.DONE}})
+    emails_count = await db.emails.count_documents({"user_id": user_id})
     
     # Upcoming events
     upcoming_events = await db.events.find(
@@ -1355,14 +1356,270 @@ async def get_dashboard_stats(user: dict = Depends(require_auth)):
         {"_id": 0}
     ).sort("due_date", 1).limit(5).to_list(5)
     
+    # Recent emails
+    recent_emails = await db.emails.find(
+        {"user_id": user_id},
+        {"_id": 0}
+    ).sort("received_at", -1).limit(5).to_list(5)
+    
     return {
         "cases": {"total": cases_count, "open": open_cases},
         "documents": {"total": documents_count},
         "tasks": {"pending": pending_tasks},
+        "emails": {"total": emails_count},
         "upcoming_events": upcoming_events,
         "recent_documents": recent_documents,
-        "urgent_tasks": urgent_tasks
+        "urgent_tasks": urgent_tasks,
+        "recent_emails": recent_emails
     }
+
+
+# ==================== Email Operations ====================
+
+@api_router.get("/emails")
+async def list_emails(
+    case_id: Optional[str] = None,
+    unread_only: bool = False,
+    user: dict = Depends(require_auth)
+):
+    """List emails for current user"""
+    query = {"user_id": user["id"]}
+    if case_id:
+        query["case_id"] = case_id
+    if unread_only:
+        query["is_read"] = False
+    
+    emails = await db.emails.find(query, {"_id": 0}).sort("received_at", -1).to_list(500)
+    return emails
+
+
+@api_router.get("/emails/{email_id}")
+async def get_email(email_id: str, user: dict = Depends(require_auth)):
+    """Get email details"""
+    email_doc = await db.emails.find_one(
+        {"id": email_id, "user_id": user["id"]},
+        {"_id": 0}
+    )
+    if not email_doc:
+        raise HTTPException(status_code=404, detail="Email not found")
+    
+    # Mark as read
+    if not email_doc.get("is_read"):
+        await db.emails.update_one(
+            {"id": email_id},
+            {"$set": {"is_read": True}}
+        )
+    
+    return email_doc
+
+
+@api_router.post("/emails/fetch/{account_id}")
+async def fetch_emails(account_id: str, user: dict = Depends(require_auth)):
+    """Fetch new emails from mail account"""
+    from email_service import EmailService
+    
+    email_service = EmailService(db)
+    result = await email_service.fetch_emails(account_id, user["id"])
+    
+    if result.get("success"):
+        await log_action(user["id"], "fetch_emails", "mail_account", account_id, 
+                        {"fetched_count": result.get("fetched_count", 0)})
+    
+    return result
+
+
+@api_router.post("/emails/{email_id}/process")
+async def process_email(email_id: str, user: dict = Depends(require_auth)):
+    """Process email with AI for summary and deadlines"""
+    from email_service import EmailService
+    from ai_service import get_ai_service
+    
+    email_service = EmailService(db)
+    ai_service = await get_ai_service(db)
+    
+    result = await email_service.process_email_with_ai(email_id, user["id"], ai_service)
+    return result
+
+
+@api_router.post("/emails/{email_id}/link")
+async def link_email_to_case(
+    email_id: str,
+    case_id: str = Form(...),
+    user: dict = Depends(require_auth)
+):
+    """Link email to a case"""
+    from email_service import EmailService
+    
+    email_service = EmailService(db)
+    result = await email_service.link_email_to_case(email_id, case_id, user["id"])
+    
+    if result.get("success"):
+        await log_action(user["id"], "link_email", "email", email_id, {"case_id": case_id})
+    
+    return result
+
+
+@api_router.post("/emails/{email_id}/import-attachment/{attachment_id}")
+async def import_attachment(
+    email_id: str,
+    attachment_id: str,
+    case_id: str = Form(None),
+    user: dict = Depends(require_auth)
+):
+    """Import email attachment as document"""
+    from email_service import EmailService
+    
+    email_service = EmailService(db)
+    result = await email_service.import_attachment_as_document(
+        email_id, attachment_id, user["id"], case_id
+    )
+    
+    if result.get("success"):
+        await log_action(user["id"], "import_attachment", "document", result.get("document_id"))
+    
+    return result
+
+
+@api_router.delete("/emails/{email_id}")
+async def delete_email(email_id: str, user: dict = Depends(require_auth)):
+    """Delete email"""
+    result = await db.emails.delete_one({"id": email_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Email not found")
+    
+    await log_action(user["id"], "delete_email", "email", email_id)
+    return {"success": True, "message": "Email deleted"}
+
+
+# ==================== Document Preview ====================
+
+@api_router.get("/documents/{document_id}/preview")
+async def get_document_preview(document_id: str, user: dict = Depends(require_auth)):
+    """Get document preview data"""
+    document = await db.documents.find_one(
+        {"id": document_id, "user_id": user["id"]},
+        {"_id": 0}
+    )
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    preview_data = {
+        "id": document["id"],
+        "display_name": document.get("display_name", document["original_filename"]),
+        "mime_type": document["mime_type"],
+        "size": document["size"],
+        "ocr_text": document.get("ocr_text"),
+        "ai_summary": document.get("ai_summary"),
+        "tags": document.get("tags", []),
+        "metadata": document.get("metadata", {}),
+        "sender": document.get("sender"),
+        "document_date": document.get("document_date"),
+        "deadlines": document.get("deadlines", []),
+        "importance": document.get("importance")
+    }
+    
+    return preview_data
+
+
+@api_router.get("/documents/{document_id}/download")
+async def download_document(document_id: str, user: dict = Depends(require_auth)):
+    """Get document file for download"""
+    from fastapi.responses import FileResponse
+    
+    document = await db.documents.find_one(
+        {"id": document_id, "user_id": user["id"]},
+        {"_id": 0}
+    )
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    file_path = document["storage_path"]
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    return FileResponse(
+        file_path,
+        filename=document.get("display_name", document["original_filename"]),
+        media_type=document["mime_type"]
+    )
+
+
+# ==================== Data Export ====================
+
+@api_router.get("/export/all")
+async def export_all_data(user: dict = Depends(require_auth)):
+    """Export all user data as JSON"""
+    user_id = user["id"]
+    
+    # Gather all user data
+    export_data = {
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "user": {
+            "id": user["id"],
+            "email": user.get("email"),
+            "username": user.get("username"),
+            "full_name": user.get("full_name")
+        },
+        "cases": await db.cases.find({"user_id": user_id}, {"_id": 0}).to_list(10000),
+        "documents": [],
+        "tasks": await db.tasks.find({"user_id": user_id}, {"_id": 0}).to_list(10000),
+        "events": await db.events.find({"user_id": user_id}, {"_id": 0}).to_list(10000),
+        "drafts": await db.drafts.find({"user_id": user_id}, {"_id": 0}).to_list(10000),
+        "emails": await db.emails.find({"user_id": user_id}, {"_id": 0}).to_list(10000)
+    }
+    
+    # Documents without OCR text (too large)
+    docs = await db.documents.find({"user_id": user_id}, {"_id": 0, "ocr_text": 0}).to_list(10000)
+    export_data["documents"] = docs
+    
+    await log_action(user_id, "export_data", "user", user_id)
+    
+    return export_data
+
+
+@api_router.get("/export/case/{case_id}")
+async def export_case(case_id: str, user: dict = Depends(require_auth)):
+    """Export single case with all related data"""
+    user_id = user["id"]
+    
+    case = await db.cases.find_one({"id": case_id, "user_id": user_id}, {"_id": 0})
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    
+    # Get related documents
+    documents = await db.documents.find(
+        {"case_id": case_id, "user_id": user_id},
+        {"_id": 0, "ocr_text": 0}
+    ).to_list(1000)
+    
+    # Get related tasks
+    tasks = await db.tasks.find(
+        {"case_id": case_id, "user_id": user_id},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    # Get related emails
+    emails = await db.emails.find(
+        {"case_id": case_id, "user_id": user_id},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    # Get related events
+    events = await db.events.find(
+        {"case_id": case_id, "user_id": user_id},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    export_data = {
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "case": case,
+        "documents": documents,
+        "tasks": tasks,
+        "emails": emails,
+        "events": events
+    }
+    
+    return export_data
 
 
 # Include router

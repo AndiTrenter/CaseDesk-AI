@@ -13,6 +13,7 @@ import Documents from './pages/Documents';
 import Cases from './pages/Cases';
 import Tasks from './pages/Tasks';
 import Calendar from './pages/Calendar';
+import Emails from './pages/Emails';
 import AIChat from './pages/AIChat';
 import Settings from './pages/Settings';
 import Layout from './components/Layout';
@@ -87,6 +88,7 @@ const AppRoutes = () => {
         <Route path="cases" element={<Cases />} />
         <Route path="tasks" element={<Tasks />} />
         <Route path="calendar" element={<Calendar />} />
+        <Route path="emails" element={<Emails />} />
         <Route path="ai" element={<AIChat />} />
         <Route path="settings" element={<Settings />} />
       </Route>

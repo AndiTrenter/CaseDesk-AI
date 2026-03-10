@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { 
   Settings as SettingsIcon, Globe, Shield, Brain, 
-  User, Moon, Sun, Check, AlertTriangle
+  User, Moon, Sun, Check, AlertTriangle, Mail, Plus, Trash2, Download
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -16,8 +16,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { settingsAPI } from '../lib/api';
+import { settingsAPI, mailAPI, exportAPI } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 
@@ -39,10 +45,30 @@ export default function Settings() {
     theme: 'dark',
     notifications_enabled: true
   });
+  
+  const [mailAccounts, setMailAccounts] = useState([]);
+  const [mailDialogOpen, setMailDialogOpen] = useState(false);
+  const [newMailAccount, setNewMailAccount] = useState({
+    email: '',
+    display_name: '',
+    imap_server: '',
+    imap_port: 993,
+    password: ''
+  });
 
   useEffect(() => {
     loadSettings();
+    loadMailAccounts();
   }, []);
+  
+  const loadMailAccounts = async () => {
+    try {
+      const res = await mailAPI.listAccounts();
+      setMailAccounts(res.data);
+    } catch (error) {
+      console.error('Failed to load mail accounts:', error);
+    }
+  };
 
   const loadSettings = async () => {
     try {
@@ -104,6 +130,50 @@ export default function Settings() {
     }
     setSaving(false);
   };
+  
+  const handleAddMailAccount = async () => {
+    try {
+      await mailAPI.createAccount(newMailAccount);
+      toast.success('E-Mail-Konto hinzugefügt');
+      setMailDialogOpen(false);
+      setNewMailAccount({ email: '', display_name: '', imap_server: '', imap_port: 993, password: '' });
+      loadMailAccounts();
+    } catch (error) {
+      toast.error('Fehler beim Hinzufügen des E-Mail-Kontos');
+    }
+  };
+  
+  const handleDeleteMailAccount = async (id) => {
+    try {
+      await mailAPI.deleteAccount(id);
+      toast.success('E-Mail-Konto gelöscht');
+      loadMailAccounts();
+    } catch (error) {
+      toast.error('Fehler beim Löschen');
+    }
+  };
+  
+  const handleExportData = async () => {
+    try {
+      toast.info('Daten werden exportiert...');
+      const response = await exportAPI.all();
+      
+      // Download as JSON file
+      const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `casedesk-export-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success('Export erfolgreich');
+    } catch (error) {
+      toast.error('Export fehlgeschlagen');
+    }
+  };
 
   if (loading) {
     return (
@@ -123,10 +193,14 @@ export default function Settings() {
         </div>
 
         <Tabs defaultValue="user" className="space-y-6">
-          <TabsList className="bg-white/5 border border-white/10">
+          <TabsList className="bg-white/5 border border-white/10 flex-wrap">
             <TabsTrigger value="user" className="data-[state=active]:bg-white/10">
               <User className="w-4 h-4 mr-2" />
               {t('settings.user')}
+            </TabsTrigger>
+            <TabsTrigger value="email" className="data-[state=active]:bg-white/10">
+              <Mail className="w-4 h-4 mr-2" />
+              E-Mail
             </TabsTrigger>
             {user?.role === 'admin' && (
               <>
@@ -140,6 +214,10 @@ export default function Settings() {
                 </TabsTrigger>
               </>
             )}
+            <TabsTrigger value="export" className="data-[state=active]:bg-white/10">
+              <Download className="w-4 h-4 mr-2" />
+              Export
+            </TabsTrigger>
           </TabsList>
 
           {/* User Settings */}
@@ -399,8 +477,172 @@ export default function Settings() {
               </motion.div>
             </TabsContent>
           )}
+
+          {/* Email Settings */}
+          <TabsContent value="email">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-[#121212] border border-white/5 rounded-xl p-6 space-y-6"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">E-Mail-Konten</h3>
+                  <p className="text-gray-500 text-sm">IMAP-Konten für E-Mail-Abruf konfigurieren</p>
+                </div>
+                <Button 
+                  onClick={() => setMailDialogOpen(true)}
+                  className="btn-primary flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" /> Konto hinzufügen
+                </Button>
+              </div>
+              
+              {mailAccounts.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Mail className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>Keine E-Mail-Konten konfiguriert</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {mailAccounts.map(account => (
+                    <div 
+                      key={account.id}
+                      className="flex items-center justify-between p-4 bg-white/5 rounded-lg"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                          <Mail className="w-5 h-5 text-blue-400" />
+                        </div>
+                        <div>
+                          <p className="text-white font-medium">{account.display_name}</p>
+                          <p className="text-gray-500 text-sm">{account.email}</p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteMailAccount(account.id)}
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          </TabsContent>
+
+          {/* Export Settings */}
+          <TabsContent value="export">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-[#121212] border border-white/5 rounded-xl p-6 space-y-6"
+            >
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-2">Daten exportieren</h3>
+                <p className="text-gray-500 text-sm">
+                  Exportieren Sie alle Ihre Daten als JSON-Datei für Backup oder Migration.
+                </p>
+              </div>
+              
+              <div className="p-4 bg-white/5 rounded-lg">
+                <h4 className="text-white font-medium mb-2">Vollständiger Export</h4>
+                <p className="text-gray-400 text-sm mb-4">
+                  Enthält: Fälle, Dokumente (ohne Dateien), Aufgaben, Termine, E-Mails, Entwürfe
+                </p>
+                <Button 
+                  onClick={handleExportData}
+                  className="btn-primary flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" /> Alle Daten exportieren
+                </Button>
+              </div>
+              
+              <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                <p className="text-amber-300 text-sm">
+                  Hinweis: Der Export enthält keine Dateien (PDFs, Bilder). Diese müssen separat gesichert werden.
+                </p>
+              </div>
+            </motion.div>
+          </TabsContent>
         </Tabs>
       </div>
+      
+      {/* Add Mail Account Dialog */}
+      <Dialog open={mailDialogOpen} onOpenChange={setMailDialogOpen}>
+        <DialogContent className="bg-[#121212] border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle>E-Mail-Konto hinzufügen</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label className="text-gray-300">E-Mail-Adresse</Label>
+              <Input
+                type="email"
+                value={newMailAccount.email}
+                onChange={(e) => setNewMailAccount({ ...newMailAccount, email: e.target.value })}
+                className="mt-1 bg-black/30 border-white/10 text-white"
+                placeholder="ihre@email.de"
+              />
+            </div>
+            
+            <div>
+              <Label className="text-gray-300">Anzeigename</Label>
+              <Input
+                value={newMailAccount.display_name}
+                onChange={(e) => setNewMailAccount({ ...newMailAccount, display_name: e.target.value })}
+                className="mt-1 bg-black/30 border-white/10 text-white"
+                placeholder="Geschäftlich"
+              />
+            </div>
+            
+            <div>
+              <Label className="text-gray-300">IMAP-Server</Label>
+              <Input
+                value={newMailAccount.imap_server}
+                onChange={(e) => setNewMailAccount({ ...newMailAccount, imap_server: e.target.value })}
+                className="mt-1 bg-black/30 border-white/10 text-white"
+                placeholder="imap.example.com"
+              />
+            </div>
+            
+            <div>
+              <Label className="text-gray-300">IMAP-Port</Label>
+              <Input
+                type="number"
+                value={newMailAccount.imap_port}
+                onChange={(e) => setNewMailAccount({ ...newMailAccount, imap_port: parseInt(e.target.value) })}
+                className="mt-1 bg-black/30 border-white/10 text-white"
+                placeholder="993"
+              />
+            </div>
+            
+            <div>
+              <Label className="text-gray-300">Passwort</Label>
+              <Input
+                type="password"
+                value={newMailAccount.password}
+                onChange={(e) => setNewMailAccount({ ...newMailAccount, password: e.target.value })}
+                className="mt-1 bg-black/30 border-white/10 text-white"
+                placeholder="••••••••"
+              />
+            </div>
+            
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="ghost" onClick={() => setMailDialogOpen(false)} className="text-gray-400">
+                Abbrechen
+              </Button>
+              <Button onClick={handleAddMailAccount} className="btn-primary">
+                Hinzufügen
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
