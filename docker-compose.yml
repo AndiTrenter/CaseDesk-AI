@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: casedesk-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-casedesk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-casedesk_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-casedesk}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-casedesk}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: casedesk-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: casedesk-backend
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-casedesk}:${POSTGRES_PASSWORD:-casedesk_secret}@postgres:5432/${POSTGRES_DB:-casedesk}
+      REDIS_URL: redis://redis:6379
+      SECRET_KEY: ${SECRET_KEY:-change-this-in-production}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      UPLOAD_DIR: /app/uploads
+      OCR_ENABLED: ${OCR_ENABLED:-true}
+    volumes:
+      - uploads_data:/app/uploads
+      - ./backend:/app
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: casedesk-frontend
+    environment:
+      REACT_APP_BACKEND_URL: ${FRONTEND_BACKEND_URL:-http://localhost:8001}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # OCR Service using Tesseract
+  ocr:
+    build:
+      context: ./ocr
+      dockerfile: Dockerfile
+    container_name: casedesk-ocr
+    volumes:
+      - uploads_data:/app/uploads:ro
+    ports:
+      - "8002:8002"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:
+
+networks:
+  default:
+    name: casedesk-network

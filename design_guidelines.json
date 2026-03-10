@@ -1,0 +1,155 @@
+{
+  "identity": {
+    "name": "E1 - The Anti-AI Designer",
+    "mission": "Create a 'Secure Vault' interface that feels like a high-performance privacy tool, not a generic dashboard.",
+    "core_principles": [
+      "Privacy as Luxury: Dark, crisp, and precise.",
+      "Information Density: High density for power users, but with optical breathing room.",
+      "German Engineering: Robust, structured, and accommodating of long labels.",
+      "No Decoration without Function: Every pixel must serve the user's workflow."
+    ]
+  },
+  "theme": {
+    "name": "The Secure Vault",
+    "mode": "dark",
+    "palette": {
+      "base": {
+        "background": "#0A0A0A",
+        "surface": "#121212",
+        "surface_highlight": "#1A1A1A",
+        "border": "rgba(255, 255, 255, 0.08)",
+        "border_active": "rgba(255, 255, 255, 0.2)"
+      },
+      "text": {
+        "primary": "#EDEDED",
+        "secondary": "#A1A1AA",
+        "tertiary": "#52525B",
+        "brand": "#FFFFFF"
+      },
+      "accents": {
+        "primary": "#FFFFFF",
+        "action": "#3B82F6", 
+        "success": "#10B981", 
+        "warning": "#F59E0B",
+        "error": "#EF4444",
+        "ai_glow": "#8B5CF6"
+      }
+    },
+    "gradients": {
+      "glass": "linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%)",
+      "glow_surface": "radial-gradient(circle at top, rgba(59, 130, 246, 0.08), transparent 70%)"
+    }
+  },
+  "typography": {
+    "headings": {
+      "family": "Manrope, sans-serif",
+      "weights": "600, 700, 800",
+      "tracking": "-0.02em",
+      "usage": "Use for all page titles, section headers, and modal titles. CRITICAL: Accommodate German word length (e.g., 'Benutzerverwaltung')."
+    },
+    "body": {
+      "family": "Inter, sans-serif",
+      "weights": "400, 500",
+      "usage": "General UI text, descriptions, and inputs."
+    },
+    "mono": {
+      "family": "JetBrains Mono, monospace",
+      "usage": "IDs, dates, file paths, and logs.",
+      "size": "text-xs"
+    }
+  },
+  "layout_system": {
+    "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+    "spacing": {
+      "section_gap": "gap-8",
+      "item_gap": "gap-4",
+      "card_padding": "p-6"
+    },
+    "grids": {
+      "dashboard": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6",
+      "documents": "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4",
+      "detail_view": "grid grid-cols-1 lg:grid-cols-12 gap-6"
+    }
+  },
+  "components": {
+    "ui_style": "Linear / Glassmorphism Hybrid",
+    "cards": {
+      "base": "bg-[#121212] border border-white/5 rounded-xl shadow-sm hover:border-white/10 transition-colors duration-200",
+      "interactive": "hover:bg-[#1A1A1A] cursor-pointer active:scale-[0.99] transition-all"
+    },
+    "buttons": {
+      "primary": "bg-white text-black hover:bg-gray-200 font-semibold rounded-lg px-4 py-2 shadow-[0_0_15px_rgba(255,255,255,0.1)]",
+      "secondary": "bg-white/5 text-white hover:bg-white/10 border border-white/10 rounded-lg px-4 py-2",
+      "ghost": "hover:bg-white/5 text-gray-400 hover:text-white rounded-lg px-3 py-2",
+      "destructive": "bg-red-900/20 text-red-400 hover:bg-red-900/30 border border-red-900/50"
+    },
+    "inputs": {
+      "style": "bg-black/20 border border-white/10 focus:border-white/30 focus:ring-1 focus:ring-white/20 rounded-lg text-sm placeholder:text-gray-600"
+    },
+    "navigation": {
+      "sidebar": "border-r border-white/5 bg-[#0A0A0A]",
+      "item_active": "bg-white/5 text-white border-r-2 border-white",
+      "item_inactive": "text-gray-500 hover:text-gray-300 hover:bg-white/5"
+    }
+  },
+  "visual_enhancers": {
+    "borders": "1px solid rgba(255,255,255,0.08)",
+    "shadows": "0 4px 20px -2px rgba(0, 0, 0, 0.5)",
+    "glass": "backdrop-blur-xl bg-black/40 border-b border-white/5",
+    "micro_interactions": "All interactive elements must have a scale, color, or border transition. Use `active:scale-95` for buttons."
+  },
+  "motion": {
+    "library": "framer-motion",
+    "variants": {
+      "fadeIn": {
+        "initial": { "opacity": 0, "y": 10 },
+        "animate": { "opacity": 1, "y": 0 },
+        "transition": { "duration": 0.3, "ease": "easeOut" }
+      },
+      "staggerContainer": {
+        "animate": { "transition": { "staggerChildren": 0.05 } }
+      }
+    }
+  },
+  "images": {
+    "login_background": {
+      "url": "https://images.unsplash.com/photo-1772050138768-2107c6e62a03?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzV8MHwxfHNlYXJjaHwyfHxhYnN0cmFjdCUyMGRhcmslMjB0ZWNobm9sb2d5JTIwbmV0d29yayUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzczMDM5OTk1fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Abstract digital network background",
+      "usage": "Full screen background for login/setup pages with overlay."
+    },
+    "empty_state_illustration": {
+      "url": "https://images.unsplash.com/photo-1640346876473-f76a73c71539?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODh8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwM2QlMjBhYnN0cmFjdCUyMHNoYXBlJTIwZGFya3xlbnwwfHx8fDE3NzMwMzk5OTZ8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Abstract black cubes",
+      "usage": "Use for empty states in dashboard/cases (e.g., 'No cases found')."
+    },
+    "ai_assistant_avatar": {
+      "url": "https://images.unsplash.com/photo-1764336312138-14a5368a6cd3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGdsb3dpbmd8ZW58MHx8fHwxNzczMDM5OTk3fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "AI Neural Network",
+      "usage": "Avatar or background for the AI Chat interface."
+    }
+  },
+  "universal_guidelines": [
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur).",
+    "You MUST NOT apply universal transition. Eg: transition: all.",
+    "You MUST NOT center align the app container. This disrupts the human natural reading flow of text.",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations.",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations. Static = dead.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures, noise overlays, custom cursors, selection states, and loading animations: separates good from extraordinary.",
+    "Prioritize using pre-existing components from src/components/ui when applicable.",
+    "Components MUST use named exports (export const ComponentName = ...).",
+    "Pages MUST use default exports (export default function PageName() {...}).",
+    "Use `sonner` for toasts.",
+    "CRITICAL: Accommodate German language text expansion (approx 30% longer than English). Avoid fixed widths for text containers."
+  ],
+  "instructions_to_main_agent": [
+    "1. Setup Shadcn UI components with the 'linear' theme logic defined above.",
+    "2. Implement the 'Setup Wizard' first as it's the entry point.",
+    "3. Build the Dashboard using the Bento Grid layout.",
+    "4. Ensure all text labels are translatable (prepare for i18n structure, even if hardcoded initially).",
+    "5. Use the provided image URLs for the specific sections mentioned."
+  ]
+}

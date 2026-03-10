@@ -1,0 +1,1153 @@
+"""
+CaseDesk AI - Main FastAPI Application
+Standalone self-hosted document and case management with AI support
+"""
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from dotenv import load_dotenv
+from motor.motor_asyncio import AsyncIOMotorClient
+from contextlib import asynccontextmanager
+import os
+import logging
+from pathlib import Path
+from typing import List, Optional
+from datetime import datetime, timezone, timedelta
+import uuid
+import hashlib
+import jwt
+import httpx
+import aiofiles
+import json
+
+from models import (
+    User, UserCreate, UserInDB, UserRole,
+    SystemSettings, UserSettings, AIProviderType, InternetAccessLevel,
+    MailAccount, MailAccountCreate,
+    Case, CaseCreate, CaseStatus,
+    Document, DocumentCreate, DocumentType,
+    EmailMessage,
+    Task, TaskCreate, TaskPriority, TaskStatus,
+    Event, EventCreate,
+    Draft, DraftCreate,
+    ChatMessage, AuditLog,
+    Token, SetupStatus
+)
+
+# Load environment
+ROOT_DIR = Path(__file__).parent
+load_dotenv(ROOT_DIR / '.env')
+
+# Logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# MongoDB connection
+mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
+client = AsyncIOMotorClient(mongo_url)
+db = client[os.environ.get('DB_NAME', 'casedesk')]
+
+# Security
+SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_HOURS = 24
+
+# File uploads
+UPLOAD_DIR = Path(os.environ.get('UPLOAD_DIR', './uploads'))
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# OCR Service
+OCR_SERVICE_URL = os.environ.get('OCR_SERVICE_URL', 'http://localhost:8002')
+
+# OpenAI (optional)
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+
+security = HTTPBearer(auto_error=False)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events"""
+    # Startup
+    logger.info("CaseDesk AI starting up...")
+    # Ensure indexes
+    await db.users.create_index("email", unique=True)
+    await db.users.create_index("username", unique=True)
+    await db.cases.create_index("user_id")
+    await db.documents.create_index("user_id")
+    await db.documents.create_index([("ocr_text", "text")])
+    await db.tasks.create_index("user_id")
+    await db.events.create_index("user_id")
+    yield
+    # Shutdown
+    logger.info("CaseDesk AI shutting down...")
+    client.close()
+
+
+app = FastAPI(
+    title="CaseDesk AI",
+    description="Self-hosted document and case management with AI support",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+api_router = APIRouter(prefix="/api")
+
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ==================== Helper Functions ====================
+
+def hash_password(password: str) -> str:
+    """Hash password using SHA-256 with salt"""
+    salt = SECRET_KEY[:16]
+    return hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
+
+
+def verify_password(password: str, hashed: str) -> bool:
+    """Verify password against hash"""
+    return hash_password(password) == hashed
+
+
+def create_access_token(user_id: str, email: str, role: str) -> str:
+    """Create JWT access token"""
+    expire = datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+    payload = {
+        "sub": user_id,
+        "email": email,
+        "role": role,
+        "exp": expire
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Optional[dict]:
+    """Get current authenticated user from JWT token"""
+    if not credentials:
+        return None
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
+        return user
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
+async def require_auth(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+    """Require authentication - raises 401 if not authenticated"""
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    user = await get_current_user(credentials)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+    return user
+
+
+async def require_admin(user: dict = Depends(require_auth)) -> dict:
+    """Require admin role"""
+    if user.get("role") != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
+async def log_action(user_id: str, action: str, resource_type: str, resource_id: str = None, details: dict = None):
+    """Create audit log entry"""
+    log = {
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "action": action,
+        "resource_type": resource_type,
+        "resource_id": resource_id,
+        "details": details or {},
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.audit_logs.insert_one(log)
+
+
+# ==================== Health & Setup ====================
+
+@api_router.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy", "service": "casedesk-backend", "version": "1.0.0"}
+
+
+@api_router.get("/setup/status", response_model=SetupStatus)
+async def get_setup_status():
+    """Check if initial setup has been completed"""
+    settings = await db.system_settings.find_one({}, {"_id": 0})
+    admin_count = await db.users.count_documents({"role": UserRole.ADMIN})
+    return SetupStatus(
+        setup_completed=settings.get("setup_completed", False) if settings else False,
+        has_admin=admin_count > 0,
+        version="1.0.0"
+    )
+
+
+@api_router.post("/setup/init")
+async def initialize_setup(
+    language: str = Form("en"),
+    admin_email: str = Form(...),
+    admin_username: str = Form(...),
+    admin_password: str = Form(...),
+    admin_full_name: str = Form(None),
+    ai_provider: str = Form("disabled"),
+    openai_api_key: str = Form(None),
+    internet_access: str = Form("denied")
+):
+    """Initial setup - create admin and system settings"""
+    # Check if already setup
+    existing_admin = await db.users.count_documents({"role": UserRole.ADMIN})
+    if existing_admin > 0:
+        raise HTTPException(status_code=400, detail="Setup already completed")
+    
+    # Create admin user
+    user_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    admin_user = {
+        "id": user_id,
+        "email": admin_email,
+        "username": admin_username,
+        "full_name": admin_full_name,
+        "password_hash": hash_password(admin_password),
+        "role": UserRole.ADMIN,
+        "is_active": True,
+        "language": language,
+        "created_at": now,
+        "updated_at": now,
+        "last_login": None
+    }
+    
+    await db.users.insert_one(admin_user)
+    
+    # Create system settings
+    settings = {
+        "id": str(uuid.uuid4()),
+        "setup_completed": True,
+        "default_language": language,
+        "ai_provider": ai_provider,
+        "openai_api_key": openai_api_key if ai_provider == "openai" else None,
+        "internet_access": internet_access,
+        "allow_external_ai": ai_provider == "openai",
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.system_settings.insert_one(settings)
+    
+    # Log action
+    await log_action(user_id, "setup_completed", "system", details={"language": language})
+    
+    # Create token
+    token = create_access_token(user_id, admin_email, UserRole.ADMIN)
+    
+    return {
+        "success": True,
+        "message": "Setup completed successfully",
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user_id,
+            "email": admin_email,
+            "username": admin_username,
+            "full_name": admin_full_name,
+            "role": UserRole.ADMIN,
+            "language": language
+        }
+    }
+
+
+# ==================== Authentication ====================
+
+@api_router.post("/auth/login", response_model=Token)
+async def login(
+    email: str = Form(...),
+    password: str = Form(...)
+):
+    """User login"""
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    if not user or not verify_password(password, user.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    if not user.get("is_active", True):
+        raise HTTPException(status_code=401, detail="Account deactivated")
+    
+    # Update last login
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"last_login": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    token = create_access_token(user["id"], user["email"], user["role"])
+    
+    # Remove sensitive data
+    user.pop("password_hash", None)
+    
+    return Token(access_token=token, user=User(**user))
+
+
+@api_router.get("/auth/me")
+async def get_current_user_info(user: dict = Depends(require_auth)):
+    """Get current user information"""
+    return user
+
+
+@api_router.post("/auth/logout")
+async def logout(user: dict = Depends(require_auth)):
+    """User logout (client should discard token)"""
+    await log_action(user["id"], "logout", "auth")
+    return {"success": True, "message": "Logged out successfully"}
+
+
+# ==================== Users ====================
+
+@api_router.get("/users", response_model=List[User])
+async def list_users(user: dict = Depends(require_admin)):
+    """List all users (admin only)"""
+    users = await db.users.find({}, {"_id": 0, "password_hash": 0}).to_list(1000)
+    return users
+
+
+@api_router.post("/users", response_model=User)
+async def create_user(user_data: UserCreate, admin: dict = Depends(require_admin)):
+    """Create new user (admin only)"""
+    # Check if email exists
+    existing = await db.users.find_one({"email": user_data.email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    existing_username = await db.users.find_one({"username": user_data.username})
+    if existing_username:
+        raise HTTPException(status_code=400, detail="Username already taken")
+    
+    user_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    new_user = {
+        "id": user_id,
+        "email": user_data.email,
+        "username": user_data.username,
+        "full_name": user_data.full_name,
+        "password_hash": hash_password(user_data.password),
+        "role": user_data.role,
+        "is_active": True,
+        "language": user_data.language,
+        "created_at": now,
+        "updated_at": now,
+        "last_login": None
+    }
+    
+    await db.users.insert_one(new_user)
+    await log_action(admin["id"], "create_user", "user", user_id)
+    
+    new_user.pop("password_hash")
+    return User(**new_user)
+
+
+@api_router.delete("/users/{user_id}")
+async def delete_user(user_id: str, admin: dict = Depends(require_admin)):
+    """Delete user (admin only)"""
+    if user_id == admin["id"]:
+        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+    
+    result = await db.users.delete_one({"id": user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    await log_action(admin["id"], "delete_user", "user", user_id)
+    return {"success": True, "message": "User deleted"}
+
+
+# ==================== Cases ====================
+
+@api_router.get("/cases", response_model=List[Case])
+async def list_cases(
+    status: Optional[CaseStatus] = None,
+    search: Optional[str] = None,
+    user: dict = Depends(require_auth)
+):
+    """List cases for current user"""
+    query = {"user_id": user["id"]}
+    if status:
+        query["status"] = status
+    
+    cases = await db.cases.find(query, {"_id": 0}).sort("updated_at", -1).to_list(1000)
+    return cases
+
+
+@api_router.post("/cases", response_model=Case)
+async def create_case(case_data: CaseCreate, user: dict = Depends(require_auth)):
+    """Create new case"""
+    case_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    new_case = {
+        "id": case_id,
+        "user_id": user["id"],
+        **case_data.model_dump(),
+        "document_ids": [],
+        "email_ids": [],
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.cases.insert_one(new_case)
+    await log_action(user["id"], "create_case", "case", case_id)
+    
+    return Case(**new_case)
+
+
+@api_router.get("/cases/{case_id}", response_model=Case)
+async def get_case(case_id: str, user: dict = Depends(require_auth)):
+    """Get case details"""
+    case = await db.cases.find_one({"id": case_id, "user_id": user["id"]}, {"_id": 0})
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return Case(**case)
+
+
+@api_router.put("/cases/{case_id}", response_model=Case)
+async def update_case(case_id: str, case_data: CaseCreate, user: dict = Depends(require_auth)):
+    """Update case"""
+    case = await db.cases.find_one({"id": case_id, "user_id": user["id"]})
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    
+    update_data = case_data.model_dump()
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.cases.update_one({"id": case_id}, {"$set": update_data})
+    await log_action(user["id"], "update_case", "case", case_id)
+    
+    updated = await db.cases.find_one({"id": case_id}, {"_id": 0})
+    return Case(**updated)
+
+
+@api_router.delete("/cases/{case_id}")
+async def delete_case(case_id: str, user: dict = Depends(require_auth)):
+    """Delete case"""
+    result = await db.cases.delete_one({"id": case_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Case not found")
+    
+    await log_action(user["id"], "delete_case", "case", case_id)
+    return {"success": True, "message": "Case deleted"}
+
+
+# ==================== Documents ====================
+
+@api_router.get("/documents", response_model=List[Document])
+async def list_documents(
+    case_id: Optional[str] = None,
+    document_type: Optional[DocumentType] = None,
+    search: Optional[str] = None,
+    user: dict = Depends(require_auth)
+):
+    """List documents for current user"""
+    query = {"user_id": user["id"]}
+    if case_id:
+        query["case_id"] = case_id
+    if document_type:
+        query["document_type"] = document_type
+    
+    documents = await db.documents.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return documents
+
+
+@api_router.post("/documents/upload")
+async def upload_document(
+    file: UploadFile = File(...),
+    case_id: Optional[str] = Form(None),
+    document_type: str = Form("other"),
+    user: dict = Depends(require_auth)
+):
+    """Upload and process document"""
+    # Validate file type
+    allowed_types = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 
+                     'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+    
+    content = await file.read()
+    
+    # Generate unique filename
+    doc_id = str(uuid.uuid4())
+    file_ext = Path(file.filename).suffix
+    storage_filename = f"{doc_id}{file_ext}"
+    storage_path = UPLOAD_DIR / user["id"] / storage_filename
+    
+    # Ensure user directory exists
+    storage_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Save file
+    async with aiofiles.open(storage_path, 'wb') as f:
+        await f.write(content)
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Create document record
+    document = {
+        "id": doc_id,
+        "user_id": user["id"],
+        "case_id": case_id,
+        "filename": storage_filename,
+        "original_filename": file.filename,
+        "mime_type": file.content_type,
+        "size": len(content),
+        "storage_path": str(storage_path),
+        "document_type": document_type,
+        "ocr_text": None,
+        "ocr_processed": False,
+        "metadata": {},
+        "sender": None,
+        "recipient": None,
+        "document_date": None,
+        "deadline": None,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.documents.insert_one(document)
+    
+    # Link to case if provided
+    if case_id:
+        await db.cases.update_one(
+            {"id": case_id, "user_id": user["id"]},
+            {"$push": {"document_ids": doc_id}}
+        )
+    
+    await log_action(user["id"], "upload_document", "document", doc_id)
+    
+    # Trigger OCR processing (async)
+    # In production, this would be a background task
+    
+    document.pop("_id", None)
+    return {"success": True, "document": document}
+
+
+@api_router.post("/documents/{document_id}/ocr")
+async def process_document_ocr(document_id: str, user: dict = Depends(require_auth)):
+    """Process document with OCR"""
+    document = await db.documents.find_one({"id": document_id, "user_id": user["id"]}, {"_id": 0})
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    try:
+        # Call OCR service
+        async with httpx.AsyncClient() as client:
+            with open(document["storage_path"], "rb") as f:
+                files = {"file": (document["original_filename"], f, document["mime_type"])}
+                response = await client.post(f"{OCR_SERVICE_URL}/ocr", files=files, timeout=120)
+        
+        if response.status_code == 200:
+            ocr_result = response.json()
+            
+            await db.documents.update_one(
+                {"id": document_id},
+                {"$set": {
+                    "ocr_text": ocr_result.get("text", ""),
+                    "ocr_processed": True,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }}
+            )
+            
+            return {"success": True, "text": ocr_result.get("text", "")}
+        else:
+            raise HTTPException(status_code=500, detail="OCR processing failed")
+            
+    except httpx.RequestError as e:
+        logger.error(f"OCR service error: {e}")
+        raise HTTPException(status_code=503, detail="OCR service unavailable")
+
+
+@api_router.get("/documents/{document_id}", response_model=Document)
+async def get_document(document_id: str, user: dict = Depends(require_auth)):
+    """Get document details"""
+    document = await db.documents.find_one({"id": document_id, "user_id": user["id"]}, {"_id": 0})
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return Document(**document)
+
+
+@api_router.delete("/documents/{document_id}")
+async def delete_document(document_id: str, user: dict = Depends(require_auth)):
+    """Delete document"""
+    document = await db.documents.find_one({"id": document_id, "user_id": user["id"]})
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Delete file
+    try:
+        os.remove(document["storage_path"])
+    except OSError:
+        pass
+    
+    # Remove from case
+    if document.get("case_id"):
+        await db.cases.update_one(
+            {"id": document["case_id"]},
+            {"$pull": {"document_ids": document_id}}
+        )
+    
+    await db.documents.delete_one({"id": document_id})
+    await log_action(user["id"], "delete_document", "document", document_id)
+    
+    return {"success": True, "message": "Document deleted"}
+
+
+# ==================== Tasks ====================
+
+@api_router.get("/tasks", response_model=List[Task])
+async def list_tasks(
+    status: Optional[TaskStatus] = None,
+    priority: Optional[TaskPriority] = None,
+    case_id: Optional[str] = None,
+    user: dict = Depends(require_auth)
+):
+    """List tasks for current user"""
+    query = {"user_id": user["id"]}
+    if status:
+        query["status"] = status
+    if priority:
+        query["priority"] = priority
+    if case_id:
+        query["case_id"] = case_id
+    
+    tasks = await db.tasks.find(query, {"_id": 0}).sort("due_date", 1).to_list(1000)
+    return tasks
+
+
+@api_router.post("/tasks", response_model=Task)
+async def create_task(task_data: TaskCreate, user: dict = Depends(require_auth)):
+    """Create new task"""
+    task_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    new_task = {
+        "id": task_id,
+        "user_id": user["id"],
+        **task_data.model_dump(),
+        "document_id": None,
+        "email_id": None,
+        "created_at": now,
+        "updated_at": now,
+        "completed_at": None
+    }
+    
+    # Convert due_date to string if present
+    if new_task.get("due_date"):
+        new_task["due_date"] = new_task["due_date"].isoformat() if isinstance(new_task["due_date"], datetime) else new_task["due_date"]
+    
+    await db.tasks.insert_one(new_task)
+    await log_action(user["id"], "create_task", "task", task_id)
+    
+    return Task(**new_task)
+
+
+@api_router.put("/tasks/{task_id}", response_model=Task)
+async def update_task(task_id: str, task_data: TaskCreate, user: dict = Depends(require_auth)):
+    """Update task"""
+    task = await db.tasks.find_one({"id": task_id, "user_id": user["id"]})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    update_data = task_data.model_dump()
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    # Handle completion
+    if task_data.status == TaskStatus.DONE and task.get("status") != TaskStatus.DONE:
+        update_data["completed_at"] = datetime.now(timezone.utc).isoformat()
+    
+    # Convert due_date to string if present
+    if update_data.get("due_date"):
+        update_data["due_date"] = update_data["due_date"].isoformat() if isinstance(update_data["due_date"], datetime) else update_data["due_date"]
+    
+    await db.tasks.update_one({"id": task_id}, {"$set": update_data})
+    await log_action(user["id"], "update_task", "task", task_id)
+    
+    updated = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    return Task(**updated)
+
+
+@api_router.delete("/tasks/{task_id}")
+async def delete_task(task_id: str, user: dict = Depends(require_auth)):
+    """Delete task"""
+    result = await db.tasks.delete_one({"id": task_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    await log_action(user["id"], "delete_task", "task", task_id)
+    return {"success": True, "message": "Task deleted"}
+
+
+# ==================== Events/Calendar ====================
+
+@api_router.get("/events", response_model=List[Event])
+async def list_events(
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    case_id: Optional[str] = None,
+    user: dict = Depends(require_auth)
+):
+    """List events for current user"""
+    query = {"user_id": user["id"]}
+    if case_id:
+        query["case_id"] = case_id
+    
+    # Date filtering would be applied here
+    
+    events = await db.events.find(query, {"_id": 0}).sort("start_time", 1).to_list(1000)
+    return events
+
+
+@api_router.post("/events", response_model=Event)
+async def create_event(event_data: EventCreate, user: dict = Depends(require_auth)):
+    """Create new event"""
+    event_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    new_event = {
+        "id": event_id,
+        "user_id": user["id"],
+        **event_data.model_dump(),
+        "document_id": None,
+        "is_deadline": False,
+        "reminder_minutes": None,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    # Convert datetimes to strings
+    for field in ["start_time", "end_time"]:
+        if new_event.get(field) and isinstance(new_event[field], datetime):
+            new_event[field] = new_event[field].isoformat()
+    
+    await db.events.insert_one(new_event)
+    await log_action(user["id"], "create_event", "event", event_id)
+    
+    return Event(**new_event)
+
+
+@api_router.put("/events/{event_id}", response_model=Event)
+async def update_event(event_id: str, event_data: EventCreate, user: dict = Depends(require_auth)):
+    """Update event"""
+    event = await db.events.find_one({"id": event_id, "user_id": user["id"]})
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    
+    update_data = event_data.model_dump()
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    # Convert datetimes to strings
+    for field in ["start_time", "end_time"]:
+        if update_data.get(field) and isinstance(update_data[field], datetime):
+            update_data[field] = update_data[field].isoformat()
+    
+    await db.events.update_one({"id": event_id}, {"$set": update_data})
+    await log_action(user["id"], "update_event", "event", event_id)
+    
+    updated = await db.events.find_one({"id": event_id}, {"_id": 0})
+    return Event(**updated)
+
+
+@api_router.delete("/events/{event_id}")
+async def delete_event(event_id: str, user: dict = Depends(require_auth)):
+    """Delete event"""
+    result = await db.events.delete_one({"id": event_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Event not found")
+    
+    await log_action(user["id"], "delete_event", "event", event_id)
+    return {"success": True, "message": "Event deleted"}
+
+
+# ==================== Drafts ====================
+
+@api_router.get("/drafts", response_model=List[Draft])
+async def list_drafts(
+    case_id: Optional[str] = None,
+    user: dict = Depends(require_auth)
+):
+    """List drafts for current user"""
+    query = {"user_id": user["id"]}
+    if case_id:
+        query["case_id"] = case_id
+    
+    drafts = await db.drafts.find(query, {"_id": 0}).sort("updated_at", -1).to_list(1000)
+    return drafts
+
+
+@api_router.post("/drafts", response_model=Draft)
+async def create_draft(draft_data: DraftCreate, user: dict = Depends(require_auth)):
+    """Create new draft"""
+    draft_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    new_draft = {
+        "id": draft_id,
+        "user_id": user["id"],
+        **draft_data.model_dump(),
+        "ai_generated": False,
+        "is_sent": False,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.drafts.insert_one(new_draft)
+    await log_action(user["id"], "create_draft", "draft", draft_id)
+    
+    return Draft(**new_draft)
+
+
+@api_router.put("/drafts/{draft_id}", response_model=Draft)
+async def update_draft(draft_id: str, draft_data: DraftCreate, user: dict = Depends(require_auth)):
+    """Update draft"""
+    draft = await db.drafts.find_one({"id": draft_id, "user_id": user["id"]})
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    
+    update_data = draft_data.model_dump()
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.drafts.update_one({"id": draft_id}, {"$set": update_data})
+    await log_action(user["id"], "update_draft", "draft", draft_id)
+    
+    updated = await db.drafts.find_one({"id": draft_id}, {"_id": 0})
+    return Draft(**updated)
+
+
+@api_router.delete("/drafts/{draft_id}")
+async def delete_draft(draft_id: str, user: dict = Depends(require_auth)):
+    """Delete draft"""
+    result = await db.drafts.delete_one({"id": draft_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    
+    await log_action(user["id"], "delete_draft", "draft", draft_id)
+    return {"success": True, "message": "Draft deleted"}
+
+
+# ==================== AI Chat ====================
+
+@api_router.post("/ai/chat")
+async def ai_chat(
+    message: str = Form(...),
+    session_id: str = Form(None),
+    case_id: str = Form(None),
+    user: dict = Depends(require_auth)
+):
+    """AI Chat endpoint"""
+    # Get system settings
+    settings = await db.system_settings.find_one({}, {"_id": 0})
+    
+    if not settings or settings.get("ai_provider") == "disabled":
+        return {
+            "success": False,
+            "error": "AI is disabled. Please configure an AI provider in settings.",
+            "response": None
+        }
+    
+    if settings.get("internet_access") == "denied" and settings.get("ai_provider") == "openai":
+        return {
+            "success": False,
+            "error": "External AI requires internet access. Please enable internet access or use local AI.",
+            "response": None
+        }
+    
+    session_id = session_id or str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Save user message
+    user_msg = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "session_id": session_id,
+        "role": "user",
+        "content": message,
+        "case_id": case_id,
+        "document_ids": [],
+        "created_at": now
+    }
+    await db.chat_messages.insert_one(user_msg)
+    
+    # Get conversation history
+    history = await db.chat_messages.find(
+        {"user_id": user["id"], "session_id": session_id},
+        {"_id": 0}
+    ).sort("created_at", 1).to_list(50)
+    
+    # Prepare context
+    context = ""
+    if case_id:
+        case = await db.cases.find_one({"id": case_id, "user_id": user["id"]}, {"_id": 0})
+        if case:
+            context += f"\nCase: {case.get('title', 'Unknown')}\nDescription: {case.get('description', 'None')}\n"
+    
+    # Call OpenAI if configured
+    if settings.get("ai_provider") == "openai" and settings.get("openai_api_key"):
+        try:
+            import openai
+            client = openai.OpenAI(api_key=settings["openai_api_key"])
+            
+            messages = [
+                {"role": "system", "content": f"""You are CaseDesk AI, a helpful assistant for document and case management.
+You help users manage their documents, cases, emails, tasks, and deadlines.
+You provide clear, accurate information based on the user's data.
+You NEVER make up facts or information.
+You ask clarifying questions when uncertain.
+Current context: {context}
+User language preference: {user.get('language', 'de')}"""}
+            ]
+            
+            for msg in history[-10:]:  # Last 10 messages
+                messages.append({"role": msg["role"], "content": msg["content"]})
+            
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=messages,
+                max_tokens=1000,
+                temperature=0.7
+            )
+            
+            ai_response = response.choices[0].message.content
+            
+        except Exception as e:
+            logger.error(f"OpenAI API error: {e}")
+            ai_response = f"AI service error: {str(e)}"
+    else:
+        # Fallback response when no AI configured
+        ai_response = "AI is not properly configured. Please set up an AI provider in the settings."
+    
+    # Save AI response
+    ai_msg = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "session_id": session_id,
+        "role": "assistant",
+        "content": ai_response,
+        "case_id": case_id,
+        "document_ids": [],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.chat_messages.insert_one(ai_msg)
+    
+    return {
+        "success": True,
+        "response": ai_response,
+        "session_id": session_id
+    }
+
+
+@api_router.get("/ai/history")
+async def get_chat_history(
+    session_id: str,
+    user: dict = Depends(require_auth)
+):
+    """Get chat history for session"""
+    messages = await db.chat_messages.find(
+        {"user_id": user["id"], "session_id": session_id},
+        {"_id": 0}
+    ).sort("created_at", 1).to_list(100)
+    
+    return {"messages": messages}
+
+
+# ==================== Settings ====================
+
+@api_router.get("/settings/system")
+async def get_system_settings(user: dict = Depends(require_admin)):
+    """Get system settings (admin only)"""
+    settings = await db.system_settings.find_one({}, {"_id": 0})
+    if settings:
+        # Mask API key
+        if settings.get("openai_api_key"):
+            settings["openai_api_key"] = "***configured***"
+    return settings or {}
+
+
+@api_router.put("/settings/system")
+async def update_system_settings(
+    ai_provider: str = Form(None),
+    openai_api_key: str = Form(None),
+    internet_access: str = Form(None),
+    default_language: str = Form(None),
+    user: dict = Depends(require_admin)
+):
+    """Update system settings (admin only)"""
+    update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    if ai_provider is not None:
+        update_data["ai_provider"] = ai_provider
+        update_data["allow_external_ai"] = ai_provider == "openai"
+    
+    if openai_api_key is not None and openai_api_key != "***configured***":
+        update_data["openai_api_key"] = openai_api_key if openai_api_key else None
+    
+    if internet_access is not None:
+        update_data["internet_access"] = internet_access
+    
+    if default_language is not None:
+        update_data["default_language"] = default_language
+    
+    await db.system_settings.update_one({}, {"$set": update_data})
+    await log_action(user["id"], "update_settings", "system")
+    
+    return {"success": True, "message": "Settings updated"}
+
+
+@api_router.get("/settings/user")
+async def get_user_settings(user: dict = Depends(require_auth)):
+    """Get current user's settings"""
+    settings = await db.user_settings.find_one({"user_id": user["id"]}, {"_id": 0})
+    return settings or {"user_id": user["id"], "language": "de", "theme": "dark"}
+
+
+@api_router.put("/settings/user")
+async def update_user_settings(
+    language: str = Form(None),
+    theme: str = Form(None),
+    notifications_enabled: bool = Form(None),
+    user: dict = Depends(require_auth)
+):
+    """Update current user's settings"""
+    update_data = {}
+    if language is not None:
+        update_data["language"] = language
+    if theme is not None:
+        update_data["theme"] = theme
+    if notifications_enabled is not None:
+        update_data["notifications_enabled"] = notifications_enabled
+    
+    await db.user_settings.update_one(
+        {"user_id": user["id"]},
+        {"$set": update_data},
+        upsert=True
+    )
+    
+    return {"success": True, "message": "Settings updated"}
+
+
+# ==================== Mail Accounts ====================
+
+@api_router.get("/mail/accounts")
+async def list_mail_accounts(user: dict = Depends(require_auth)):
+    """List mail accounts for current user"""
+    accounts = await db.mail_accounts.find(
+        {"user_id": user["id"]},
+        {"_id": 0, "password": 0}
+    ).to_list(100)
+    return accounts
+
+
+@api_router.post("/mail/accounts")
+async def create_mail_account(
+    email: str = Form(...),
+    display_name: str = Form(...),
+    imap_server: str = Form(...),
+    imap_port: int = Form(993),
+    imap_use_ssl: bool = Form(True),
+    password: str = Form(...),
+    smtp_server: str = Form(None),
+    smtp_port: int = Form(587),
+    user: dict = Depends(require_auth)
+):
+    """Add mail account"""
+    account_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    account = {
+        "id": account_id,
+        "user_id": user["id"],
+        "email": email,
+        "display_name": display_name,
+        "imap_server": imap_server,
+        "imap_port": imap_port,
+        "imap_use_ssl": imap_use_ssl,
+        "password": password,  # Should be encrypted in production
+        "smtp_server": smtp_server,
+        "smtp_port": smtp_port,
+        "smtp_use_tls": True,
+        "is_active": True,
+        "last_sync": None,
+        "created_at": now
+    }
+    
+    await db.mail_accounts.insert_one(account)
+    await log_action(user["id"], "create_mail_account", "mail_account", account_id)
+    
+    account.pop("password")
+    return {"success": True, "account": account}
+
+
+@api_router.delete("/mail/accounts/{account_id}")
+async def delete_mail_account(account_id: str, user: dict = Depends(require_auth)):
+    """Delete mail account"""
+    result = await db.mail_accounts.delete_one({"id": account_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Mail account not found")
+    
+    await log_action(user["id"], "delete_mail_account", "mail_account", account_id)
+    return {"success": True, "message": "Mail account deleted"}
+
+
+# ==================== Dashboard Stats ====================
+
+@api_router.get("/dashboard/stats")
+async def get_dashboard_stats(user: dict = Depends(require_auth)):
+    """Get dashboard statistics"""
+    user_id = user["id"]
+    
+    # Count various items
+    cases_count = await db.cases.count_documents({"user_id": user_id})
+    open_cases = await db.cases.count_documents({"user_id": user_id, "status": CaseStatus.OPEN})
+    documents_count = await db.documents.count_documents({"user_id": user_id})
+    pending_tasks = await db.tasks.count_documents({"user_id": user_id, "status": {"$ne": TaskStatus.DONE}})
+    
+    # Upcoming events
+    upcoming_events = await db.events.find(
+        {"user_id": user_id},
+        {"_id": 0}
+    ).sort("start_time", 1).limit(5).to_list(5)
+    
+    # Recent documents
+    recent_documents = await db.documents.find(
+        {"user_id": user_id},
+        {"_id": 0}
+    ).sort("created_at", -1).limit(5).to_list(5)
+    
+    # Urgent tasks
+    urgent_tasks = await db.tasks.find(
+        {"user_id": user_id, "status": {"$ne": TaskStatus.DONE}},
+        {"_id": 0}
+    ).sort("due_date", 1).limit(5).to_list(5)
+    
+    return {
+        "cases": {"total": cases_count, "open": open_cases},
+        "documents": {"total": documents_count},
+        "tasks": {"pending": pending_tasks},
+        "upcoming_events": upcoming_events,
+        "recent_documents": recent_documents,
+        "urgent_tasks": urgent_tasks
+    }
+
+
+# Include router
+app.include_router(api_router)
+
+
+# Serve API docs
+@app.get("/api/docs", include_in_schema=False)
+async def api_docs():
+    return {"message": "Visit /docs for Swagger UI or /redoc for ReDoc"}
