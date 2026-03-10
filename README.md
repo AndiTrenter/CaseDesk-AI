@@ -4,7 +4,23 @@ Eine vollständig self-hosted, datenschutzorientierte Webanwendung für private 
 
 ## Features
 
-- **Dokumentenverwaltung**: Upload, OCR, Suche und Kategorisierung
+- **Intelligente Dokumentenverarbeitung**
+  - Automatische OCR bei Upload (Tesseract)
+  - KI-basierte Metadatenextraktion (Absender, Datum, Typ, Referenz)
+  - Automatische Umbenennung: `Datum – Absender – Dokumenttyp – Referenz – Kurzthema`
+  - Automatische Tag-Generierung
+  - Fristenerkennung und Aufgabenerstellung
+
+- **Volltextsuche**
+  - Durchsucht Dokumenteninhalt, nicht nur Namen
+  - Relevanz-basiertes Ranking
+  - Deutsche Sprachunterstützung
+
+- **Lokale KI mit Ollama**
+  - Llama 3.2 wird automatisch installiert
+  - Funktioniert komplett offline
+  - Keine API-Kosten
+
 - **Fallverwaltung**: Strukturierte Verwaltung von Vorgängen
 - **E-Mail-Integration**: IMAP-Abruf und -Verarbeitung
 - **Kalender & Aufgaben**: Fristen und Termine im Blick
@@ -17,8 +33,9 @@ Eine vollständig self-hosted, datenschutzorientierte Webanwendung für private 
 ### Voraussetzungen
 
 - Docker & Docker Compose
-- Mindestens 4GB RAM
-- 10GB freier Speicherplatz
+- Mindestens 8GB RAM (für Ollama LLM)
+- 20GB freier Speicherplatz
+- Optional: NVIDIA GPU für schnellere KI-Verarbeitung
 
 ### Installation
 
@@ -39,6 +56,9 @@ Eine vollständig self-hosted, datenschutzorientierte Webanwendung für private 
    ```bash
    docker-compose up -d
    ```
+   
+   > Beim ersten Start wird Ollama das Llama 3.2 Modell herunterladen (~2GB).
+   > Dies kann einige Minuten dauern.
 
 4. **Weboberfläche öffnen**
    ```
@@ -46,65 +66,120 @@ Eine vollständig self-hosted, datenschutzorientierte Webanwendung für private 
    ```
 
 5. **Setup-Assistent durchlaufen**
-   - Sprache wählen
+   - Sprache wählen (Deutsch/English)
    - Admin-Benutzer anlegen
-   - KI-Provider konfigurieren (optional)
+   - KI-Provider wählen (Ollama empfohlen)
    - Datenschutz-Einstellungen festlegen
-
-## Konfiguration
-
-### KI-Integration (Optional)
-
-CaseDesk AI kann vollständig lokal ohne externe KI-Dienste betrieben werden.
-
-Für erweiterte KI-Funktionen:
-1. OpenAI API-Key in `.env` eintragen
-2. Oder im Setup-Assistent konfigurieren
-
-### E-Mail-Integration
-
-IMAP-Konten werden im Web-Interface unter **Einstellungen > E-Mail** konfiguriert.
-
-### Datenschutz
-
-Unter **Einstellungen > Datenschutz** können Sie:
-- Internetzugriff vollständig deaktivieren
-- Externe KI-Nutzung steuern
-- Audit-Logs einsehen
 
 ## Architektur
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    CaseDesk AI                          │
-├─────────────────────────────────────────────────────────┤
-│  Frontend (React)     │  Backend (FastAPI)              │
-│  - Dashboard          │  - REST API                     │
-│  - Dokumente          │  - Auth & Sessions              │
-│  - Fälle              │  - Document Processing          │
-│  - E-Mails            │  - AI Abstraction Layer         │
-│  - Kalender           │  - IMAP Integration             │
-│  - KI-Chat            │                                 │
-├─────────────────────────────────────────────────────────┤
-│  PostgreSQL   │  Redis       │  OCR Service (Tesseract) │
-│  (Datenbank)  │  (Cache/Jobs)│  (Texterkennung)         │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                      CaseDesk AI                            │
+├─────────────────────────────────────────────────────────────┤
+│  Frontend (React)      │  Backend (FastAPI)                 │
+│  - Dashboard           │  - REST API                        │
+│  - Dokumente           │  - Auth & Sessions                 │
+│  - Fälle               │  - Document Processing             │
+│  - E-Mails             │  - AI Abstraction Layer            │
+│  - Kalender            │  - IMAP Integration                │
+│  - KI-Chat             │                                    │
+├─────────────────────────────────────────────────────────────┤
+│  Ollama       │ PostgreSQL │  Redis    │ OCR Service       │
+│  (Llama 3.2) │ (Datenbank)│ (Cache)   │ (Tesseract)       │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+## Dokumentenverarbeitung
+
+Wenn Sie ein Dokument hochladen, passiert folgendes automatisch:
+
+1. **OCR** - Text wird aus PDF/Bild extrahiert (Tesseract)
+2. **KI-Analyse** - Ollama analysiert den Inhalt:
+   - Datum erkennen
+   - Absender identifizieren
+   - Dokumenttyp klassifizieren
+   - Referenznummer/Aktenzeichen finden
+   - Kurzthema erstellen
+   - Relevante Tags generieren
+   - Fristen erkennen
+3. **Umbenennung** - Dokument wird nach Schema umbenannt:
+   `2024-03-15 – Finanzamt München – Steuerbescheid – 123/456/789 – Einkommensteuer 2023.pdf`
+4. **Aufgaben** - Erkannte Fristen werden als Aufgaben angelegt
+
+## Volltextsuche
+
+Die Suche durchsucht:
+- Dokumenteninhalt (OCR-Text)
+- Dokumentennamen
+- Tags
+- KI-Zusammenfassungen
+
+Beispiel: Suche nach "Steuern 24" findet alle Dokumente die mit Steuern 2024 zu tun haben, auch wenn der Dateiname anders lautet.
+
+## GPU-Unterstützung (Optional)
+
+Für schnellere KI-Verarbeitung mit NVIDIA GPU:
+
+```yaml
+# In docker-compose.yml ist GPU-Support bereits konfiguriert
+# Stellen Sie sicher, dass nvidia-container-toolkit installiert ist:
+sudo apt install nvidia-container-toolkit
+sudo systemctl restart docker
+```
+
+Ohne GPU funktioniert alles auf CPU, aber langsamer.
+
+## Konfiguration
+
+### Umgebungsvariablen
+
+| Variable | Beschreibung | Standard |
+|----------|--------------|----------|
+| `POSTGRES_PASSWORD` | Datenbank-Passwort | `casedesk_secret` |
+| `SECRET_KEY` | JWT-Verschlüsselung | Muss geändert werden! |
+| `OPENAI_API_KEY` | Optional für OpenAI | - |
+
+### KI-Provider
+
+Im Web-Interface unter **Einstellungen > KI**:
+
+- **Ollama (Empfohlen)**: Läuft lokal, kostenlos, kein Internet nötig
+- **OpenAI**: Benötigt API-Key und Internetzugriff
+- **Deaktiviert**: Keine KI-Funktionen
+
+### Datenschutz
+
+Unter **Einstellungen > Datenschutz**:
+
+- **Internetzugriff blockieren**: Kompletter Offline-Betrieb
+- **Internetzugriff erlauben**: Für OpenAI oder Recherche
+
+## API-Dokumentation
+
+Nach dem Start verfügbar unter:
+- Swagger UI: `http://localhost:8001/api/docs`
+- ReDoc: `http://localhost:8001/api/redoc`
 
 ## Entwicklung
 
-### Lokale Entwicklung
+### Lokale Entwicklung ohne Docker
 
 ```bash
 # Backend
 cd backend
 pip install -r requirements.txt
-uvicorn server:app --reload --port 8001
+python -m uvicorn server:app --reload --port 8001
 
 # Frontend
 cd frontend
 yarn install
 yarn start
+
+# Ollama separat installieren
+# https://ollama.ai/download
+ollama serve
+ollama pull llama3.2
 ```
 
 ### Tests
@@ -119,18 +194,31 @@ cd frontend
 yarn test
 ```
 
-## API-Dokumentation
+## Troubleshooting
 
-Nach dem Start verfügbar unter:
-- Swagger UI: `http://localhost:8001/api/docs`
-- ReDoc: `http://localhost:8001/api/redoc`
+### Ollama startet nicht
+```bash
+# Logs prüfen
+docker-compose logs ollama
+
+# Manuell Modell laden
+docker-compose exec ollama ollama pull llama3.2
+```
+
+### OCR funktioniert nicht
+```bash
+# OCR Service Status
+docker-compose logs ocr
+
+# Tesseract Sprachen prüfen
+docker-compose exec ocr tesseract --list-langs
+```
+
+### Dokumentenverarbeitung langsam
+- GPU aktivieren für schnellere KI
+- RAM auf 8GB+ erhöhen
+- SSD statt HDD verwenden
 
 ## Lizenz
 
 MIT License - Siehe LICENSE-Datei
-
-## Support
-
-Bei Fragen oder Problemen:
-- GitHub Issues öffnen
-- Dokumentation unter `/docs` lesen

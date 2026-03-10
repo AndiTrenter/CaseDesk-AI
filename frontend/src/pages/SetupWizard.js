@@ -28,7 +28,7 @@ export default function SetupWizard({ onComplete }) {
     admin_password: '',
     admin_password_confirm: '',
     admin_full_name: '',
-    ai_provider: 'disabled',
+    ai_provider: 'ollama',
     openai_api_key: '',
     internet_access: 'denied'
   });
@@ -354,20 +354,26 @@ const AIStep = ({ formData, onChange, t }) => (
         <Label className="text-gray-300">{t('setup.aiProvider')}</Label>
         <div className="grid grid-cols-1 gap-3 mt-2">
           {[
-            { id: 'disabled', label: t('setup.aiDisabled'), desc: 'No AI features' },
-            { id: 'openai', label: t('setup.aiOpenai'), desc: 'Requires API key' }
+            { id: 'ollama', label: 'Ollama (Lokal)', desc: 'Komplett lokal, kein Internet erforderlich', recommended: true },
+            { id: 'openai', label: t('setup.aiOpenai'), desc: 'Benötigt API-Key und Internetzugriff' },
+            { id: 'disabled', label: t('setup.aiDisabled'), desc: 'KI-Funktionen deaktiviert' }
           ].map((option) => (
             <button
               key={option.id}
               onClick={() => onChange('ai_provider', option.id)}
               className={`
-                p-4 rounded-lg border transition-all text-left
+                p-4 rounded-lg border transition-all text-left relative
                 ${formData.ai_provider === option.id 
                   ? 'border-white/30 bg-white/5' 
                   : 'border-white/10 hover:border-white/20'}
               `}
               data-testid={`ai-provider-${option.id}-btn`}
             >
+              {option.recommended && (
+                <span className="absolute top-2 right-2 px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded">
+                  Empfohlen
+                </span>
+              )}
               <span className="text-white font-medium block">{option.label}</span>
               <span className="text-gray-500 text-sm">{option.desc}</span>
             </button>
@@ -375,7 +381,13 @@ const AIStep = ({ formData, onChange, t }) => (
         </div>
       </div>
       
-      {formData.ai_provider === 'openai' && (
+      {formData.ai_provider === 'ollama' && (
+        <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+          <p className="text-green-300 text-sm">
+            Ollama wird automatisch mit Docker installiert. Das Llama 3.2 Modell wird beim ersten Start heruntergeladen (ca. 2GB).
+          </p>
+        </div>
+      )}
         <div>
           <Label className="text-gray-300">{t('setup.apiKey')}</Label>
           <Input

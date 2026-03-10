@@ -1,6 +1,38 @@
 version: '3.8'
 
 services:
+  # Ollama - Local LLM Server
+  ollama:
+    image: ollama/ollama:latest
+    container_name: casedesk-ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+    # Pull llama3 model on startup
+    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull llama3.2 && wait"]
+
+  # Ollama CPU-only alternative (comment out the above and use this if no GPU)
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: casedesk-ollama
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   ports:
+  #     - "11434:11434"
+  #   restart: unless-stopped
+  #   entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull llama3.2 && wait"]
+
   postgres:
     image: postgres:16-alpine
     container_name: casedesk-postgres
@@ -44,8 +76,10 @@ services:
       REDIS_URL: redis://redis:6379
       SECRET_KEY: ${SECRET_KEY:-change-this-in-production}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OLLAMA_URL: http://ollama:11434
       UPLOAD_DIR: /app/uploads
       OCR_ENABLED: ${OCR_ENABLED:-true}
+      OCR_SERVICE_URL: http://ocr:8002
     volumes:
       - uploads_data:/app/uploads
       - ./backend:/app
@@ -56,6 +90,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      ollama:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
       interval: 30s
@@ -97,6 +133,7 @@ volumes:
   postgres_data:
   redis_data:
   uploads_data:
+  ollama_data:
 
 networks:
   default:

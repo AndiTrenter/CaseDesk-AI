@@ -78,7 +78,14 @@ async def lifespan(app: FastAPI):
     await db.users.create_index("username", unique=True)
     await db.cases.create_index("user_id")
     await db.documents.create_index("user_id")
-    await db.documents.create_index([("ocr_text", "text")])
+    # Full-text search index for documents
+    await db.documents.create_index([
+        ("ocr_text", "text"),
+        ("display_name", "text"),
+        ("original_filename", "text"),
+        ("tags", "text"),
+        ("ai_summary", "text")
+    ], default_language="german", name="document_fulltext")
     await db.tasks.create_index("user_id")
     await db.events.create_index("user_id")
     yield
@@ -450,22 +457,56 @@ async def delete_case(case_id: str, user: dict = Depends(require_auth)):
 
 # ==================== Documents ====================
 
-@api_router.get("/documents", response_model=List[Document])
+@api_router.get("/documents")
 async def list_documents(
     case_id: Optional[str] = None,
     document_type: Optional[DocumentType] = None,
     search: Optional[str] = None,
     user: dict = Depends(require_auth)
 ):
-    """List documents for current user"""
-    query = {"user_id": user["id"]}
-    if case_id:
-        query["case_id"] = case_id
-    if document_type:
-        query["document_type"] = document_type
-    
-    documents = await db.documents.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
-    return documents
+    """List documents for current user with full-text search"""
+    if search:
+        # Full-text search across document content, name, and tags
+        pipeline = [
+            {
+                "$match": {
+                    "user_id": user["id"],
+                    "$text": {"$search": search}
+                }
+            },
+            {
+                "$addFields": {
+                    "score": {"$meta": "textScore"}
+                }
+            },
+            {
+                "$sort": {"score": -1}
+            },
+            {
+                "$project": {"_id": 0}
+            },
+            {
+                "$limit": 100
+            }
+        ]
+        
+        if case_id:
+            pipeline[0]["$match"]["case_id"] = case_id
+        if document_type:
+            pipeline[0]["$match"]["document_type"] = document_type
+        
+        documents = await db.documents.aggregate(pipeline).to_list(100)
+        return documents
+    else:
+        # Normal listing
+        query = {"user_id": user["id"]}
+        if case_id:
+            query["case_id"] = case_id
+        if document_type:
+            query["document_type"] = document_type
+        
+        documents = await db.documents.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+        return documents
 
 
 @api_router.post("/documents/upload")
@@ -473,18 +514,17 @@ async def upload_document(
     file: UploadFile = File(...),
     case_id: Optional[str] = Form(None),
     document_type: str = Form("other"),
+    auto_process: bool = Form(True),
     user: dict = Depends(require_auth)
 ):
-    """Upload and process document"""
-    # Validate file type
-    allowed_types = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 
-                     'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+    """Upload and auto-process document with OCR and AI analysis"""
+    from ai_service import AIService, DocumentAnalyzer, get_ai_service
     
     content = await file.read()
     
     # Generate unique filename
     doc_id = str(uuid.uuid4())
-    file_ext = Path(file.filename).suffix
+    file_ext = Path(file.filename).suffix.lower()
     storage_filename = f"{doc_id}{file_ext}"
     storage_path = UPLOAD_DIR / user["id"] / storage_filename
     
@@ -497,24 +537,30 @@ async def upload_document(
     
     now = datetime.now(timezone.utc).isoformat()
     
-    # Create document record
+    # Create initial document record
     document = {
         "id": doc_id,
         "user_id": user["id"],
         "case_id": case_id,
         "filename": storage_filename,
         "original_filename": file.filename,
+        "display_name": file.filename,  # Will be updated after AI analysis
         "mime_type": file.content_type,
         "size": len(content),
         "storage_path": str(storage_path),
         "document_type": document_type,
         "ocr_text": None,
         "ocr_processed": False,
+        "ai_analyzed": False,
+        "ai_summary": None,
+        "tags": [],
         "metadata": {},
         "sender": None,
         "recipient": None,
         "document_date": None,
         "deadline": None,
+        "deadlines": [],
+        "importance": "mittel",
         "created_at": now,
         "updated_at": now
     }
@@ -530,26 +576,208 @@ async def upload_document(
     
     await log_action(user["id"], "upload_document", "document", doc_id)
     
-    # Trigger OCR processing (async)
-    # In production, this would be a background task
+    # Auto-process document (OCR + AI analysis)
+    if auto_process:
+        try:
+            # Step 1: OCR
+            ocr_text = ""
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as http_client:
+                    with open(storage_path, "rb") as f:
+                        files = {"file": (file.filename, f, file.content_type)}
+                        response = await http_client.post(f"{OCR_SERVICE_URL}/ocr", files=files)
+                
+                if response.status_code == 200:
+                    ocr_result = response.json()
+                    ocr_text = ocr_result.get("text", "")
+            except Exception as e:
+                logger.warning(f"OCR processing failed: {e}")
+            
+            # Step 2: AI Analysis
+            if ocr_text:
+                try:
+                    ai_service = await get_ai_service(db)
+                    analyzer = DocumentAnalyzer(ai_service)
+                    
+                    analysis = await analyzer.analyze_document(ocr_text, file.filename)
+                    
+                    if analysis.get("success"):
+                        metadata = analysis.get("metadata", {})
+                        
+                        # Generate new display name
+                        new_display_name = analyzer.generate_filename(metadata, file_ext)
+                        
+                        # Update document with AI analysis
+                        update_data = {
+                            "ocr_text": ocr_text,
+                            "ocr_processed": True,
+                            "ai_analyzed": True,
+                            "display_name": new_display_name,
+                            "document_type": metadata.get("dokumenttyp", document_type).lower().replace("ä", "ae").replace("ö", "oe").replace("ü", "ue"),
+                            "tags": metadata.get("tags", []),
+                            "ai_summary": metadata.get("zusammenfassung"),
+                            "sender": metadata.get("absender"),
+                            "importance": metadata.get("wichtigkeit", "mittel"),
+                            "deadlines": metadata.get("fristen", []),
+                            "metadata": metadata,
+                            "updated_at": datetime.now(timezone.utc).isoformat()
+                        }
+                        
+                        # Parse document date
+                        if metadata.get("datum") and metadata["datum"] != "null":
+                            try:
+                                update_data["document_date"] = metadata["datum"]
+                            except:
+                                pass
+                        
+                        await db.documents.update_one({"id": doc_id}, {"$set": update_data})
+                        
+                        # Update document dict for response
+                        document.update(update_data)
+                        
+                        # Create tasks for deadlines
+                        for deadline in metadata.get("fristen", []):
+                            try:
+                                task = {
+                                    "id": str(uuid.uuid4()),
+                                    "user_id": user["id"],
+                                    "title": f"Frist: {metadata.get('kurzthema', 'Dokument')}",
+                                    "description": f"Automatisch erkannte Frist aus: {new_display_name}",
+                                    "priority": "high",
+                                    "status": "todo",
+                                    "due_date": deadline,
+                                    "case_id": case_id,
+                                    "document_id": doc_id,
+                                    "created_at": now,
+                                    "updated_at": now
+                                }
+                                await db.tasks.insert_one(task)
+                            except:
+                                pass
+                    else:
+                        # AI analysis failed, just save OCR text
+                        await db.documents.update_one(
+                            {"id": doc_id},
+                            {"$set": {
+                                "ocr_text": ocr_text,
+                                "ocr_processed": True,
+                                "updated_at": datetime.now(timezone.utc).isoformat()
+                            }}
+                        )
+                        document["ocr_text"] = ocr_text
+                        document["ocr_processed"] = True
+                        
+                except Exception as e:
+                    logger.error(f"AI analysis failed: {e}")
+                    # Save OCR text even if AI fails
+                    await db.documents.update_one(
+                        {"id": doc_id},
+                        {"$set": {
+                            "ocr_text": ocr_text,
+                            "ocr_processed": True,
+                            "updated_at": datetime.now(timezone.utc).isoformat()
+                        }}
+                    )
+                    
+        except Exception as e:
+            logger.error(f"Document processing error: {e}")
     
     document.pop("_id", None)
     return {"success": True, "document": document}
 
 
+@api_router.post("/documents/{document_id}/reprocess")
+async def reprocess_document(document_id: str, user: dict = Depends(require_auth)):
+    """Re-process document with OCR and AI analysis"""
+    from ai_service import AIService, DocumentAnalyzer, get_ai_service
+    
+    document = await db.documents.find_one({"id": document_id, "user_id": user["id"]}, {"_id": 0})
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Run OCR
+    ocr_text = ""
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as http_client:
+            with open(document["storage_path"], "rb") as f:
+                files = {"file": (document["original_filename"], f, document["mime_type"])}
+                response = await http_client.post(f"{OCR_SERVICE_URL}/ocr", files=files)
+        
+        if response.status_code == 200:
+            ocr_result = response.json()
+            ocr_text = ocr_result.get("text", "")
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"OCR service error: {str(e)}")
+    
+    if not ocr_text:
+        raise HTTPException(status_code=400, detail="No text could be extracted from document")
+    
+    # AI Analysis
+    ai_service = await get_ai_service(db)
+    analyzer = DocumentAnalyzer(ai_service)
+    
+    file_ext = Path(document["original_filename"]).suffix.lower()
+    analysis = await analyzer.analyze_document(ocr_text, document["original_filename"])
+    
+    if analysis.get("success"):
+        metadata = analysis.get("metadata", {})
+        new_display_name = analyzer.generate_filename(metadata, file_ext)
+        
+        update_data = {
+            "ocr_text": ocr_text,
+            "ocr_processed": True,
+            "ai_analyzed": True,
+            "display_name": new_display_name,
+            "tags": metadata.get("tags", []),
+            "ai_summary": metadata.get("zusammenfassung"),
+            "sender": metadata.get("absender"),
+            "importance": metadata.get("wichtigkeit", "mittel"),
+            "deadlines": metadata.get("fristen", []),
+            "metadata": metadata,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        if metadata.get("datum") and metadata["datum"] != "null":
+            update_data["document_date"] = metadata["datum"]
+        
+        await db.documents.update_one({"id": document_id}, {"$set": update_data})
+        
+        return {
+            "success": True,
+            "display_name": new_display_name,
+            "tags": metadata.get("tags", []),
+            "summary": metadata.get("zusammenfassung"),
+            "metadata": metadata
+        }
+    else:
+        # Save OCR text even if AI fails
+        await db.documents.update_one(
+            {"id": document_id},
+            {"$set": {
+                "ocr_text": ocr_text,
+                "ocr_processed": True,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        return {
+            "success": False,
+            "ocr_text": ocr_text[:500] + "...",
+            "error": analysis.get("error", "AI analysis failed")
+        }
+
+
 @api_router.post("/documents/{document_id}/ocr")
 async def process_document_ocr(document_id: str, user: dict = Depends(require_auth)):
-    """Process document with OCR"""
+    """Process document with OCR only (legacy endpoint)"""
     document = await db.documents.find_one({"id": document_id, "user_id": user["id"]}, {"_id": 0})
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
     
     try:
-        # Call OCR service
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=120.0) as http_client:
             with open(document["storage_path"], "rb") as f:
                 files = {"file": (document["original_filename"], f, document["mime_type"])}
-                response = await client.post(f"{OCR_SERVICE_URL}/ocr", files=files, timeout=120)
+                response = await http_client.post(f"{OCR_SERVICE_URL}/ocr", files=files)
         
         if response.status_code == 200:
             ocr_result = response.json()
@@ -848,21 +1076,17 @@ async def ai_chat(
     case_id: str = Form(None),
     user: dict = Depends(require_auth)
 ):
-    """AI Chat endpoint"""
+    """AI Chat endpoint with Ollama (local) and OpenAI support"""
+    from ai_service import get_ai_service, ChatAssistant
+    
     # Get system settings
     settings = await db.system_settings.find_one({}, {"_id": 0})
     
-    if not settings or settings.get("ai_provider") == "disabled":
+    # Check internet access for external AI
+    if settings and settings.get("internet_access") == "denied" and settings.get("ai_provider") == "openai":
         return {
             "success": False,
-            "error": "AI is disabled. Please configure an AI provider in settings.",
-            "response": None
-        }
-    
-    if settings.get("internet_access") == "denied" and settings.get("ai_provider") == "openai":
-        return {
-            "success": False,
-            "error": "External AI requires internet access. Please enable internet access or use local AI.",
+            "error": "Externe KI benötigt Internetzugriff. Bitte aktivieren Sie den Internetzugriff oder nutzen Sie die lokale KI (Ollama).",
             "response": None
         }
     
@@ -882,53 +1106,33 @@ async def ai_chat(
     }
     await db.chat_messages.insert_one(user_msg)
     
-    # Get conversation history
-    history = await db.chat_messages.find(
-        {"user_id": user["id"], "session_id": session_id},
-        {"_id": 0}
-    ).sort("created_at", 1).to_list(50)
-    
     # Prepare context
-    context = ""
+    context = {}
     if case_id:
         case = await db.cases.find_one({"id": case_id, "user_id": user["id"]}, {"_id": 0})
         if case:
-            context += f"\nCase: {case.get('title', 'Unknown')}\nDescription: {case.get('description', 'None')}\n"
+            context["case"] = case
+            # Get linked documents
+            if case.get("document_ids"):
+                docs = await db.documents.find(
+                    {"id": {"$in": case["document_ids"][:5]}, "user_id": user["id"]},
+                    {"_id": 0}
+                ).to_list(5)
+                context["documents"] = docs
     
-    # Call OpenAI if configured
-    if settings.get("ai_provider") == "openai" and settings.get("openai_api_key"):
-        try:
-            import openai
-            client = openai.OpenAI(api_key=settings["openai_api_key"])
-            
-            messages = [
-                {"role": "system", "content": f"""You are CaseDesk AI, a helpful assistant for document and case management.
-You help users manage their documents, cases, emails, tasks, and deadlines.
-You provide clear, accurate information based on the user's data.
-You NEVER make up facts or information.
-You ask clarifying questions when uncertain.
-Current context: {context}
-User language preference: {user.get('language', 'de')}"""}
-            ]
-            
-            for msg in history[-10:]:  # Last 10 messages
-                messages.append({"role": msg["role"], "content": msg["content"]})
-            
-            response = client.chat.completions.create(
-                model="gpt-4",
-                messages=messages,
-                max_tokens=1000,
-                temperature=0.7
-            )
-            
-            ai_response = response.choices[0].message.content
-            
-        except Exception as e:
-            logger.error(f"OpenAI API error: {e}")
-            ai_response = f"AI service error: {str(e)}"
-    else:
-        # Fallback response when no AI configured
-        ai_response = "AI is not properly configured. Please set up an AI provider in the settings."
+    # Get AI service and generate response
+    try:
+        ai_service = await get_ai_service(db)
+        assistant = ChatAssistant(ai_service)
+        
+        ai_response = await assistant.chat(
+            message=message,
+            context=context,
+            language=user.get("language", "de")
+        )
+    except Exception as e:
+        logger.error(f"AI chat error: {e}")
+        ai_response = f"KI-Fehler: {str(e)}"
     
     # Save AI response
     ai_msg = {
@@ -947,6 +1151,24 @@ User language preference: {user.get('language', 'de')}"""}
         "success": True,
         "response": ai_response,
         "session_id": session_id
+    }
+
+
+@api_router.get("/ai/status")
+async def get_ai_status(user: dict = Depends(require_auth)):
+    """Check AI service availability"""
+    from ai_service import AIService
+    
+    ai = AIService(provider="ollama")
+    status = await ai.check_availability()
+    
+    settings = await db.system_settings.find_one({}, {"_id": 0})
+    
+    return {
+        "configured_provider": settings.get("ai_provider", "ollama") if settings else "ollama",
+        "ollama": status["ollama"],
+        "openai": status["openai"],
+        "internet_access": settings.get("internet_access", "denied") if settings else "denied"
     }
 
 

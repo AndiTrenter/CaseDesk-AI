@@ -87,13 +87,16 @@ export const documentsAPI = {
   upload: (file, caseId, documentType) => {
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('auto_process', 'true');
     if (caseId) formData.append('case_id', caseId);
     if (documentType) formData.append('document_type', documentType);
     return api.post('/documents/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000 // 2 minutes for OCR + AI processing
     });
   },
   ocr: (id) => api.post(`/documents/${id}/ocr`),
+  reprocess: (id) => api.post(`/documents/${id}/reprocess`, {}, { timeout: 120000 }),
   delete: (id) => api.delete(`/documents/${id}`),
 };
 
