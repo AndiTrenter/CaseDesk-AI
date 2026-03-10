@@ -7,151 +7,114 @@
 **Last Updated:** 2026-03-10
 
 ## Original Problem Statement
-Eine vollständig self-hosted, datenschutzorientierte, modulare Webanwendung für private und geschäftliche Dokumenten-, E-Mail-, Kalender- und Fallverwaltung mit KI-Unterstützung. Die Anwendung muss komplett unabhängig von externen Diensten funktionieren und per Docker Compose installierbar sein.
+Eine vollständig self-hosted, datenschutzorientierte, modulare Webanwendung für private und geschäftliche Dokumenten-, E-Mail-, Kalender- und Fallverwaltung mit KI-Unterstützung. Komplett standalone per Docker Compose installierbar.
 
-## User Personas
+## User Choices
+- **KI:** Ollama (Llama 3.2) als Standard, OpenAI optional
+- **OCR:** Tesseract (lokal)
+- **Datenbank:** MongoDB (Dev) / PostgreSQL (Produktion)
+- **Theme:** Dunkel als Standard mit Hell-Toggle
+- **Sprache:** Mehrsprachig (DE/EN)
 
-### Primary: Privacy-Conscious Professional
-- Manages personal and business documents
-- Needs offline-capable document management
-- Values data sovereignty and privacy
-- German-speaking, deals with authorities (Behörden)
+## What's Been Implemented (2026-03-10)
 
-### Secondary: Small Business Owner
-- Multiple users with separate data areas
-- Case-based workflow (clients, projects)
-- Email integration needs
-- Requires audit logs
+### Backend (FastAPI + MongoDB)
+- ✅ User authentication with JWT
+- ✅ Setup wizard API mit Ollama-Unterstützung
+- ✅ Cases CRUD mit Status-Tracking
+- ✅ Documents CRUD mit Auto-Processing
+- ✅ Tasks CRUD mit Prioritäten
+- ✅ Events CRUD für Kalender
+- ✅ Drafts CRUD
+- ✅ AI Chat mit Ollama/OpenAI-Abstraktion
+- ✅ System & User Settings
+- ✅ Mail Accounts Struktur
+- ✅ Audit Logging
 
-## Core Requirements (Static)
+### Intelligente Dokumentenverarbeitung
+- ✅ Auto-OCR bei Upload (Tesseract)
+- ✅ KI-basierte Metadatenextraktion (Ollama)
+- ✅ Auto-Umbenennung: `Datum – Absender – Dokumenttyp – Referenz – Kurzthema`
+- ✅ Auto-Tag-Generierung
+- ✅ Fristenerkennung mit Aufgabenerstellung
+- ✅ Wichtigkeits-Bewertung (hoch/mittel/niedrig)
 
-### Must Have (P0)
-- [x] Multi-user support with data separation
-- [x] Document upload (PDF, PNG, JPG, DOCX)
-- [x] OCR processing (Tesseract)
-- [x] Case management with status tracking
-- [x] Task management with priorities
-- [x] Calendar with events
-- [x] AI Chat interface
-- [x] Setup wizard for first-time installation
-- [x] Configurable AI provider (disabled/OpenAI)
-- [x] Internet access toggle
-- [x] Multilingual support (DE/EN)
-- [x] Dark/Light theme
-- [x] Docker Compose ready
-- [x] No external platform dependencies
+### Volltextsuche
+- ✅ MongoDB Text-Index für deutsche Sprache
+- ✅ Suche in Dokumenteninhalt (OCR-Text)
+- ✅ Suche in Namen, Tags, Zusammenfassungen
+- ✅ Relevanz-basiertes Ranking
 
-### Should Have (P1)
-- [ ] IMAP email integration (structure ready)
-- [ ] Draft generation with AI
-- [ ] Document semantic search
-- [ ] Deadline detection from documents
-- [ ] Document attachment suggestions
+### Frontend (React + Tailwind + Shadcn)
+- ✅ Setup Wizard (5 Schritte) mit Ollama als Standard
+- ✅ Login-Seite
+- ✅ Dashboard mit Statistiken
+- ✅ Dokumentenseite mit Upload, Suche, Reprocessing
+- ✅ Fallverwaltung
+- ✅ Aufgaben-Board (Kanban-Stil)
+- ✅ Kalender (Monatsansicht)
+- ✅ KI-Chat-Interface
+- ✅ Einstellungen (User, KI, Datenschutz)
 
-### Nice to Have (P2)
-- [ ] SMTP email sending
-- [ ] Local LLM support (Ollama)
-- [ ] Team roles and permissions
-- [ ] Calendar sync (CalDAV)
-- [ ] Mobile responsive optimization
-
-## What's Been Implemented
-
-### 2026-03-10 - MVP Release
-- **Backend (FastAPI + MongoDB)**
-  - User authentication with JWT
-  - Setup wizard API
-  - Cases CRUD
-  - Documents CRUD with file upload
-  - Tasks CRUD
-  - Events CRUD
-  - Drafts CRUD
-  - AI Chat endpoint
-  - System & User settings
-  - Mail accounts structure
-  - Audit logging
-
-- **Frontend (React + Tailwind + Shadcn)**
-  - Setup Wizard (5 steps)
-  - Login page
-  - Dashboard with stats
-  - Documents page with upload
-  - Cases management
-  - Tasks board (Kanban-style)
-  - Calendar (month view)
-  - AI Chat interface
-  - Settings (User, AI, Privacy)
-  - Responsive sidebar navigation
-
-- **Docker Infrastructure**
-  - docker-compose.yml with all services
-  - PostgreSQL, Redis, OCR service
-  - Tesseract OCR service
-  - Environment configuration
-
-- **Design**
-  - Dark theme ("Secure Vault")
-  - Manrope + Inter fonts
-  - German language support
-  - Privacy-first UX
+### Docker-Infrastruktur
+- ✅ docker-compose.yml mit allen Services
+- ✅ Ollama mit Llama 3.2 (Auto-Download)
+- ✅ PostgreSQL, Redis
+- ✅ Tesseract OCR Service
+- ✅ GPU-Unterstützung (optional)
 
 ## Architecture
 
 ```
-Frontend (React 19)
-├── Pages: SetupWizard, Login, Dashboard, Documents, Cases, Tasks, Calendar, AI, Settings
-├── Components: Layout, Sidebar, Cards
-├── State: AuthContext
-└── API: Axios client
-
-Backend (FastAPI)
-├── Routes: /api/auth, /api/setup, /api/cases, /api/documents, /api/tasks, /api/events, /api/ai, /api/settings
-├── Models: User, Case, Document, Task, Event, Draft, Settings
-├── Services: Auth (JWT), File Storage, AI Abstraction
-└── Database: MongoDB (dev) / PostgreSQL (prod)
-
-OCR Service (FastAPI + Tesseract)
-├── Endpoints: /ocr, /languages, /health
-└── Supports: PDF, PNG, JPG, TIFF
+┌─────────────────────────────────────────────────────────────┐
+│                      CaseDesk AI                            │
+├─────────────────────────────────────────────────────────────┤
+│  Frontend (React)      │  Backend (FastAPI)                 │
+│  - Dashboard           │  - REST API                        │
+│  - Dokumente           │  - AI Abstraction Layer            │
+│  - Fälle               │  - Document Processor              │
+│  - Aufgaben            │  - Search Engine                   │
+│  - Kalender            │  - Auth & Sessions                 │
+│  - KI-Chat             │                                    │
+├─────────────────────────────────────────────────────────────┤
+│  Ollama       │ PostgreSQL │  Redis    │ OCR Service       │
+│  (Llama 3.2) │ (Datenbank)│ (Cache)   │ (Tesseract)       │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## Prioritized Backlog
 
-### P0 (Critical - Next Sprint)
-1. IMAP email fetching implementation
-2. Email-to-case linking
-3. Attachment import from emails
-4. Document OCR auto-processing
+### P0 (Nächster Sprint)
+1. IMAP E-Mail-Abruf implementieren
+2. E-Mail-zu-Fall-Verknüpfung
+3. Anhänge aus E-Mails importieren
+4. E-Mails nach Verarbeitung als gelesen markieren
 
-### P1 (High - Following Sprint)
-1. AI-powered draft generation
-2. Document content analysis
-3. Deadline extraction from OCR text
-4. Full-text search implementation
+### P1 (Folgender Sprint)
+1. KI-gestützte Entwurfserstellung
+2. Dokumenten-Vorschau im Browser
+3. Export/Import-Funktionalität
+4. SMTP E-Mail-Versand (mit Freigabe)
 
-### P2 (Medium)
-1. Local LLM integration (Ollama)
-2. Team collaboration features
-3. Export/Import functionality
-4. API documentation (Swagger UI)
-
-### P3 (Low)
-1. Mobile app (React Native)
-2. Browser extensions
-3. Third-party integrations
+### P2 (Mittel)
+1. Team-Rollen und Berechtigungen
+2. CalDAV-Kalendersync
+3. Mobile Optimierung
+4. Webhook-Integrationen
 
 ## Technical Decisions
 
-1. **MongoDB for Development** - Quick iteration, flexible schema
-2. **PostgreSQL for Production** - ACID compliance, better for Docker
-3. **Tesseract OCR** - Open source, no API costs, German support
-4. **OpenAI Integration** - Optional, configurable per installation
-5. **No Emergent Dependencies** - Fully self-contained
+1. **Ollama als Standard-KI** - Läuft lokal, kostenlos, datenschutzkonform
+2. **MongoDB für Entwicklung** - Schnelle Iteration, flexible Schemas
+3. **PostgreSQL für Produktion** - ACID-Compliance, robuster
+4. **Tesseract OCR** - Open Source, deutsche Sprachunterstützung
+5. **Keine Emergent-Abhängigkeiten** - Vollständig self-contained
 
-## Next Tasks
+## Next Action Items
 
-1. Test IMAP email fetching with real mail server
-2. Implement background job processing for OCR
-3. Add document preview in browser
-4. Implement search across all entities
-5. Add data export functionality
+1. ✅ Ollama Integration abgeschlossen
+2. ✅ Intelligente Dokumentenverarbeitung implementiert
+3. ✅ Volltextsuche implementiert
+4. ⏳ IMAP E-Mail-Integration
+5. ⏳ Dokumenten-Vorschau
+6. ⏳ Datenexport-Funktion

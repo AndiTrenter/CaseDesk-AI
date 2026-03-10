@@ -28,7 +28,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   
   const [systemSettings, setSystemSettings] = useState({
-    ai_provider: 'disabled',
+    ai_provider: 'ollama',
     openai_api_key: '',
     internet_access: 'denied',
     default_language: 'de'
@@ -244,20 +244,45 @@ export default function Settings() {
                     {/* AI Provider */}
                     <div>
                       <Label className="text-white">{t('setup.aiProvider')}</Label>
-                      <p className="text-gray-500 text-sm mb-2">Choose how AI features work</p>
-                      <Select
-                        value={systemSettings.ai_provider}
-                        onValueChange={(value) => setSystemSettings({ ...systemSettings, ai_provider: value })}
-                      >
-                        <SelectTrigger className="bg-black/30 border-white/10 text-white" data-testid="ai-provider-select">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="bg-[#1A1A1A] border-white/10">
-                          <SelectItem value="disabled">{t('setup.aiDisabled')}</SelectItem>
-                          <SelectItem value="openai">{t('setup.aiOpenai')}</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <p className="text-gray-500 text-sm mb-2">Wählen Sie den KI-Anbieter</p>
+                      
+                      <div className="grid grid-cols-1 gap-3 mt-2">
+                        {[
+                          { id: 'ollama', label: 'Ollama (Lokal)', desc: 'Komplett lokal, kein Internet erforderlich', recommended: true },
+                          { id: 'openai', label: t('setup.aiOpenai'), desc: 'Benötigt API-Key und Internetzugriff' },
+                          { id: 'disabled', label: t('setup.aiDisabled'), desc: 'KI-Funktionen deaktiviert' }
+                        ].map((option) => (
+                          <button
+                            key={option.id}
+                            onClick={() => setSystemSettings({ ...systemSettings, ai_provider: option.id })}
+                            className={`
+                              p-4 rounded-lg border transition-all text-left relative
+                              ${systemSettings.ai_provider === option.id 
+                                ? 'border-white/30 bg-white/5' 
+                                : 'border-white/10 hover:border-white/20'}
+                            `}
+                            data-testid={`ai-setting-${option.id}-btn`}
+                          >
+                            {option.recommended && (
+                              <span className="absolute top-2 right-2 px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded">
+                                Empfohlen
+                              </span>
+                            )}
+                            <span className="text-white font-medium block">{option.label}</span>
+                            <span className="text-gray-500 text-sm">{option.desc}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
+
+                    {/* Ollama Info */}
+                    {systemSettings.ai_provider === 'ollama' && (
+                      <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+                        <p className="text-green-300 text-sm">
+                          Ollama läuft lokal auf Ihrem Server. Keine Daten verlassen Ihr System.
+                        </p>
+                      </div>
+                    )}
 
                     {/* OpenAI API Key */}
                     {systemSettings.ai_provider === 'openai' && (
