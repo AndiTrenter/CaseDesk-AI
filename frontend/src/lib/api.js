@@ -46,6 +46,32 @@ export const authAPI = {
   },
   logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
+  validateInvitation: (token) => api.get(`/auth/invitation/${token}`),
+  registerWithInvitation: (token, data) => {
+    const formData = new FormData();
+    formData.append('full_name', data.full_name);
+    formData.append('password', data.password);
+    return api.post(`/auth/register/${token}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+};
+
+// Users (Admin)
+export const usersAPI = {
+  list: () => api.get('/users'),
+  create: (data) => api.post('/users', data),
+  delete: (id) => api.delete(`/users/${id}`),
+  invite: (email, role = 'user') => {
+    const formData = new FormData();
+    formData.append('email', email);
+    formData.append('role', role);
+    return api.post('/users/invite', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  listInvitations: () => api.get('/users/invitations'),
+  cancelInvitation: (id) => api.delete(`/users/invitations/${id}`),
 };
 
 // Setup
@@ -62,13 +88,6 @@ export const setupAPI = {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
-};
-
-// Users
-export const usersAPI = {
-  list: () => api.get('/users'),
-  create: (data) => api.post('/users', data),
-  delete: (id) => api.delete(`/users/${id}`),
 };
 
 // Cases
@@ -211,6 +230,74 @@ export const dashboardAPI = {
 export const exportAPI = {
   all: () => api.get('/export/all'),
   case: (caseId) => api.get(`/export/case/${caseId}`),
+};
+
+// Correspondence
+export const correspondenceAPI = {
+  list: (caseId) => api.get('/correspondence', { params: caseId ? { case_id: caseId } : {} }),
+  get: (id) => api.get(`/correspondence/${id}`),
+  update: (id, data) => {
+    const formData = new FormData();
+    Object.keys(data).forEach(key => {
+      if (data[key] !== null && data[key] !== undefined) {
+        formData.append(key, data[key]);
+      }
+    });
+    return api.put(`/correspondence/${id}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  delete: (id) => api.delete(`/correspondence/${id}`),
+  download: (id) => api.get(`/correspondence/${id}/download`, { responseType: 'blob' }),
+  send: (id, mailAccountId, recipientEmail) => {
+    const formData = new FormData();
+    formData.append('mail_account_id', mailAccountId);
+    formData.append('recipient_email', recipientEmail);
+    return api.post(`/correspondence/${id}/send`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+};
+
+// Extended Cases API
+export const caseResponseAPI = {
+  analyze: (caseId) => api.get(`/cases/${caseId}/analyze`, { timeout: 120000 }),
+  generateResponse: (caseId, data) => {
+    const formData = new FormData();
+    formData.append('response_type', data.response_type);
+    formData.append('recipient', data.recipient);
+    formData.append('subject', data.subject);
+    if (data.instructions) formData.append('instructions', data.instructions);
+    if (data.document_ids) formData.append('document_ids', JSON.stringify(data.document_ids));
+    if (data.output_format) formData.append('output_format', data.output_format);
+    return api.post(`/cases/${caseId}/generate-response`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 180000
+    });
+  },
+  getHistory: (caseId) => api.get(`/cases/${caseId}/history`),
+  getDocuments: (caseId) => api.get(`/cases/${caseId}/documents`),
+};
+
+// Extended Documents API
+export const documentUpdateAPI = {
+  update: (id, data) => {
+    const formData = new FormData();
+    Object.keys(data).forEach(key => {
+      if (data[key] !== null && data[key] !== undefined) {
+        if (key === 'tags') {
+          formData.append(key, JSON.stringify(data[key]));
+        } else {
+          formData.append(key, data[key]);
+        }
+      }
+    });
+    return api.put(`/documents/${id}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  preview: (id) => api.get(`/documents/${id}/preview`),
+  downloadUrl: (id) => `${API_URL}/api/documents/${id}/download`,
 };
 
 // Health

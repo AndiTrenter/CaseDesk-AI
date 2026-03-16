@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   Briefcase, Plus, Search, MoreVertical, Trash2, 
-  Edit, FileText, Mail, CheckSquare
+  Edit, FileText, Mail, CheckSquare, ExternalLink, Sparkles
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -40,6 +41,7 @@ const STATUS_COLORS = {
 
 export default function Cases() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -173,7 +175,8 @@ export default function Cases() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05 }}
-              className="bg-[#121212] border border-white/5 rounded-xl p-5 hover:border-white/10 transition-colors group"
+              className="bg-[#121212] border border-white/5 rounded-xl p-5 hover:border-white/10 transition-colors group cursor-pointer"
+              onClick={() => navigate(`/cases/${caseItem.id}`)}
               data-testid={`case-item-${index}`}
             >
               <div className="flex items-start justify-between">
@@ -202,27 +205,56 @@ export default function Cases() {
                   </div>
                 </div>
                 
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <MoreVertical className="w-4 h-4 text-gray-400" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="bg-[#1A1A1A] border-white/10">
-                    <DropdownMenuItem 
-                      onClick={() => handleEdit(caseItem)}
-                      className="text-gray-300 focus:bg-white/10"
-                    >
-                      <Edit className="w-4 h-4 mr-2" /> {t('common.edit')}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      onClick={() => handleDelete(caseItem.id)}
-                      className="text-red-400 focus:bg-red-500/10"
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" /> {t('common.delete')}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/cases/${caseItem.id}`);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 text-blue-400"
+                  >
+                    <Sparkles className="w-4 h-4 mr-1" /> Antwort
+                  </Button>
+                  
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <MoreVertical className="w-4 h-4 text-gray-400" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="bg-[#1A1A1A] border-white/10">
+                      <DropdownMenuItem 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/cases/${caseItem.id}`);
+                        }}
+                        className="text-gray-300 focus:bg-white/10"
+                      >
+                        <ExternalLink className="w-4 h-4 mr-2" /> Öffnen
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEdit(caseItem);
+                        }}
+                        className="text-gray-300 focus:bg-white/10"
+                      >
+                        <Edit className="w-4 h-4 mr-2" /> {t('common.edit')}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(caseItem.id);
+                        }}
+                        className="text-red-400 focus:bg-red-500/10"
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" /> {t('common.delete')}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
             </motion.div>
           ))}

@@ -379,6 +379,254 @@ async def delete_user(user_id: str, admin: dict = Depends(require_admin)):
     return {"success": True, "message": "User deleted"}
 
 
+# ==================== User Invitations ====================
+
+@api_router.post("/users/invite")
+async def invite_user(
+    email: str = Form(...),
+    role: str = Form("user"),
+    admin: dict = Depends(require_admin)
+):
+    """Invite a new user via email (admin only)"""
+    # Check if email already exists
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        raise HTTPException(status_code=400, detail="E-Mail ist bereits registriert")
+    
+    # Check for existing pending invitation
+    existing_invitation = await db.invitations.find_one({
+        "email": email,
+        "status": "pending",
+        "expires_at": {"$gt": datetime.now(timezone.utc).isoformat()}
+    })
+    if existing_invitation:
+        raise HTTPException(status_code=400, detail="Einladung für diese E-Mail existiert bereits")
+    
+    # Create invitation token
+    invitation_id = str(uuid.uuid4())
+    token = hashlib.sha256(f"{invitation_id}-{email}-{datetime.now()}".encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+    expires_at = (now + timedelta(days=7)).isoformat()
+    
+    invitation = {
+        "id": invitation_id,
+        "token": token,
+        "email": email,
+        "role": role,
+        "invited_by": admin["email"],
+        "invited_by_id": admin["id"],
+        "status": "pending",
+        "created_at": now.isoformat(),
+        "expires_at": expires_at
+    }
+    
+    await db.invitations.insert_one(invitation)
+    await log_action(admin["id"], "invite_user", "invitation", invitation_id, {"email": email})
+    
+    # Generate invitation URL (frontend URL)
+    # In production, this should be configured via environment variable
+    base_url = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
+    invitation_url = f"{base_url}/register/{token}"
+    
+    # Try to send email if SMTP is configured
+    email_sent = False
+    try:
+        email_sent = await send_invitation_email(email, invitation_url, admin["full_name"] or admin["email"])
+    except Exception as e:
+        logger.warning(f"Failed to send invitation email: {e}")
+    
+    return {
+        "success": True,
+        "invitation_id": invitation_id,
+        "invitation_url": invitation_url,
+        "email_sent": email_sent,
+        "expires_at": expires_at
+    }
+
+
+async def send_invitation_email(to_email: str, invitation_url: str, invited_by: str) -> bool:
+    """Send invitation email via configured SMTP"""
+    # Get admin's mail account with SMTP settings
+    mail_account = await db.mail_accounts.find_one({
+        "smtp_server": {"$exists": True, "$ne": ""}
+    })
+    
+    if not mail_account:
+        return False
+    
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        
+        # Decrypt password
+        from cryptography.fernet import Fernet
+        fernet_key = os.environ.get('FERNET_KEY', 'default-key-change-me-in-production').encode()
+        # Pad or hash the key to 32 bytes for Fernet
+        fernet_key = hashlib.sha256(fernet_key).digest()
+        import base64
+        fernet_key = base64.urlsafe_b64encode(fernet_key)
+        fernet = Fernet(fernet_key)
+        password = fernet.decrypt(mail_account["encrypted_password"].encode()).decode()
+        
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = 'Einladung zu CaseDesk AI'
+        msg['From'] = mail_account["email"]
+        msg['To'] = to_email
+        
+        html_body = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #333;">Einladung zu CaseDesk AI</h2>
+            <p>Hallo,</p>
+            <p>{invited_by} hat Sie eingeladen, CaseDesk AI beizutreten.</p>
+            <p>Klicken Sie auf den folgenden Link, um Ihr Konto zu erstellen:</p>
+            <p style="margin: 20px 0;">
+                <a href="{invitation_url}" style="background-color: #3B82F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
+                    Konto erstellen
+                </a>
+            </p>
+            <p style="color: #666; font-size: 12px;">
+                Dieser Link ist 7 Tage gültig.<br>
+                Falls Sie diese E-Mail nicht erwartet haben, können Sie sie ignorieren.
+            </p>
+        </body>
+        </html>
+        """
+        
+        text_body = f"""
+        Einladung zu CaseDesk AI
+        
+        {invited_by} hat Sie eingeladen, CaseDesk AI beizutreten.
+        
+        Klicken Sie auf den folgenden Link, um Ihr Konto zu erstellen:
+        {invitation_url}
+        
+        Dieser Link ist 7 Tage gültig.
+        """
+        
+        msg.attach(MIMEText(text_body, 'plain'))
+        msg.attach(MIMEText(html_body, 'html'))
+        
+        smtp_server = mail_account.get("smtp_server")
+        smtp_port = mail_account.get("smtp_port", 587)
+        
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.login(mail_account["email"], password)
+            server.sendmail(mail_account["email"], to_email, msg.as_string())
+        
+        return True
+    except Exception as e:
+        logger.error(f"SMTP error: {e}")
+        return False
+
+
+@api_router.get("/users/invitations")
+async def list_invitations(admin: dict = Depends(require_admin)):
+    """List all pending invitations (admin only)"""
+    invitations = await db.invitations.find(
+        {"status": "pending"},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    return invitations
+
+
+@api_router.delete("/users/invitations/{invitation_id}")
+async def cancel_invitation(invitation_id: str, admin: dict = Depends(require_admin)):
+    """Cancel a pending invitation (admin only)"""
+    result = await db.invitations.update_one(
+        {"id": invitation_id, "status": "pending"},
+        {"$set": {"status": "cancelled", "cancelled_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Invitation not found or already used")
+    
+    return {"success": True}
+
+
+@api_router.get("/auth/invitation/{token}")
+async def validate_invitation(token: str):
+    """Validate an invitation token (public endpoint)"""
+    invitation = await db.invitations.find_one(
+        {"token": token},
+        {"_id": 0}
+    )
+    
+    if not invitation:
+        return {"valid": False, "error": "Einladung nicht gefunden"}
+    
+    if invitation["status"] != "pending":
+        return {"valid": False, "error": "Einladung wurde bereits verwendet oder storniert"}
+    
+    if datetime.fromisoformat(invitation["expires_at"]) < datetime.now(timezone.utc):
+        return {"valid": False, "error": "Einladung ist abgelaufen"}
+    
+    return {
+        "valid": True,
+        "email": invitation["email"],
+        "role": invitation["role"],
+        "invited_by": invitation["invited_by"]
+    }
+
+
+@api_router.post("/auth/register/{token}")
+async def register_with_invitation(
+    token: str,
+    full_name: str = Form(...),
+    password: str = Form(...)
+):
+    """Register a new user with an invitation token"""
+    invitation = await db.invitations.find_one({"token": token})
+    
+    if not invitation:
+        raise HTTPException(status_code=400, detail="Einladung nicht gefunden")
+    
+    if invitation["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Einladung wurde bereits verwendet")
+    
+    if datetime.fromisoformat(invitation["expires_at"]) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Einladung ist abgelaufen")
+    
+    # Check if email already exists (double check)
+    existing = await db.users.find_one({"email": invitation["email"]})
+    if existing:
+        raise HTTPException(status_code=400, detail="E-Mail ist bereits registriert")
+    
+    # Create user
+    user_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    username = invitation["email"].split("@")[0] + "_" + str(uuid.uuid4())[:4]
+    
+    new_user = {
+        "id": user_id,
+        "email": invitation["email"],
+        "username": username,
+        "full_name": full_name,
+        "password_hash": hash_password(password),
+        "role": invitation.get("role", "user"),
+        "is_active": True,
+        "language": "de",
+        "created_at": now,
+        "updated_at": now,
+        "last_login": None,
+        "invited_by": invitation["invited_by_id"]
+    }
+    
+    await db.users.insert_one(new_user)
+    
+    # Mark invitation as used
+    await db.invitations.update_one(
+        {"id": invitation["id"]},
+        {"$set": {"status": "accepted", "accepted_at": now, "user_id": user_id}}
+    )
+    
+    await log_action(user_id, "register", "user", user_id, {"invited_by": invitation["invited_by_id"]})
+    
+    return {"success": True, "message": "Konto erfolgreich erstellt"}
+
+
 # ==================== Cases ====================
 
 @api_router.get("/cases", response_model=List[Case])
@@ -1108,17 +1356,50 @@ async def ai_chat(
     
     # Prepare context
     context = {}
+    
+    # Always include user's recent documents for context awareness
+    all_docs = await db.documents.find(
+        {"user_id": user["id"]},
+        {"_id": 0, "id": 1, "display_name": 1, "original_filename": 1, "ocr_text": 1, 
+         "ai_summary": 1, "tags": 1, "document_type": 1, "case_id": 1, "sender": 1, 
+         "document_date": 1}
+    ).sort("created_at", -1).to_list(100)
+    
+    # Get all cases for context
+    all_cases = await db.cases.find(
+        {"user_id": user["id"]},
+        {"_id": 0, "id": 1, "title": 1, "description": 1, "status": 1, "reference_number": 1}
+    ).to_list(50)
+    
+    context["all_documents"] = all_docs
+    context["all_cases"] = all_cases
+    
     if case_id:
         case = await db.cases.find_one({"id": case_id, "user_id": user["id"]}, {"_id": 0})
         if case:
-            context["case"] = case
-            # Get linked documents
+            context["current_case"] = case
+            # Get linked documents with full content
             if case.get("document_ids"):
                 docs = await db.documents.find(
-                    {"id": {"$in": case["document_ids"][:5]}, "user_id": user["id"]},
+                    {"id": {"$in": case["document_ids"]}, "user_id": user["id"]},
                     {"_id": 0}
-                ).to_list(5)
-                context["documents"] = docs
+                ).to_list(20)
+                context["case_documents"] = docs
+    
+    # Get open tasks
+    open_tasks = await db.tasks.find(
+        {"user_id": user["id"], "status": {"$ne": "done"}},
+        {"_id": 0, "id": 1, "title": 1, "description": 1, "due_date": 1, "priority": 1, "case_id": 1}
+    ).sort("due_date", 1).to_list(20)
+    context["open_tasks"] = open_tasks
+    
+    # Get upcoming events
+    now = datetime.now(timezone.utc).isoformat()
+    upcoming_events = await db.events.find(
+        {"user_id": user["id"], "start_date": {"$gte": now}},
+        {"_id": 0, "id": 1, "title": 1, "description": 1, "start_date": 1, "end_date": 1}
+    ).sort("start_date", 1).to_list(10)
+    context["upcoming_events"] = upcoming_events
     
     # Get AI service and generate response
     try:
@@ -1620,6 +1901,256 @@ async def export_case(case_id: str, user: dict = Depends(require_auth)):
     }
     
     return export_data
+
+
+# ==================== Response Generation ====================
+
+@api_router.get("/cases/{case_id}/analyze")
+async def analyze_case(case_id: str, user: dict = Depends(require_auth)):
+    """Analyze case and determine requirements for response"""
+    from response_service import ResponseGeneratorService
+    from ai_service import get_ai_service
+    
+    ai_service = await get_ai_service(db)
+    response_service = ResponseGeneratorService(db, ai_service)
+    
+    result = await response_service.analyze_case_requirements(case_id, user["id"])
+    return result
+
+
+@api_router.post("/cases/{case_id}/generate-response")
+async def generate_case_response(
+    case_id: str,
+    response_type: str = Form(...),
+    recipient: str = Form(...),
+    subject: str = Form(...),
+    instructions: str = Form(None),
+    document_ids: str = Form(None),
+    output_format: str = Form("txt"),
+    user: dict = Depends(require_auth)
+):
+    """Generate AI response for a case with attached documents"""
+    from response_service import ResponseGeneratorService
+    from ai_service import get_ai_service
+    
+    ai_service = await get_ai_service(db)
+    response_service = ResponseGeneratorService(db, ai_service)
+    
+    # Parse document IDs
+    doc_ids = json.loads(document_ids) if document_ids else []
+    
+    result = await response_service.generate_response(
+        case_id=case_id,
+        user_id=user["id"],
+        response_type=response_type,
+        recipient=recipient,
+        subject=subject,
+        instructions=instructions,
+        include_document_ids=doc_ids
+    )
+    
+    if result.get("success"):
+        await log_action(user["id"], "generate_response", "correspondence", result.get("correspondence_id"),
+                        {"case_id": case_id, "type": response_type})
+    
+    return result
+
+
+@api_router.get("/correspondence")
+async def list_correspondence(
+    case_id: Optional[str] = None,
+    user: dict = Depends(require_auth)
+):
+    """List correspondence for user or case"""
+    query = {"user_id": user["id"]}
+    if case_id:
+        query["case_id"] = case_id
+    
+    correspondence = await db.correspondence.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return correspondence
+
+
+@api_router.get("/correspondence/{correspondence_id}")
+async def get_correspondence(correspondence_id: str, user: dict = Depends(require_auth)):
+    """Get correspondence details"""
+    corr = await db.correspondence.find_one(
+        {"id": correspondence_id, "user_id": user["id"]},
+        {"_id": 0}
+    )
+    if not corr:
+        raise HTTPException(status_code=404, detail="Correspondence not found")
+    return corr
+
+
+@api_router.put("/correspondence/{correspondence_id}")
+async def update_correspondence(
+    correspondence_id: str,
+    content: str = Form(None),
+    subject: str = Form(None),
+    status: str = Form(None),
+    user: dict = Depends(require_auth)
+):
+    """Update correspondence content"""
+    from response_service import ResponseGeneratorService
+    from ai_service import get_ai_service
+    
+    ai_service = await get_ai_service(db)
+    response_service = ResponseGeneratorService(db, ai_service)
+    
+    result = await response_service.update_correspondence(
+        correspondence_id, user["id"], content, subject, status
+    )
+    
+    if result.get("success"):
+        await log_action(user["id"], "update_correspondence", "correspondence", correspondence_id)
+    
+    return result
+
+
+@api_router.delete("/correspondence/{correspondence_id}")
+async def delete_correspondence(correspondence_id: str, user: dict = Depends(require_auth)):
+    """Delete correspondence"""
+    from response_service import ResponseGeneratorService
+    from ai_service import get_ai_service
+    
+    ai_service = await get_ai_service(db)
+    response_service = ResponseGeneratorService(db, ai_service)
+    
+    result = await response_service.delete_correspondence(correspondence_id, user["id"])
+    
+    if result.get("success"):
+        await log_action(user["id"], "delete_correspondence", "correspondence", correspondence_id)
+    
+    return result
+
+
+@api_router.get("/correspondence/{correspondence_id}/download")
+async def download_correspondence_package(correspondence_id: str, user: dict = Depends(require_auth)):
+    """Download correspondence as ZIP with attachments"""
+    from fastapi.responses import FileResponse
+    from response_service import ResponseGeneratorService
+    from ai_service import get_ai_service
+    
+    ai_service = await get_ai_service(db)
+    response_service = ResponseGeneratorService(db, ai_service)
+    
+    result = await response_service.create_download_package(correspondence_id, user["id"])
+    
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error"))
+    
+    await log_action(user["id"], "download_package", "correspondence", correspondence_id)
+    
+    return FileResponse(
+        result["zip_path"],
+        filename=result["filename"],
+        media_type="application/zip"
+    )
+
+
+@api_router.post("/correspondence/{correspondence_id}/send")
+async def send_correspondence(
+    correspondence_id: str,
+    mail_account_id: str = Form(...),
+    recipient_email: str = Form(...),
+    user: dict = Depends(require_auth)
+):
+    """Send correspondence via email"""
+    from response_service import ResponseGeneratorService
+    from ai_service import get_ai_service
+    
+    ai_service = await get_ai_service(db)
+    response_service = ResponseGeneratorService(db, ai_service)
+    
+    result = await response_service.send_via_email(
+        correspondence_id, user["id"], mail_account_id, recipient_email
+    )
+    
+    if result.get("success"):
+        await log_action(user["id"], "send_correspondence", "correspondence", correspondence_id,
+                        {"recipient": recipient_email})
+    
+    return result
+
+
+@api_router.get("/cases/{case_id}/history")
+async def get_case_history(case_id: str, user: dict = Depends(require_auth)):
+    """Get audit history for a case"""
+    # Get correspondence history
+    correspondence = await db.correspondence.find(
+        {"case_id": case_id, "user_id": user["id"]},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    # Get audit logs for this case
+    audit_logs = await db.audit_logs.find(
+        {"resource_id": case_id, "user_id": user["id"]},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return {
+        "correspondence": correspondence,
+        "audit_logs": audit_logs
+    }
+
+
+@api_router.put("/documents/{document_id}")
+async def update_document(
+    document_id: str,
+    display_name: str = Form(None),
+    document_type: str = Form(None),
+    tags: str = Form(None),
+    case_id: str = Form(None),
+    user: dict = Depends(require_auth)
+):
+    """Update document metadata"""
+    document = await db.documents.find_one({"id": document_id, "user_id": user["id"]})
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    if display_name is not None:
+        update_data["display_name"] = display_name
+    if document_type is not None:
+        update_data["document_type"] = document_type
+    if tags is not None:
+        update_data["tags"] = json.loads(tags) if tags else []
+    
+    # Handle case change
+    old_case_id = document.get("case_id")
+    if case_id is not None and case_id != old_case_id:
+        update_data["case_id"] = case_id if case_id else None
+        
+        # Remove from old case
+        if old_case_id:
+            await db.cases.update_one(
+                {"id": old_case_id},
+                {"$pull": {"document_ids": document_id}}
+            )
+        
+        # Add to new case
+        if case_id:
+            await db.cases.update_one(
+                {"id": case_id, "user_id": user["id"]},
+                {"$addToSet": {"document_ids": document_id}}
+            )
+    
+    await db.documents.update_one({"id": document_id}, {"$set": update_data})
+    await log_action(user["id"], "update_document", "document", document_id)
+    
+    updated = await db.documents.find_one({"id": document_id}, {"_id": 0})
+    return {"success": True, "document": updated}
+
+
+@api_router.get("/cases/{case_id}/documents")
+async def get_case_documents(case_id: str, user: dict = Depends(require_auth)):
+    """Get all documents for a case"""
+    documents = await db.documents.find(
+        {"case_id": case_id, "user_id": user["id"]},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(1000)
+    return documents
 
 
 # Include router

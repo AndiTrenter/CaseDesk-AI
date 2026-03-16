@@ -5,10 +5,11 @@ import { motion } from 'framer-motion';
 import { 
   LayoutDashboard, FileText, Briefcase, Mail, Calendar, 
   CheckSquare, FileEdit, Bot, Settings, LogOut, Menu, X,
-  Shield, Globe, ChevronRight
+  Shield, Globe, ChevronRight, Sun, Moon
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'nav.dashboard' },
@@ -24,6 +25,7 @@ const navItems = [
 export default function Layout() {
   const { t } = useTranslation();
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -32,8 +34,16 @@ export default function Layout() {
     navigate('/login');
   };
 
+  // Theme-aware classes
+  const bgPrimary = theme === 'dark' ? 'bg-[#0A0A0A]' : 'bg-white';
+  const bgSecondary = theme === 'dark' ? 'bg-[#121212]' : 'bg-gray-50';
+  const textPrimary = theme === 'dark' ? 'text-white' : 'text-gray-900';
+  const textSecondary = theme === 'dark' ? 'text-gray-400' : 'text-gray-600';
+  const textMuted = theme === 'dark' ? 'text-gray-600' : 'text-gray-400';
+  const borderColor = theme === 'dark' ? 'border-white/5' : 'border-gray-200';
+
   return (
-    <div className="min-h-screen bg-[#0A0A0A] flex">
+    <div className={`min-h-screen ${bgPrimary} flex`}>
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div 
@@ -45,25 +55,36 @@ export default function Layout() {
       {/* Sidebar */}
       <aside className={`
         fixed lg:static inset-y-0 left-0 z-50
-        w-64 bg-[#0A0A0A] border-r border-white/5
+        w-64 ${bgPrimary} border-r ${borderColor}
         transform transition-transform duration-200
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="p-6 border-b border-white/5">
+          <div className={`p-6 border-b ${borderColor}`}>
             <div className="flex items-center justify-between">
-              <h1 className="text-xl font-bold text-white tracking-tight">CaseDesk AI</h1>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="lg:hidden text-gray-400"
-                onClick={() => setSidebarOpen(false)}
-              >
-                <X className="w-5 h-5" />
-              </Button>
+              <h1 className={`text-xl font-bold ${textPrimary} tracking-tight`}>CaseDesk AI</h1>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={textSecondary}
+                  onClick={toggleTheme}
+                  data-testid="theme-toggle"
+                >
+                  {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`lg:hidden ${textSecondary}`}
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
             </div>
-            <p className="text-xs text-gray-600 mt-1">Self-Hosted v1.0.0</p>
+            <p className={`text-xs ${textMuted} mt-1`}>Self-Hosted v1.0.0</p>
           </div>
 
           {/* Navigation */}
@@ -76,8 +97,15 @@ export default function Layout() {
                   to={item.path}
                   onClick={() => setSidebarOpen(false)}
                   className={({ isActive }) => `
-                    sidebar-item
-                    ${isActive ? 'sidebar-item-active' : ''}
+                    flex items-center gap-3 px-3 py-2 rounded-lg transition-colors
+                    ${isActive 
+                      ? theme === 'dark'
+                        ? 'bg-white/10 text-white'
+                        : 'bg-blue-50 text-blue-600'
+                      : theme === 'dark'
+                        ? 'text-gray-400 hover:text-white hover:bg-white/5'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                    }
                   `}
                   data-testid={`nav-${item.path.replace('/', '') || 'dashboard'}`}
                 >
@@ -89,20 +117,20 @@ export default function Layout() {
           </nav>
 
           {/* User Section */}
-          <div className="p-4 border-t border-white/5">
+          <div className={`p-4 border-t ${borderColor}`}>
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center text-white font-medium">
+              <div className={`w-10 h-10 ${theme === 'dark' ? 'bg-white/10' : 'bg-blue-100'} rounded-lg flex items-center justify-center ${textPrimary} font-medium`}>
                 {user?.username?.charAt(0).toUpperCase() || 'U'}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-white text-sm font-medium truncate">{user?.full_name || user?.username}</p>
-                <p className="text-gray-500 text-xs truncate">{user?.email}</p>
+                <p className={`${textPrimary} text-sm font-medium truncate`}>{user?.full_name || user?.username}</p>
+                <p className={`${textMuted} text-xs truncate`}>{user?.email}</p>
               </div>
             </div>
             
             <Button
               variant="ghost"
-              className="w-full justify-start text-gray-400 hover:text-white hover:bg-white/5"
+              className={`w-full justify-start ${textSecondary} hover:${textPrimary} ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-gray-100'}`}
               onClick={handleLogout}
               data-testid="logout-btn"
             >
@@ -116,18 +144,25 @@ export default function Layout() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-h-screen">
         {/* Top Bar */}
-        <header className="sticky top-0 z-30 glass-panel px-4 py-3 lg:hidden">
+        <header className={`sticky top-0 z-30 ${bgSecondary} border-b ${borderColor} px-4 py-3 lg:hidden`}>
           <div className="flex items-center justify-between">
             <Button
               variant="ghost"
               size="sm"
-              className="text-gray-400"
+              className={textSecondary}
               onClick={() => setSidebarOpen(true)}
             >
               <Menu className="w-5 h-5" />
             </Button>
-            <h1 className="text-lg font-bold text-white">CaseDesk AI</h1>
-            <div className="w-8" />
+            <h1 className={`text-lg font-bold ${textPrimary}`}>CaseDesk AI</h1>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={textSecondary}
+              onClick={toggleTheme}
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </Button>
           </div>
         </header>
 
@@ -137,8 +172,8 @@ export default function Layout() {
         </main>
 
         {/* Footer */}
-        <footer className="border-t border-white/5 px-6 py-4">
-          <div className="flex items-center justify-between text-xs text-gray-600">
+        <footer className={`border-t ${borderColor} px-6 py-4`}>
+          <div className={`flex items-center justify-between text-xs ${textMuted}`}>
             <span>CaseDesk AI - Self-Hosted Document Management</span>
             <div className="flex items-center gap-2">
               <Shield className="w-3 h-3" />

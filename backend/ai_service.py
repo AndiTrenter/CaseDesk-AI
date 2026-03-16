@@ -232,7 +232,7 @@ Extrahiere die Metadaten als JSON."""
 
 
 class ChatAssistant:
-    """AI Chat Assistant for document and case queries"""
+    """AI Chat Assistant for document and case queries - Full Knowledge Agent"""
     
     def __init__(self, ai_service: AIService):
         self.ai = ai_service
@@ -244,53 +244,130 @@ class ChatAssistant:
         language: str = "de"
     ) -> str:
         """
-        Process chat message with context awareness
+        Process chat message with full document knowledge
+        The assistant knows about ALL user documents and can make cross-references
         """
         
         lang_instruction = "Antworte auf Deutsch." if language == "de" else "Answer in English."
         
-        system_prompt = f"""Du bist CaseDesk AI, ein hilfreicher Assistent für Dokumenten- und Fallverwaltung.
+        system_prompt = f"""Du bist CaseDesk AI, ein persönlicher KI-Assistent und Agent für Dokumenten- und Fallverwaltung.
+Du hast vollständigen Zugriff auf ALLE Dokumente, Fälle, Aufgaben und Termine des Benutzers.
 
 {lang_instruction}
 
-Deine Aufgaben:
-- Fragen zu Dokumenten, Fällen, E-Mails und Aufgaben beantworten
-- Zusammenfassungen erstellen
-- Bei der Formulierung von Antwortschreiben helfen
-- Fristen und wichtige Termine hervorheben
-- Bei Behördenangelegenheiten den besten legitimen Weg aufzeigen
+DEINE FÄHIGKEITEN:
+1. **Dokumentenwissen**: Du kennst alle Dokumente des Benutzers und kannst:
+   - Inhalte zusammenfassen
+   - Verbindungen zwischen Dokumenten erkennen (z.B. gleicher Absender, ähnliches Thema)
+   - Relevante Dokumente für Anfragen finden
+   - Fristen und wichtige Daten identifizieren
+
+2. **Fallunterstützung**: Du kannst:
+   - Dokumente zu passenden Fällen vorschlagen
+   - Querverweise zwischen Fällen und Dokumenten herstellen
+   - Bei der Vorbereitung von Antworten helfen
+
+3. **Persönliche Assistenz**: Du kannst:
+   - Aufgaben und Termine im Blick behalten
+   - An Fristen erinnern
+   - Handlungsempfehlungen geben
+   - Bei Behördenangelegenheiten den besten legitimen Weg aufzeigen
+
+4. **Proaktive Hilfe**: Du analysierst aktiv:
+   - Welche Dokumente zusammengehören könnten
+   - Ob Fristen drohen
+   - Welche Aufgaben dringend sind
 
 WICHTIGE REGELN:
-- NIEMALS Fakten erfinden
-- NIEMALS falsche Angaben machen
+- NIEMALS Fakten erfinden - nur auf Basis der vorhandenen Daten arbeiten
 - Bei Unsicherheit nachfragen
-- Nur auf Basis der vorhandenen Daten arbeiten
-- Quellen und Dokumente referenzieren"""
+- Dokumente klar referenzieren (Name, Datum, Absender)
+- Praktische, umsetzbare Empfehlungen geben
+- Wenn ein relevantes Dokument zu einem Fall passt, das explizit erwähnen"""
 
-        # Add context if available
-        context_text = ""
-        if context:
-            if context.get("case"):
-                case = context["case"]
-                context_text += f"\n\nAktueller Fall: {case.get('title')}\nBeschreibung: {case.get('description')}\nStatus: {case.get('status')}"
-            
-            if context.get("documents"):
-                context_text += "\n\nVerknüpfte Dokumente:"
-                for doc in context["documents"][:5]:
-                    context_text += f"\n- {doc.get('display_name', doc.get('original_filename'))}"
-                    if doc.get("ocr_text"):
-                        context_text += f"\n  Inhalt (Auszug): {doc['ocr_text'][:500]}..."
-            
-            if context.get("tasks"):
-                context_text += "\n\nOffene Aufgaben:"
-                for task in context["tasks"][:5]:
-                    context_text += f"\n- {task.get('title')} (Fällig: {task.get('due_date', 'nicht gesetzt')})"
+        # Build comprehensive context
+        context_text = self._build_context(context, message) if context else ""
 
         prompt = message
         if context_text:
-            prompt = f"Kontext:{context_text}\n\nFrage: {message}"
+            prompt = f"{context_text}\n\n---\nBenutzeranfrage: {message}"
 
-        return await self.ai.generate(prompt, system_prompt)
+        return await self.ai.generate(prompt, system_prompt, max_tokens=3000)
+    
+    def _build_context(self, context: Dict[str, Any], message: str) -> str:
+        """Build a comprehensive context string for the AI"""
+        parts = []
+        
+        # Current case context
+        if context.get("current_case"):
+            case = context["current_case"]
+            parts.append(f"## AKTUELLER FALL\nTitel: {case.get('title')}\nBeschreibung: {case.get('description')}\nStatus: {case.get('status')}\nAktenzeichen: {case.get('reference_number', 'Nicht angegeben')}")
+            
+            if context.get("case_documents"):
+                parts.append("\n### Dokumente in diesem Fall:")
+                for doc in context["case_documents"]:
+                    doc_info = f"- **{doc.get('display_name', doc.get('original_filename'))}**"
+                    if doc.get('sender'):
+                        doc_info += f" | Absender: {doc['sender']}"
+                    if doc.get('document_date'):
+                        doc_info += f" | Datum: {doc['document_date']}"
+                    if doc.get('ai_summary'):
+                        doc_info += f"\n  Zusammenfassung: {doc['ai_summary']}"
+                    if doc.get('ocr_text'):
+                        doc_info += f"\n  Inhalt (Auszug): {doc['ocr_text'][:800]}..."
+                    parts.append(doc_info)
+        
+        # All documents overview
+        if context.get("all_documents"):
+            parts.append("\n## ALLE DOKUMENTE DES BENUTZERS")
+            for doc in context["all_documents"][:50]:  # Limit to 50 docs
+                doc_info = f"- **{doc.get('display_name', doc.get('original_filename'))}**"
+                if doc.get('sender'):
+                    doc_info += f" | Von: {doc['sender']}"
+                if doc.get('document_type'):
+                    doc_info += f" | Typ: {doc['document_type']}"
+                if doc.get('tags'):
+                    doc_info += f" | Tags: {', '.join(doc['tags'][:5])}"
+                if doc.get('case_id'):
+                    # Find case name
+                    for c in context.get("all_cases", []):
+                        if c["id"] == doc["case_id"]:
+                            doc_info += f" | Fall: {c['title']}"
+                            break
+                if doc.get('ai_summary'):
+                    doc_info += f"\n  → {doc['ai_summary'][:200]}"
+                parts.append(doc_info)
+        
+        # All cases overview
+        if context.get("all_cases"):
+            parts.append("\n## ALLE FÄLLE")
+            for case in context["all_cases"]:
+                case_info = f"- **{case.get('title')}** | Status: {case.get('status')}"
+                if case.get('reference_number'):
+                    case_info += f" | Aktenzeichen: {case['reference_number']}"
+                if case.get('description'):
+                    case_info += f"\n  {case['description'][:150]}"
+                parts.append(case_info)
+        
+        # Open tasks
+        if context.get("open_tasks"):
+            parts.append("\n## OFFENE AUFGABEN")
+            for task in context["open_tasks"]:
+                task_info = f"- **{task.get('title')}**"
+                if task.get('due_date'):
+                    task_info += f" | Fällig: {task['due_date']}"
+                if task.get('priority'):
+                    task_info += f" | Priorität: {task['priority']}"
+                parts.append(task_info)
+        
+        # Upcoming events
+        if context.get("upcoming_events"):
+            parts.append("\n## ANSTEHENDE TERMINE")
+            for event in context["upcoming_events"]:
+                event_info = f"- **{event.get('title')}** | {event.get('start_date')}"
+                parts.append(event_info)
+        
+        return "\n".join(parts)
 
 
 async def get_ai_service(db) -> AIService:

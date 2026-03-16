@@ -10,7 +10,7 @@ import tempfile
 import os
 
 class CaseDeskAPITester:
-    def __init__(self, base_url="https://privacy-case-hub.preview.emergentagent.com"):
+    def __init__(self, base_url="https://case-response-pkg.preview.emergentagent.com"):
         self.base_url = base_url
         self.token = None
         self.session_id = None

@@ -81,7 +81,7 @@ Bei Freigabe von Internetzugriff + OpenAI API-Key sind alle KI-Features voll fun
 - GPU-Unterstützung (optional)
 
 ## Login für Preview
-- **URL:** https://privacy-case-hub.preview.emergentagent.com
+- **URL:** https://case-response-pkg.preview.emergentagent.com
 - **Email:** admin@casedesk.app
 - **Passwort:** admin123
 

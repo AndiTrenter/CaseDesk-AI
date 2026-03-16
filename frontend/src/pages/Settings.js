@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { 
   Settings as SettingsIcon, Globe, Shield, Brain, 
-  User, Moon, Sun, Check, AlertTriangle, Mail, Plus, Trash2, Download
+  User, Moon, Sun, Check, AlertTriangle, Mail, Plus, Trash2, Download,
+  Users, UserPlus, Link, Copy, Clock, X
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -23,13 +24,15 @@ import {
   DialogTitle,
 } from '../components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { settingsAPI, mailAPI, exportAPI } from '../lib/api';
+import { settingsAPI, mailAPI, exportAPI, usersAPI } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { toast } from 'sonner';
 
 export default function Settings() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
@@ -53,13 +56,42 @@ export default function Settings() {
     display_name: '',
     imap_server: '',
     imap_port: 993,
-    password: ''
+    password: '',
+    smtp_server: '',
+    smtp_port: 587
   });
+  
+  // User management state
+  const [users, setUsers] = useState([]);
+  const [invitations, setInvitations] = useState([]);
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('user');
+  const [inviteResult, setInviteResult] = useState(null);
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
   useEffect(() => {
     loadSettings();
     loadMailAccounts();
-  }, []);
+    if (user?.role === 'admin') {
+      loadUsersAndInvitations();
+    }
+  }, [user]);
+  
+  const loadUsersAndInvitations = async () => {
+    setLoadingUsers(true);
+    try {
+      const [usersRes, invitationsRes] = await Promise.all([
+        usersAPI.list(),
+        usersAPI.listInvitations()
+      ]);
+      setUsers(usersRes.data);
+      setInvitations(invitationsRes.data);
+    } catch (error) {
+      console.error('Failed to load users:', error);
+    }
+    setLoadingUsers(false);
+  };
   
   const loadMailAccounts = async () => {
     try {
@@ -106,12 +138,8 @@ export default function Settings() {
       await settingsAPI.updateUser(userSettings);
       i18n.changeLanguage(userSettings.language);
       
-      // Apply theme
-      if (userSettings.theme === 'light') {
-        document.documentElement.classList.add('light');
-      } else {
-        document.documentElement.classList.remove('light');
-      }
+      // Apply theme via context
+      setTheme(userSettings.theme);
       
       toast.success(t('settings.saved'));
     } catch (error) {
@@ -136,7 +164,7 @@ export default function Settings() {
       await mailAPI.createAccount(newMailAccount);
       toast.success('E-Mail-Konto hinzugefügt');
       setMailDialogOpen(false);
-      setNewMailAccount({ email: '', display_name: '', imap_server: '', imap_port: 993, password: '' });
+      setNewMailAccount({ email: '', display_name: '', imap_server: '', imap_port: 993, password: '', smtp_server: '', smtp_port: 587 });
       loadMailAccounts();
     } catch (error) {
       toast.error('Fehler beim Hinzufügen des E-Mail-Kontos');
@@ -151,6 +179,53 @@ export default function Settings() {
     } catch (error) {
       toast.error('Fehler beim Löschen');
     }
+  };
+  
+  const handleInviteUser = async () => {
+    if (!inviteEmail) {
+      toast.error('Bitte E-Mail-Adresse eingeben');
+      return;
+    }
+    
+    try {
+      const response = await usersAPI.invite(inviteEmail, inviteRole);
+      setInviteResult(response.data);
+      toast.success('Einladung erstellt');
+      setInviteEmail('');
+      loadUsersAndInvitations();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Einladung fehlgeschlagen');
+    }
+  };
+  
+  const handleCancelInvitation = async (invitationId) => {
+    try {
+      await usersAPI.cancelInvitation(invitationId);
+      toast.success('Einladung storniert');
+      loadUsersAndInvitations();
+    } catch (error) {
+      toast.error('Stornierung fehlgeschlagen');
+    }
+  };
+  
+  const handleDeleteUser = async (userId) => {
+    if (userId === user?.id) {
+      toast.error('Sie können sich nicht selbst löschen');
+      return;
+    }
+    
+    try {
+      await usersAPI.delete(userId);
+      toast.success('Benutzer gelöscht');
+      loadUsersAndInvitations();
+    } catch (error) {
+      toast.error('Löschen fehlgeschlagen');
+    }
+  };
+  
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    toast.success('Link kopiert');
   };
   
   const handleExportData = async () => {
@@ -204,6 +279,10 @@ export default function Settings() {
             </TabsTrigger>
             {user?.role === 'admin' && (
               <>
+                <TabsTrigger value="users" className="data-[state=active]:bg-white/10">
+                  <Users className="w-4 h-4 mr-2" />
+                  Benutzer
+                </TabsTrigger>
                 <TabsTrigger value="ai" className="data-[state=active]:bg-white/10">
                   <Brain className="w-4 h-4 mr-2" />
                   {t('settings.ai')}
@@ -393,6 +472,114 @@ export default function Settings() {
                   >
                     {saving ? t('common.loading') : t('settings.save')}
                   </Button>
+                </div>
+              </motion.div>
+            </TabsContent>
+          )}
+
+          {/* Users Management (Admin only) */}
+          {user?.role === 'admin' && (
+            <TabsContent value="users">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-[#121212] border border-white/5 rounded-xl p-6 space-y-6"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-white">Benutzerverwaltung</h3>
+                    <Button
+                      onClick={() => {
+                        setInviteDialogOpen(true);
+                        setInviteResult(null);
+                      }}
+                      className="btn-primary"
+                      data-testid="invite-user-btn"
+                    >
+                      <UserPlus className="w-4 h-4 mr-2" /> Benutzer einladen
+                    </Button>
+                  </div>
+                  
+                  {/* Current Users */}
+                  <div className="mb-6">
+                    <h4 className="text-white font-medium mb-3">Aktive Benutzer ({users.length})</h4>
+                    <div className="space-y-2">
+                      {loadingUsers ? (
+                        <div className="text-gray-500 text-sm">Laden...</div>
+                      ) : users.length === 0 ? (
+                        <div className="text-gray-500 text-sm">Keine Benutzer gefunden</div>
+                      ) : (
+                        users.map((u) => (
+                          <div 
+                            key={u.id}
+                            className="flex items-center justify-between p-3 bg-white/5 rounded-lg"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center text-blue-400 font-medium">
+                                {u.full_name?.charAt(0) || u.email?.charAt(0)?.toUpperCase()}
+                              </div>
+                              <div>
+                                <p className="text-white font-medium">{u.full_name || u.email}</p>
+                                <p className="text-gray-500 text-sm">{u.email}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className={`px-2 py-1 rounded text-xs ${
+                                u.role === 'admin' 
+                                  ? 'bg-purple-500/20 text-purple-400' 
+                                  : 'bg-gray-500/20 text-gray-400'
+                              }`}>
+                                {u.role === 'admin' ? 'Admin' : 'Benutzer'}
+                              </span>
+                              {u.id !== user?.id && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteUser(u.id)}
+                                  className="text-red-400 hover:text-red-300"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Pending Invitations */}
+                  {invitations.length > 0 && (
+                    <div>
+                      <h4 className="text-white font-medium mb-3">Ausstehende Einladungen ({invitations.length})</h4>
+                      <div className="space-y-2">
+                        {invitations.map((inv) => (
+                          <div 
+                            key={inv.id}
+                            className="flex items-center justify-between p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg"
+                          >
+                            <div className="flex items-center gap-3">
+                              <Clock className="w-5 h-5 text-amber-400" />
+                              <div>
+                                <p className="text-white">{inv.email}</p>
+                                <p className="text-gray-500 text-xs">
+                                  Eingeladen von {inv.invited_by} • Läuft ab am {new Date(inv.expires_at).toLocaleDateString('de-DE')}
+                                </p>
+                              </div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleCancelInvitation(inv.id)}
+                              className="text-red-400 hover:text-red-300"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             </TabsContent>
@@ -621,6 +808,31 @@ export default function Settings() {
               />
             </div>
             
+            <div className="pt-4 border-t border-white/10">
+              <h4 className="text-white font-medium mb-3">SMTP-Einstellungen (für Versand)</h4>
+            </div>
+            
+            <div>
+              <Label className="text-gray-300">SMTP-Server</Label>
+              <Input
+                value={newMailAccount.smtp_server}
+                onChange={(e) => setNewMailAccount({ ...newMailAccount, smtp_server: e.target.value })}
+                className="mt-1 bg-black/30 border-white/10 text-white"
+                placeholder="smtp.example.com"
+              />
+            </div>
+            
+            <div>
+              <Label className="text-gray-300">SMTP-Port</Label>
+              <Input
+                type="number"
+                value={newMailAccount.smtp_port}
+                onChange={(e) => setNewMailAccount({ ...newMailAccount, smtp_port: parseInt(e.target.value) })}
+                className="mt-1 bg-black/30 border-white/10 text-white"
+                placeholder="587"
+              />
+            </div>
+            
             <div>
               <Label className="text-gray-300">Passwort</Label>
               <Input
@@ -640,6 +852,103 @@ export default function Settings() {
                 Hinzufügen
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invite User Dialog */}
+      <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+        <DialogContent className="bg-[#121212] border-white/10 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle>Benutzer einladen</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {inviteResult ? (
+              // Show invitation result
+              <div className="space-y-4">
+                <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+                  <p className="text-green-400 font-medium mb-2">Einladung erstellt!</p>
+                  <p className="text-gray-400 text-sm">
+                    {inviteResult.email_sent 
+                      ? 'Eine E-Mail mit dem Einladungslink wurde gesendet.' 
+                      : 'E-Mail konnte nicht gesendet werden. Bitte teilen Sie den Link manuell.'}
+                  </p>
+                </div>
+                
+                <div>
+                  <Label className="text-gray-300">Einladungslink</Label>
+                  <div className="flex gap-2 mt-1">
+                    <Input
+                      value={inviteResult.invitation_url}
+                      readOnly
+                      className="bg-black/30 border-white/10 text-white text-sm"
+                    />
+                    <Button
+                      variant="secondary"
+                      onClick={() => copyToClipboard(inviteResult.invitation_url)}
+                      className="flex-shrink-0"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <p className="text-gray-500 text-xs mt-2">
+                    Gültig bis: {new Date(inviteResult.expires_at).toLocaleDateString('de-DE')}
+                  </p>
+                </div>
+                
+                <div className="flex justify-end pt-4">
+                  <Button onClick={() => setInviteDialogOpen(false)} className="btn-primary">
+                    Fertig
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              // Show invite form
+              <>
+                <div>
+                  <Label className="text-gray-300">E-Mail-Adresse</Label>
+                  <Input
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    className="mt-1 bg-black/30 border-white/10 text-white"
+                    placeholder="benutzer@beispiel.de"
+                  />
+                </div>
+                
+                <div>
+                  <Label className="text-gray-300">Rolle</Label>
+                  <Select
+                    value={inviteRole}
+                    onValueChange={setInviteRole}
+                  >
+                    <SelectTrigger className="mt-1 bg-black/30 border-white/10 text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#1A1A1A] border-white/10">
+                      <SelectItem value="user">Benutzer</SelectItem>
+                      <SelectItem value="admin">Administrator</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <p className="text-blue-300 text-sm">
+                    Der eingeladene Benutzer erhält einen Link per E-Mail (wenn SMTP konfiguriert ist) oder Sie können den Link manuell teilen.
+                  </p>
+                </div>
+                
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button variant="ghost" onClick={() => setInviteDialogOpen(false)} className="text-gray-400">
+                    Abbrechen
+                  </Button>
+                  <Button onClick={handleInviteUser} className="btn-primary">
+                    <UserPlus className="w-4 h-4 mr-2" /> Einladen
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>

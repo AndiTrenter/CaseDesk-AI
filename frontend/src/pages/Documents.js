@@ -5,7 +5,7 @@ import {
   FileText, Upload, Search, Trash2, 
   Eye, FileImage, File, MoreVertical, RefreshCw,
   Tag, Calendar, User, AlertCircle, CheckCircle,
-  Loader2
+  Loader2, Edit, Download, X, Plus
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -22,22 +22,50 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../components/ui/dialog';
-import { documentsAPI } from '../lib/api';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../components/ui/select';
+import { Label } from '../components/ui/label';
+import { documentsAPI, casesAPI, documentUpdateAPI } from '../lib/api';
 import { toast } from 'sonner';
 
 export default function Documents() {
   const { t, i18n } = useTranslation();
   const fileInputRef = useRef(null);
   const [documents, setDocuments] = useState([]);
+  const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [uploading, setUploading] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState(null);
+  const [editingDoc, setEditingDoc] = useState(null);
   const [processing, setProcessing] = useState({});
+  
+  // Edit form state
+  const [editForm, setEditForm] = useState({
+    display_name: '',
+    document_type: '',
+    tags: [],
+    case_id: ''
+  });
 
   useEffect(() => {
     loadDocuments();
+    loadCases();
   }, []);
+
+  const loadCases = async () => {
+    try {
+      const response = await casesAPI.list();
+      setCases(response.data);
+    } catch (error) {
+      console.error('Failed to load cases:', error);
+    }
+  };
 
   const loadDocuments = async (search = null) => {
     try {
@@ -116,6 +144,40 @@ export default function Documents() {
     } catch (error) {
       toast.error('Löschen fehlgeschlagen');
     }
+  };
+
+  const handleEditDocument = (doc) => {
+    setEditingDoc(doc);
+    setEditForm({
+      display_name: doc.display_name || doc.original_filename,
+      document_type: doc.document_type || 'other',
+      tags: doc.tags || [],
+      case_id: doc.case_id || ''
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    try {
+      await documentUpdateAPI.update(editingDoc.id, editForm);
+      toast.success('Dokument aktualisiert');
+      setEditingDoc(null);
+      loadDocuments();
+    } catch (error) {
+      toast.error('Speichern fehlgeschlagen');
+    }
+  };
+
+  const handleAddTag = (tag) => {
+    if (tag && !editForm.tags.includes(tag)) {
+      setEditForm(prev => ({ ...prev, tags: [...prev.tags, tag] }));
+    }
+  };
+
+  const handleRemoveTag = (tagToRemove) => {
+    setEditForm(prev => ({ 
+      ...prev, 
+      tags: prev.tags.filter(tag => tag !== tagToRemove) 
+    }));
   };
 
   const getFileIcon = (mimeType) => {
@@ -338,12 +400,27 @@ export default function Documents() {
                         <Eye className="w-4 h-4 mr-2" /> Details anzeigen
                       </DropdownMenuItem>
                       <DropdownMenuItem 
+                        onClick={() => handleEditDocument(doc)}
+                        className="text-gray-300 focus:bg-white/10"
+                      >
+                        <Edit className="w-4 h-4 mr-2" /> Bearbeiten
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
                         onClick={() => handleReprocess(doc)}
                         disabled={isProcessing}
                         className="text-gray-300 focus:bg-white/10"
                       >
                         <RefreshCw className={`w-4 h-4 mr-2 ${isProcessing ? 'animate-spin' : ''}`} /> 
                         Erneut analysieren
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild className="text-gray-300 focus:bg-white/10">
+                        <a 
+                          href={documentUpdateAPI.downloadUrl(doc.id)} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                        >
+                          <Download className="w-4 h-4 mr-2" /> Herunterladen
+                        </a>
                       </DropdownMenuItem>
                       <DropdownMenuItem 
                         onClick={() => handleDelete(doc.id)}
@@ -438,8 +515,141 @@ export default function Documents() {
                   </pre>
                 </div>
               )}
+              
+              <div className="flex gap-3 pt-4 border-t border-white/5">
+                <a
+                  href={documentUpdateAPI.downloadUrl(selectedDoc.id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button className="btn-primary">
+                    <Download className="w-4 h-4 mr-2" /> Herunterladen
+                  </Button>
+                </a>
+                <Button 
+                  variant="secondary" 
+                  onClick={() => {
+                    handleEditDocument(selectedDoc);
+                    setSelectedDoc(null);
+                  }}
+                  className="btn-secondary"
+                >
+                  <Edit className="w-4 h-4 mr-2" /> Bearbeiten
+                </Button>
+              </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Document Dialog */}
+      <Dialog open={!!editingDoc} onOpenChange={() => setEditingDoc(null)}>
+        <DialogContent className="bg-[#121212] border-white/10 text-white max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Dokument bearbeiten</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label className="text-gray-300">Anzeigename</Label>
+              <Input
+                value={editForm.display_name}
+                onChange={(e) => setEditForm(prev => ({ ...prev, display_name: e.target.value }))}
+                className="mt-1 bg-black/30 border-white/10 text-white"
+              />
+            </div>
+            
+            <div>
+              <Label className="text-gray-300">Dokumenttyp</Label>
+              <Select
+                value={editForm.document_type}
+                onValueChange={(value) => setEditForm(prev => ({ ...prev, document_type: value }))}
+              >
+                <SelectTrigger className="mt-1 bg-black/30 border-white/10 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-[#1A1A1A] border-white/10">
+                  <SelectItem value="letter">Brief</SelectItem>
+                  <SelectItem value="invoice">Rechnung</SelectItem>
+                  <SelectItem value="contract">Vertrag</SelectItem>
+                  <SelectItem value="form">Formular</SelectItem>
+                  <SelectItem value="receipt">Beleg</SelectItem>
+                  <SelectItem value="id_document">Ausweisdokument</SelectItem>
+                  <SelectItem value="other">Sonstiges</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <Label className="text-gray-300">Fall zuweisen</Label>
+              <Select
+                value={editForm.case_id}
+                onValueChange={(value) => setEditForm(prev => ({ ...prev, case_id: value }))}
+              >
+                <SelectTrigger className="mt-1 bg-black/30 border-white/10 text-white">
+                  <SelectValue placeholder="Kein Fall" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#1A1A1A] border-white/10">
+                  <SelectItem value="">Kein Fall</SelectItem>
+                  {cases.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <Label className="text-gray-300">Tags</Label>
+              <div className="flex flex-wrap gap-1 mt-2 mb-2">
+                {editForm.tags.map((tag, i) => (
+                  <span 
+                    key={i}
+                    className="flex items-center gap-1 px-2 py-1 bg-blue-500/10 text-blue-400 text-sm rounded border border-blue-500/20"
+                  >
+                    {tag}
+                    <button onClick={() => handleRemoveTag(tag)} className="hover:text-blue-200">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  id="new-tag-input"
+                  placeholder="Neuen Tag hinzufügen..."
+                  className="bg-black/30 border-white/10 text-white"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddTag(e.target.value);
+                      e.target.value = '';
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    const input = document.getElementById('new-tag-input');
+                    handleAddTag(input.value);
+                    input.value = '';
+                  }}
+                  className="text-gray-400"
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="ghost" onClick={() => setEditingDoc(null)} className="text-gray-400">
+                Abbrechen
+              </Button>
+              <Button onClick={handleSaveEdit} className="btn-primary">
+                Speichern
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

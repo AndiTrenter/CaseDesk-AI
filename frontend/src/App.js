@@ -3,14 +3,17 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import './i18n';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { setupAPI } from './lib/api';
 
 // Pages
 import SetupWizard from './pages/SetupWizard';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Documents from './pages/Documents';
 import Cases from './pages/Cases';
+import CaseDetail from './pages/CaseDetail';
 import Tasks from './pages/Tasks';
 import Calendar from './pages/Calendar';
 import Emails from './pages/Emails';
@@ -77,6 +80,7 @@ const AppRoutes = () => {
       <Route path="/login" element={
         isAuthenticated ? <Navigate to="/" replace /> : <Login />
       } />
+      <Route path="/register/:token" element={<Register />} />
       
       <Route path="/" element={
         <ProtectedRoute>
@@ -86,6 +90,7 @@ const AppRoutes = () => {
         <Route index element={<Dashboard />} />
         <Route path="documents" element={<Documents />} />
         <Route path="cases" element={<Cases />} />
+        <Route path="cases/:caseId" element={<CaseDetail />} />
         <Route path="tasks" element={<Tasks />} />
         <Route path="calendar" element={<Calendar />} />
         <Route path="emails" element={<Emails />} />
@@ -98,24 +103,38 @@ const AppRoutes = () => {
   );
 };
 
+function ThemedToaster() {
+  const { theme } = useTheme();
+  
+  return (
+    <Toaster 
+      position="top-right" 
+      theme={theme}
+      toastOptions={{
+        style: theme === 'dark' ? {
+          background: '#1A1A1A',
+          border: '1px solid rgba(255,255,255,0.1)',
+          color: '#EDEDED'
+        } : {
+          background: '#FFFFFF',
+          border: '1px solid rgba(0,0,0,0.1)',
+          color: '#111827'
+        }
+      }}
+    />
+  );
+}
+
 function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <AppRoutes />
-        <Toaster 
-          position="top-right" 
-          theme="dark"
-          toastOptions={{
-            style: {
-              background: '#1A1A1A',
-              border: '1px solid rgba(255,255,255,0.1)',
-              color: '#EDEDED'
-            }
-          }}
-        />
-      </BrowserRouter>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <AppRoutes />
+          <ThemedToaster />
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
