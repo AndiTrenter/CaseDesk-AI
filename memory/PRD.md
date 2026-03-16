@@ -2,21 +2,53 @@
 
 ## Project Overview
 **Name:** CaseDesk AI  
-**Version:** 1.0.0  
+**Version:** 1.1.0  
 **Type:** Self-hosted Document & Case Management with AI Support  
-**Last Updated:** 2026-03-10
+**Last Updated:** 2026-03-16
 
-## Aktueller Status: MVP COMPLETE ✅
+## Aktueller Status: FEATURE-COMPLETE ✅
 
-### Ja, mit OpenAI funktioniert alles sofort!
+### Neue Features (2026-03-16)
+
+#### ✅ Theme-Umschalter (Hell/Dunkel)
+- Sonnen/Mond-Icon in der Sidebar zum Umschalten
+- Theme-Auswahl auch in User Preferences
+- Theme wird im localStorage persistiert
+- CSS-Variablen werden dynamisch aktualisiert
+
+#### ✅ Benutzereinladungssystem
+- Admin kann neue Benutzer per E-Mail einladen
+- Einladungslink mit Token (7 Tage gültig)
+- Registrierungsseite für eingeladene Benutzer
+- SMTP-Einstellungen für E-Mail-Versand
+- Einladungen können storniert werden
+- API-Endpunkte: POST /api/users/invite, GET /api/auth/invitation/{token}, POST /api/auth/register/{token}
+
+#### ✅ Erweiterter KI-Assistent
+- Kennt ALLE Dokumente des Benutzers
+- Kann Querverweise zwischen Dokumenten herstellen
+- Kennt alle Fälle, Aufgaben und Termine
+- Gibt proaktive Empfehlungen
+- Vollständiger Kontext bei jeder Anfrage
+
+#### ✅ Response-Paket-Generierung (für Fälle)
+- KI analysiert Fall und schlägt Antworttyp vor
+- Generiert komplettes Antwortschreiben
+- Dokumente als Anlagen auswählbar
+- Download als ZIP-Paket
+- Versand per E-Mail möglich
+- Audit-Trail für alle Aktionen
+
+### Mit OpenAI funktioniert alles sofort!
 Bei Freigabe von Internetzugriff + OpenAI API-Key sind alle KI-Features voll funktionsfähig:
 - Dokumentenanalyse & Auto-Tagging
 - Intelligente Umbenennung
-- KI-Chat
+- KI-Chat mit Dokumentenwissen
 - E-Mail-Analyse
 - Fristenerkennung
+- Response-Generierung
 
-## Implementierte Features (2026-03-10)
+## Implementierte Features (Komplett)
 
 ### ✅ Backend (FastAPI + MongoDB)
 - User Authentication mit JWT
@@ -97,19 +129,36 @@ Danach funktionieren:
 - E-Mail-Zusammenfassungen
 - Fristenerkennung
 
-## Verbleibende optionale Features (P1/P2)
-
-### P1 (Nicht kritisch)
-- SMTP E-Mail-Versand (mit Freigabe)
-- KI-gestützte Entwurfserstellung
-- Dokumenten-Vorschau im Browser (PDF-Viewer)
+## Verbleibende optionale Features (P2)
 
 ### P2 (Nice-to-Have)
-- Team-Rollen und Berechtigungen
+- Team-Rollen und Berechtigungen (Feinabstimmung)
 - CalDAV-Kalendersync
 - Mobile Optimierung
 - Webhook-Integrationen
-- Browser-basierte PDF-Vorschau
+- Browser-basierte PDF-Vorschau mit Annotation
+
+## Erledigte Features (Vollständig)
+
+### ✅ SMTP E-Mail-Versand
+- SMTP-Einstellungen in E-Mail-Konto-Konfiguration
+- Versand von Korrespondenz per E-Mail
+
+### ✅ KI-gestützte Entwurfserstellung
+- Response-Generierung für Fälle
+- Verschiedene Antworttypen (Widerspruch, Antrag, etc.)
+
+### ✅ Dokumenten-Viewer
+- PDF-Anzeige im Browser
+- Bild-Vorschau
+- OCR-Text-Anzeige
+
+### ✅ Benutzereinladungssystem
+- Admin kann Benutzer einladen
+- Registrierung über Einladungslink
+
+### ✅ Theme-Umschalter
+- Hell/Dunkel-Modus
 
 ## Architektur
 
