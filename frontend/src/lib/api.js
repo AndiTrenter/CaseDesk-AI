@@ -117,6 +117,17 @@ export const documentsAPI = {
   ocr: (id) => api.post(`/documents/${id}/ocr`),
   reprocess: (id) => api.post(`/documents/${id}/reprocess`, {}, { timeout: 120000 }),
   delete: (id) => api.delete(`/documents/${id}`),
+  update: (id, data) => {
+    const formData = new FormData();
+    Object.keys(data).forEach(key => {
+      if (data[key] !== null && data[key] !== undefined) {
+        formData.append(key, data[key]);
+      }
+    });
+    return api.put(`/documents/${id}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
 };
 
 // Tasks
@@ -151,10 +162,27 @@ export const aiAPI = {
     if (sessionId) formData.append('session_id', sessionId);
     if (caseId) formData.append('case_id', caseId);
     return api.post('/ai/chat', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000
     });
   },
   history: (sessionId) => api.get('/ai/history', { params: { session_id: sessionId } }),
+  dailyBriefing: () => api.get('/ai/daily-briefing', { timeout: 120000 }),
+  suggestDocuments: (caseTitle, caseDescription) => {
+    const formData = new FormData();
+    formData.append('case_title', caseTitle);
+    if (caseDescription) formData.append('case_description', caseDescription);
+    return api.post('/ai/suggest-documents', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000
+    });
+  },
+};
+
+// Proactive AI
+export const proactiveAI = {
+  analyzeCase: (caseId) => api.get(`/cases/${caseId}/proactive-analysis`, { timeout: 180000 }),
+  autoLinkDocument: (documentId) => api.get(`/documents/${documentId}/auto-link`, { timeout: 120000 }),
 };
 
 // Settings

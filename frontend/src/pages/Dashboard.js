@@ -3,20 +3,34 @@ import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { 
   Briefcase, FileText, CheckSquare, Calendar, 
-  ArrowRight, Clock 
+  ArrowRight, Clock, Sparkles, AlertTriangle, Lightbulb,
+  RefreshCw, ChevronRight, Bell
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { dashboardAPI } from '../lib/api';
+import { useTheme } from '../context/ThemeContext';
+import { dashboardAPI, aiAPI } from '../lib/api';
 import { Link } from 'react-router-dom';
+import { Button } from '../components/ui/button';
 
 export default function Dashboard() {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { theme } = useTheme();
   const [stats, setStats] = useState(null);
+  const [briefing, setBriefing] = useState(null);
+  const [loadingBriefing, setLoadingBriefing] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Theme-aware classes
+  const bgCard = theme === 'dark' ? 'bg-[#121212]' : 'bg-white';
+  const borderColor = theme === 'dark' ? 'border-white/5' : 'border-gray-200';
+  const textPrimary = theme === 'dark' ? 'text-white' : 'text-gray-900';
+  const textSecondary = theme === 'dark' ? 'text-gray-400' : 'text-gray-600';
+  const textMuted = theme === 'dark' ? 'text-gray-500' : 'text-gray-400';
 
   useEffect(() => {
     loadStats();
+    loadDailyBriefing();
   }, []);
 
   const loadStats = async () => {
@@ -27,6 +41,19 @@ export default function Dashboard() {
       console.error('Failed to load stats:', error);
     }
     setLoading(false);
+  };
+
+  const loadDailyBriefing = async () => {
+    setLoadingBriefing(true);
+    try {
+      const response = await aiAPI.dailyBriefing();
+      if (response.data.success) {
+        setBriefing(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to load briefing:', error);
+    }
+    setLoadingBriefing(false);
   };
 
   const statCards = [
@@ -73,10 +100,10 @@ export default function Dashboard() {
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <h1 className="text-3xl font-bold text-white mb-2">
+        <h1 className={`text-3xl font-bold ${textPrimary} mb-2`}>
           {t('dashboard.welcome')}, {user?.full_name || user?.username}
         </h1>
-        <p className="text-gray-400">{t('dashboard.overview')}</p>
+        <p className={textSecondary}>{t('dashboard.overview')}</p>
       </motion.div>
 
       {loading ? (
@@ -85,6 +112,105 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
+          {/* AI Daily Briefing */}
+          {briefing && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`${bgCard} border ${borderColor} rounded-xl p-6 mb-8`}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                    <Sparkles className="w-5 h-5 text-purple-400" />
+                  </div>
+                  <div>
+                    <h2 className={`font-semibold ${textPrimary}`}>KI-Tagesbriefing</h2>
+                    <p className={`text-sm ${textMuted}`}>{briefing.date}</p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={loadDailyBriefing}
+                  disabled={loadingBriefing}
+                  className={textSecondary}
+                >
+                  <RefreshCw className={`w-4 h-4 ${loadingBriefing ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+              
+              <div className="space-y-4">
+                {/* Greeting */}
+                {briefing.briefing?.begruessung && (
+                  <p className={textSecondary}>{briefing.briefing.begruessung}</p>
+                )}
+                
+                {/* Today's Priorities */}
+                {briefing.briefing?.prioritaeten_heute?.length > 0 && (
+                  <div>
+                    <h3 className={`text-sm font-medium ${textPrimary} mb-2 flex items-center gap-2`}>
+                      <AlertTriangle className="w-4 h-4 text-amber-400" />
+                      Prioritäten heute
+                    </h3>
+                    <div className="space-y-2">
+                      {briefing.briefing.prioritaeten_heute.slice(0, 3).map((item, i) => (
+                        <div key={i} className={`flex items-start gap-2 text-sm ${textSecondary}`}>
+                          <ChevronRight className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                          <span>{item.item} {item.grund && <span className={textMuted}>- {item.grund}</span>}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Upcoming Deadlines */}
+                {briefing.briefing?.anstehende_fristen?.length > 0 && (
+                  <div>
+                    <h3 className={`text-sm font-medium ${textPrimary} mb-2 flex items-center gap-2`}>
+                      <Clock className="w-4 h-4 text-red-400" />
+                      Anstehende Fristen
+                    </h3>
+                    <div className="space-y-2">
+                      {briefing.briefing.anstehende_fristen.slice(0, 3).map((item, i) => (
+                        <div key={i} className={`flex items-start gap-2 text-sm ${textSecondary}`}>
+                          <Bell className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-400" />
+                          <span>{item.frist}: {item.beschreibung}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Tip of the Day */}
+                {briefing.briefing?.tipp_des_tages && (
+                  <div className={`p-3 rounded-lg ${theme === 'dark' ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-blue-50 border border-blue-200'}`}>
+                    <div className="flex items-start gap-2">
+                      <Lightbulb className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
+                      <p className={`text-sm ${theme === 'dark' ? 'text-blue-300' : 'text-blue-700'}`}>
+                        {briefing.briefing.tipp_des_tages}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+          
+          {/* Loading Briefing Indicator */}
+          {loadingBriefing && !briefing && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className={`${bgCard} border ${borderColor} rounded-xl p-6 mb-8`}
+            >
+              <div className="flex items-center gap-3">
+                <RefreshCw className="w-5 h-5 text-purple-400 animate-spin" />
+                <span className={textSecondary}>KI-Briefing wird geladen...</span>
+              </div>
+            </motion.div>
+          )}
+
           {/* Stat Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {statCards.map((stat, index) => {
@@ -98,19 +224,19 @@ export default function Dashboard() {
                 >
                   <Link
                     to={stat.link}
-                    className="stat-card block group"
+                    className={`block ${bgCard} border ${borderColor} rounded-xl p-5 hover:border-white/10 transition-all group`}
                     data-testid={`stat-card-${index}`}
                   >
                     <div className="flex items-start justify-between mb-4">
                       <div className={`w-10 h-10 rounded-lg ${stat.bgColor} flex items-center justify-center`}>
                         <Icon className={`w-5 h-5 ${stat.color}`} />
                       </div>
-                      <ArrowRight className="w-5 h-5 text-gray-600 group-hover:text-white group-hover:translate-x-1 transition-all" />
+                      <ArrowRight className={`w-5 h-5 ${textMuted} group-hover:${textPrimary} group-hover:translate-x-1 transition-all`} />
                     </div>
-                    <div className="text-3xl font-bold text-white mb-1">{stat.value}</div>
-                    <div className="text-gray-400 text-sm">{stat.label}</div>
+                    <div className={`text-3xl font-bold ${textPrimary} mb-1`}>{stat.value}</div>
+                    <div className={`${textSecondary} text-sm`}>{stat.label}</div>
                     {stat.total !== undefined && stat.total !== stat.value && (
-                      <div className="text-gray-600 text-xs mt-1">
+                      <div className={`${textMuted} text-xs mt-1`}>
                         {stat.total} total
                       </div>
                     )}

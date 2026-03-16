@@ -385,3 +385,464 @@ async def get_ai_service(db) -> AIService:
         provider = "ollama"  # Fallback to Ollama even if "disabled"
     
     return AIService(provider=provider, api_key=api_key)
+
+
+class ProactiveAssistant:
+    """Proactive AI Assistant that automatically prepares relevant information"""
+    
+    def __init__(self, ai_service: AIService, db):
+        self.ai = ai_service
+        self.db = db
+    
+    async def find_related_documents(self, user_id: str, query: str = None, 
+                                    sender: str = None, tags: List[str] = None,
+                                    reference: str = None, limit: int = 10) -> List[Dict]:
+        """Find documents related to given criteria"""
+        # Build search query
+        search_conditions = {"user_id": user_id}
+        
+        # Text search if query provided
+        if query:
+            # Use MongoDB text search
+            documents = await self.db.documents.find(
+                {"user_id": user_id, "$text": {"$search": query}},
+                {"_id": 0, "score": {"$meta": "textScore"}}
+            ).sort([("score", {"$meta": "textScore"})]).limit(limit).to_list(limit)
+            return documents
+        
+        # Search by sender
+        if sender:
+            search_conditions["sender"] = {"$regex": sender, "$options": "i"}
+        
+        # Search by tags
+        if tags:
+            search_conditions["tags"] = {"$in": tags}
+            
+        # Search by reference number
+        if reference:
+            search_conditions["$or"] = [
+                {"ocr_text": {"$regex": reference, "$options": "i"}},
+                {"display_name": {"$regex": reference, "$options": "i"}}
+            ]
+        
+        documents = await self.db.documents.find(
+            search_conditions, {"_id": 0}
+        ).sort("created_at", -1).limit(limit).to_list(limit)
+        
+        return documents
+    
+    async def suggest_documents_for_case(self, user_id: str, case_title: str, 
+                                         case_description: str = None) -> Dict[str, Any]:
+        """Suggest relevant documents when creating or viewing a case"""
+        
+        # Get all user documents
+        all_docs = await self.db.documents.find(
+            {"user_id": user_id},
+            {"_id": 0, "id": 1, "display_name": 1, "original_filename": 1, 
+             "sender": 1, "document_type": 1, "tags": 1, "ai_summary": 1,
+             "document_date": 1, "ocr_text": 1}
+        ).sort("created_at", -1).to_list(100)
+        
+        if not all_docs:
+            return {"suggestions": [], "analysis": "Keine Dokumente vorhanden."}
+        
+        # Use AI to find relevant documents
+        system_prompt = """Du bist ein Experte für Dokumentenanalyse und Fallzuordnung.
+Analysiere den Falltitel und die Beschreibung und finde die relevantesten Dokumente.
+
+WICHTIG: Antworte NUR mit einem validen JSON-Objekt:
+{
+    "relevant_document_ids": ["id1", "id2", ...],
+    "relevanz_erklaerung": {
+        "id1": "Warum dieses Dokument relevant ist",
+        "id2": "Warum dieses Dokument relevant ist"
+    },
+    "empfohlene_aktionen": ["Aktion 1", "Aktion 2"],
+    "erkannte_zusammenhaenge": "Beschreibung erkannter Zusammenhänge zwischen Dokumenten",
+    "moegliche_fristen": ["Frist 1 mit Datum", "Frist 2 mit Datum"],
+    "fehlende_dokumente": ["Was könnte noch fehlen"]
+}"""
+
+        # Build document list for AI
+        doc_list = []
+        for doc in all_docs:
+            doc_info = f"ID: {doc['id']}\n"
+            doc_info += f"Name: {doc.get('display_name', doc.get('original_filename'))}\n"
+            if doc.get('sender'):
+                doc_info += f"Absender: {doc['sender']}\n"
+            if doc.get('document_type'):
+                doc_info += f"Typ: {doc['document_type']}\n"
+            if doc.get('tags'):
+                doc_info += f"Tags: {', '.join(doc['tags'])}\n"
+            if doc.get('ai_summary'):
+                doc_info += f"Zusammenfassung: {doc['ai_summary']}\n"
+            if doc.get('ocr_text'):
+                doc_info += f"Inhalt (Auszug): {doc['ocr_text'][:500]}...\n"
+            doc_list.append(doc_info)
+        
+        prompt = f"""FALL:
+Titel: {case_title}
+Beschreibung: {case_description or 'Nicht angegeben'}
+
+VERFÜGBARE DOKUMENTE:
+{chr(10).join(doc_list)}
+
+Finde die relevantesten Dokumente für diesen Fall und analysiere Zusammenhänge."""
+
+        try:
+            response = await self.ai.generate(prompt, system_prompt, max_tokens=2000)
+            
+            # Parse JSON from response
+            json_match = re.search(r'\{[\s\S]*\}', response)
+            if json_match:
+                analysis = json.loads(json_match.group())
+                
+                # Get full document info for suggested IDs
+                suggested_docs = []
+                for doc_id in analysis.get("relevant_document_ids", []):
+                    for doc in all_docs:
+                        if doc["id"] == doc_id:
+                            doc["relevanz"] = analysis.get("relevanz_erklaerung", {}).get(doc_id, "")
+                            suggested_docs.append(doc)
+                            break
+                
+                return {
+                    "success": True,
+                    "suggestions": suggested_docs,
+                    "analysis": analysis
+                }
+            else:
+                return {"success": False, "suggestions": [], "analysis": response}
+                
+        except Exception as e:
+            logger.error(f"Document suggestion error: {e}")
+            return {"success": False, "suggestions": [], "error": str(e)}
+    
+    async def analyze_case_proactively(self, user_id: str, case_id: str) -> Dict[str, Any]:
+        """Proactively analyze a case and provide recommendations"""
+        
+        # Get case
+        case = await self.db.cases.find_one({"id": case_id, "user_id": user_id}, {"_id": 0})
+        if not case:
+            return {"success": False, "error": "Fall nicht gefunden"}
+        
+        # Get case documents
+        case_docs = []
+        if case.get("document_ids"):
+            case_docs = await self.db.documents.find(
+                {"id": {"$in": case["document_ids"]}, "user_id": user_id},
+                {"_id": 0}
+            ).to_list(50)
+        
+        # Get ALL user documents for cross-reference
+        all_docs = await self.db.documents.find(
+            {"user_id": user_id, "id": {"$nin": case.get("document_ids", [])}},
+            {"_id": 0, "id": 1, "display_name": 1, "sender": 1, "tags": 1, 
+             "ai_summary": 1, "document_date": 1, "ocr_text": 1}
+        ).to_list(100)
+        
+        # Get open tasks
+        open_tasks = await self.db.tasks.find(
+            {"user_id": user_id, "case_id": case_id, "status": {"$ne": "done"}},
+            {"_id": 0}
+        ).to_list(20)
+        
+        # Get correspondence
+        correspondence = await self.db.correspondence.find(
+            {"case_id": case_id, "user_id": user_id},
+            {"_id": 0}
+        ).sort("created_at", -1).to_list(10)
+        
+        system_prompt = """Du bist ein proaktiver KI-Assistent für Fallbearbeitung.
+Analysiere den Fall und alle zugehörigen Daten umfassend.
+
+WICHTIG: Antworte NUR mit einem validen JSON-Objekt:
+{
+    "status_zusammenfassung": "Kurze Zusammenfassung des aktuellen Fallstatus",
+    "dringende_aktionen": [
+        {"aktion": "Was zu tun ist", "grund": "Warum dringend", "prioritaet": "hoch/mittel/niedrig"}
+    ],
+    "erkannte_fristen": [
+        {"frist": "Datum oder Zeitraum", "quelle": "Woher die Frist stammt", "aktion_erforderlich": "Was zu tun ist"}
+    ],
+    "fehlende_dokumente": [
+        {"dokument": "Was fehlt", "warum_wichtig": "Warum es benötigt wird"}
+    ],
+    "zusaetzliche_dokumente_vorschlag": [
+        {"dokument_id": "ID", "grund": "Warum es zum Fall gehören könnte"}
+    ],
+    "naechster_schritt": {
+        "empfehlung": "Was als nächstes zu tun ist",
+        "begruendung": "Warum dieser Schritt"
+    },
+    "warnungen": ["Wichtige Warnungen oder Risiken"],
+    "zusammenhaenge": "Erkannte Verbindungen zu anderen Dokumenten oder Fällen"
+}"""
+
+        # Build context
+        case_docs_text = ""
+        for doc in case_docs:
+            case_docs_text += f"\n--- Dokument: {doc.get('display_name', doc.get('original_filename'))} ---\n"
+            if doc.get('sender'):
+                case_docs_text += f"Absender: {doc['sender']}\n"
+            if doc.get('document_date'):
+                case_docs_text += f"Datum: {doc['document_date']}\n"
+            if doc.get('ai_summary'):
+                case_docs_text += f"Zusammenfassung: {doc['ai_summary']}\n"
+            if doc.get('ocr_text'):
+                case_docs_text += f"Inhalt:\n{doc['ocr_text'][:1500]}\n"
+        
+        other_docs_text = ""
+        for doc in all_docs[:30]:  # Limit for token management
+            other_docs_text += f"\n- {doc.get('display_name', 'Unbekannt')} (ID: {doc['id']})"
+            if doc.get('sender'):
+                other_docs_text += f" | Von: {doc['sender']}"
+            if doc.get('ai_summary'):
+                other_docs_text += f"\n  {doc['ai_summary'][:100]}"
+        
+        tasks_text = ""
+        for task in open_tasks:
+            tasks_text += f"\n- {task.get('title')} (Fällig: {task.get('due_date', 'Nicht gesetzt')}, Priorität: {task.get('priority', 'normal')})"
+        
+        corr_text = ""
+        for corr in correspondence:
+            corr_text += f"\n- {corr.get('type')}: {corr.get('subject')} ({corr.get('status')}) - {corr.get('created_at', '')[:10]}"
+        
+        prompt = f"""FALL: {case.get('title')}
+Aktenzeichen: {case.get('reference_number', 'Nicht angegeben')}
+Status: {case.get('status')}
+Beschreibung: {case.get('description', 'Keine')}
+
+DOKUMENTE IM FALL ({len(case_docs)}):
+{case_docs_text if case_docs_text else 'Keine Dokumente'}
+
+OFFENE AUFGABEN ({len(open_tasks)}):
+{tasks_text if tasks_text else 'Keine offenen Aufgaben'}
+
+KORRESPONDENZ ({len(correspondence)}):
+{corr_text if corr_text else 'Keine Korrespondenz'}
+
+WEITERE DOKUMENTE DES BENUTZERS (für Querverweise):
+{other_docs_text if other_docs_text else 'Keine weiteren Dokumente'}
+
+Analysiere den Fall proaktiv und gib umfassende Empfehlungen."""
+
+        try:
+            response = await self.ai.generate(prompt, system_prompt, max_tokens=3000)
+            
+            json_match = re.search(r'\{[\s\S]*\}', response)
+            if json_match:
+                analysis = json.loads(json_match.group())
+                return {
+                    "success": True,
+                    "case_id": case_id,
+                    "case_title": case.get("title"),
+                    "analysis": analysis,
+                    "documents_count": len(case_docs),
+                    "tasks_count": len(open_tasks),
+                    "correspondence_count": len(correspondence)
+                }
+            else:
+                return {"success": False, "raw_response": response}
+                
+        except Exception as e:
+            logger.error(f"Proactive analysis error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    async def auto_link_documents(self, user_id: str, document_id: str) -> Dict[str, Any]:
+        """Automatically find and suggest links for a document"""
+        
+        # Get the document
+        doc = await self.db.documents.find_one(
+            {"id": document_id, "user_id": user_id}, {"_id": 0}
+        )
+        if not doc:
+            return {"success": False, "error": "Dokument nicht gefunden"}
+        
+        # Get all other documents
+        other_docs = await self.db.documents.find(
+            {"user_id": user_id, "id": {"$ne": document_id}},
+            {"_id": 0, "id": 1, "display_name": 1, "sender": 1, "tags": 1,
+             "ai_summary": 1, "ocr_text": 1, "case_id": 1}
+        ).to_list(100)
+        
+        # Get all cases
+        cases = await self.db.cases.find(
+            {"user_id": user_id},
+            {"_id": 0, "id": 1, "title": 1, "description": 1, "reference_number": 1}
+        ).to_list(50)
+        
+        system_prompt = """Du bist ein Experte für Dokumentenverknüpfung.
+Analysiere das Dokument und finde Verbindungen zu anderen Dokumenten und Fällen.
+
+WICHTIG: Antworte NUR mit einem validen JSON-Objekt:
+{
+    "verwandte_dokumente": [
+        {"id": "dok_id", "verbindung": "Art der Verbindung", "staerke": "hoch/mittel/niedrig"}
+    ],
+    "passende_faelle": [
+        {"id": "fall_id", "grund": "Warum passend"}
+    ],
+    "erkannte_referenzen": ["Aktenzeichen, Vertragsnummern etc."],
+    "empfohlene_tags": ["tag1", "tag2"],
+    "zusammenfassung": "Kurze Analyse der Dokumentenbeziehungen"
+}"""
+
+        doc_text = f"""DOKUMENT ZUR ANALYSE:
+Name: {doc.get('display_name', doc.get('original_filename'))}
+Absender: {doc.get('sender', 'Unbekannt')}
+Typ: {doc.get('document_type', 'Unbekannt')}
+Tags: {', '.join(doc.get('tags', []))}
+Zusammenfassung: {doc.get('ai_summary', 'Keine')}
+Inhalt: {doc.get('ocr_text', '')[:2000]}
+
+ANDERE DOKUMENTE:
+"""
+        for od in other_docs[:50]:
+            doc_text += f"\n- ID: {od['id']} | {od.get('display_name', 'Unbekannt')}"
+            if od.get('sender'):
+                doc_text += f" | Von: {od['sender']}"
+            if od.get('ai_summary'):
+                doc_text += f"\n  {od['ai_summary'][:150]}"
+        
+        doc_text += "\n\nVERFÜGBARE FÄLLE:\n"
+        for c in cases:
+            doc_text += f"\n- ID: {c['id']} | {c['title']}"
+            if c.get('reference_number'):
+                doc_text += f" | AZ: {c['reference_number']}"
+            if c.get('description'):
+                doc_text += f"\n  {c['description'][:100]}"
+        
+        try:
+            response = await self.ai.generate(doc_text, system_prompt, max_tokens=2000)
+            
+            json_match = re.search(r'\{[\s\S]*\}', response)
+            if json_match:
+                analysis = json.loads(json_match.group())
+                return {
+                    "success": True,
+                    "document_id": document_id,
+                    "links": analysis
+                }
+            else:
+                return {"success": False, "raw_response": response}
+                
+        except Exception as e:
+            logger.error(f"Auto-link error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    async def get_daily_briefing(self, user_id: str) -> Dict[str, Any]:
+        """Generate a daily briefing with important items"""
+        
+        from datetime import timedelta
+        
+        today = datetime.now()
+        week_ahead = (today + timedelta(days=7)).isoformat()
+        today_str = today.isoformat()
+        
+        # Get upcoming tasks
+        upcoming_tasks = await self.db.tasks.find(
+            {"user_id": user_id, "status": {"$ne": "done"}, 
+             "due_date": {"$lte": week_ahead}},
+            {"_id": 0}
+        ).sort("due_date", 1).to_list(20)
+        
+        # Get upcoming events
+        upcoming_events = await self.db.events.find(
+            {"user_id": user_id, "start_date": {"$gte": today_str, "$lte": week_ahead}},
+            {"_id": 0}
+        ).sort("start_date", 1).to_list(20)
+        
+        # Get recent documents (last 7 days)
+        week_ago = (today - timedelta(days=7)).isoformat()
+        recent_docs = await self.db.documents.find(
+            {"user_id": user_id, "created_at": {"$gte": week_ago}},
+            {"_id": 0, "id": 1, "display_name": 1, "ai_summary": 1, "tags": 1}
+        ).sort("created_at", -1).to_list(10)
+        
+        # Get open cases
+        open_cases = await self.db.cases.find(
+            {"user_id": user_id, "status": {"$in": ["open", "in_progress"]}},
+            {"_id": 0}
+        ).to_list(20)
+        
+        # Get pending correspondence
+        pending_corr = await self.db.correspondence.find(
+            {"user_id": user_id, "status": "draft"},
+            {"_id": 0}
+        ).to_list(10)
+        
+        system_prompt = """Du bist ein proaktiver persönlicher Assistent.
+Erstelle ein hilfreiches Tagesbriefing basierend auf den Daten.
+
+WICHTIG: Antworte NUR mit einem validen JSON-Objekt:
+{
+    "begruessung": "Personalisierte Begrüßung",
+    "prioritaeten_heute": [
+        {"item": "Was heute wichtig ist", "grund": "Warum", "typ": "aufgabe/termin/frist"}
+    ],
+    "anstehende_fristen": [
+        {"frist": "Datum", "beschreibung": "Was", "tage_verbleibend": 3}
+    ],
+    "offene_faelle_status": [
+        {"fall": "Fallname", "status": "Status", "naechster_schritt": "Empfehlung"}
+    ],
+    "unbearbeitete_dokumente": [
+        {"dokument": "Name", "empfehlung": "Was damit zu tun"}
+    ],
+    "entwuerfe_zu_senden": [
+        {"entwurf": "Betreff", "empfaenger": "An wen"}
+    ],
+    "tipp_des_tages": "Ein hilfreicher Tipp basierend auf der Situation",
+    "zusammenfassung": "Kurze Zusammenfassung des Tages"
+}"""
+
+        context = f"""DATUM: {today.strftime('%d.%m.%Y')}
+
+ANSTEHENDE AUFGABEN ({len(upcoming_tasks)}):
+"""
+        for task in upcoming_tasks:
+            context += f"\n- {task.get('title')} (Fällig: {task.get('due_date', 'Nicht gesetzt')}, Priorität: {task.get('priority', 'normal')})"
+        
+        context += f"\n\nANSTEHENDE TERMINE ({len(upcoming_events)}):"
+        for event in upcoming_events:
+            context += f"\n- {event.get('title')} am {event.get('start_date', '')[:10]}"
+        
+        context += f"\n\nNEUE DOKUMENTE LETZTE 7 TAGE ({len(recent_docs)}):"
+        for doc in recent_docs:
+            context += f"\n- {doc.get('display_name', 'Unbekannt')}"
+            if doc.get('ai_summary'):
+                context += f": {doc['ai_summary'][:100]}"
+        
+        context += f"\n\nOFFENE FÄLLE ({len(open_cases)}):"
+        for case in open_cases:
+            context += f"\n- {case.get('title')} ({case.get('status')})"
+        
+        context += f"\n\nUNGESENDETE ENTWÜRFE ({len(pending_corr)}):"
+        for corr in pending_corr:
+            context += f"\n- {corr.get('subject')} an {corr.get('recipient')}"
+        
+        try:
+            response = await self.ai.generate(context, system_prompt, max_tokens=2000)
+            
+            json_match = re.search(r'\{[\s\S]*\}', response)
+            if json_match:
+                briefing = json.loads(json_match.group())
+                return {
+                    "success": True,
+                    "date": today.strftime('%d.%m.%Y'),
+                    "briefing": briefing,
+                    "stats": {
+                        "tasks": len(upcoming_tasks),
+                        "events": len(upcoming_events),
+                        "recent_docs": len(recent_docs),
+                        "open_cases": len(open_cases),
+                        "pending_drafts": len(pending_corr)
+                    }
+                }
+            else:
+                return {"success": False, "raw_response": response}
+                
+        except Exception as e:
+            logger.error(f"Daily briefing error: {e}")
+            return {"success": False, "error": str(e)}

@@ -5,7 +5,8 @@ import { motion } from 'framer-motion';
 import { 
   ArrowLeft, FileText, Mail, Send, Download, Edit, Trash2,
   Plus, RefreshCw, Loader2, Sparkles, History, CheckCircle,
-  AlertCircle, Calendar, User, Paperclip, Eye, X, Save
+  AlertCircle, Calendar, User, Paperclip, Eye, X, Save,
+  Lightbulb, Clock, Bell, ChevronRight, Brain
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -26,7 +27,7 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { casesAPI, caseResponseAPI, correspondenceAPI, mailAPI, documentUpdateAPI } from '../lib/api';
+import { casesAPI, caseResponseAPI, correspondenceAPI, mailAPI, documentUpdateAPI, proactiveAI } from '../lib/api';
 import { toast } from 'sonner';
 
 const STATUS_COLORS = {
@@ -50,6 +51,10 @@ export default function CaseDetail() {
   const [analyzing, setAnalyzing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [analysis, setAnalysis] = useState(null);
+  
+  // Proactive AI state
+  const [proactiveAnalysis, setProactiveAnalysis] = useState(null);
+  const [loadingProactive, setLoadingProactive] = useState(false);
   
   // Dialog states
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
@@ -93,11 +98,27 @@ export default function CaseDetail() {
       setCorrespondence(corrRes.data);
       setHistory(historyRes.data);
       setMailAccounts(mailRes.data);
+      
+      // Load proactive analysis automatically
+      loadProactiveAnalysis();
     } catch (error) {
       console.error('Failed to load case data:', error);
       toast.error('Falldaten konnten nicht geladen werden');
     }
     setLoading(false);
+  };
+  
+  const loadProactiveAnalysis = async () => {
+    setLoadingProactive(true);
+    try {
+      const response = await proactiveAI.analyzeCase(caseId);
+      if (response.data.success) {
+        setProactiveAnalysis(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to load proactive analysis:', error);
+    }
+    setLoadingProactive(false);
   };
 
   const handleAnalyzeCase = async () => {
@@ -316,8 +337,12 @@ export default function CaseDetail() {
         </div>
       </div>
 
-      <Tabs defaultValue="documents" className="space-y-6">
+      <Tabs defaultValue="assistant" className="space-y-6">
         <TabsList className="bg-white/5 border border-white/10">
+          <TabsTrigger value="assistant" className="data-[state=active]:bg-white/10">
+            <Brain className="w-4 h-4 mr-2" />
+            KI-Assistent
+          </TabsTrigger>
           <TabsTrigger value="documents" className="data-[state=active]:bg-white/10">
             <FileText className="w-4 h-4 mr-2" />
             Dokumente ({documents.length})
@@ -331,6 +356,213 @@ export default function CaseDetail() {
             Verlauf
           </TabsTrigger>
         </TabsList>
+
+        {/* AI Assistant Tab */}
+        <TabsContent value="assistant">
+          <div className="space-y-4">
+            {loadingProactive ? (
+              <div className="bg-[#121212] border border-white/5 rounded-xl p-8 text-center">
+                <RefreshCw className="w-8 h-8 text-purple-400 animate-spin mx-auto mb-3" />
+                <p className="text-gray-400">KI analysiert den Fall...</p>
+              </div>
+            ) : proactiveAnalysis?.analysis ? (
+              <>
+                {/* Status Summary */}
+                {proactiveAnalysis.analysis.status_zusammenfassung && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-[#121212] border border-white/5 rounded-xl p-5"
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                        <Brain className="w-5 h-5 text-purple-400" />
+                      </div>
+                      <h3 className="text-white font-medium">Fallzusammenfassung</h3>
+                    </div>
+                    <p className="text-gray-300">{proactiveAnalysis.analysis.status_zusammenfassung}</p>
+                  </motion.div>
+                )}
+
+                {/* Urgent Actions */}
+                {proactiveAnalysis.analysis.dringende_aktionen?.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                    className="bg-red-500/5 border border-red-500/20 rounded-xl p-5"
+                  >
+                    <h3 className="text-red-400 font-medium mb-3 flex items-center gap-2">
+                      <AlertCircle className="w-5 h-5" />
+                      Dringende Aktionen
+                    </h3>
+                    <div className="space-y-3">
+                      {proactiveAnalysis.analysis.dringende_aktionen.map((action, i) => (
+                        <div key={i} className="flex items-start gap-3 p-3 bg-black/30 rounded-lg">
+                          <span className={`px-2 py-0.5 text-xs rounded ${
+                            action.prioritaet === 'hoch' ? 'bg-red-500/20 text-red-400' :
+                            action.prioritaet === 'mittel' ? 'bg-amber-500/20 text-amber-400' :
+                            'bg-gray-500/20 text-gray-400'
+                          }`}>
+                            {action.prioritaet}
+                          </span>
+                          <div>
+                            <p className="text-white">{action.aktion}</p>
+                            {action.grund && <p className="text-gray-500 text-sm mt-1">{action.grund}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Deadlines */}
+                {proactiveAnalysis.analysis.erkannte_fristen?.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                    className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-5"
+                  >
+                    <h3 className="text-amber-400 font-medium mb-3 flex items-center gap-2">
+                      <Clock className="w-5 h-5" />
+                      Erkannte Fristen
+                    </h3>
+                    <div className="space-y-2">
+                      {proactiveAnalysis.analysis.erkannte_fristen.map((frist, i) => (
+                        <div key={i} className="flex items-start gap-3">
+                          <Bell className="w-4 h-4 text-amber-400 mt-1 flex-shrink-0" />
+                          <div>
+                            <p className="text-white">{frist.frist}: {frist.aktion_erforderlich}</p>
+                            {frist.quelle && <p className="text-gray-500 text-sm">Quelle: {frist.quelle}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Next Step */}
+                {proactiveAnalysis.analysis.naechster_schritt && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-5"
+                  >
+                    <h3 className="text-blue-400 font-medium mb-3 flex items-center gap-2">
+                      <Lightbulb className="w-5 h-5" />
+                      Nächster Schritt
+                    </h3>
+                    <p className="text-white">{proactiveAnalysis.analysis.naechster_schritt.empfehlung}</p>
+                    {proactiveAnalysis.analysis.naechster_schritt.begruendung && (
+                      <p className="text-gray-400 text-sm mt-2">{proactiveAnalysis.analysis.naechster_schritt.begruendung}</p>
+                    )}
+                    <Button 
+                      onClick={handleAnalyzeCase}
+                      className="btn-primary mt-4"
+                      disabled={analyzing}
+                    >
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Antwort generieren
+                    </Button>
+                  </motion.div>
+                )}
+
+                {/* Additional Documents Suggestion */}
+                {proactiveAnalysis.analysis.zusaetzliche_dokumente_vorschlag?.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
+                    className="bg-[#121212] border border-white/5 rounded-xl p-5"
+                  >
+                    <h3 className="text-white font-medium mb-3 flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-gray-400" />
+                      Empfohlene Dokumente zum Verknüpfen
+                    </h3>
+                    <div className="space-y-2">
+                      {proactiveAnalysis.analysis.zusaetzliche_dokumente_vorschlag.map((item, i) => (
+                        <div key={i} className="flex items-center gap-3 p-3 bg-white/5 rounded-lg">
+                          <ChevronRight className="w-4 h-4 text-gray-500" />
+                          <span className="text-gray-300">{item.grund}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Missing Documents */}
+                {proactiveAnalysis.analysis.fehlende_dokumente?.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                    className="bg-[#121212] border border-white/5 rounded-xl p-5"
+                  >
+                    <h3 className="text-white font-medium mb-3 flex items-center gap-2">
+                      <AlertCircle className="w-5 h-5 text-amber-400" />
+                      Möglicherweise fehlende Dokumente
+                    </h3>
+                    <div className="space-y-2">
+                      {proactiveAnalysis.analysis.fehlende_dokumente.map((item, i) => (
+                        <div key={i} className="p-3 bg-white/5 rounded-lg">
+                          <p className="text-white">{item.dokument}</p>
+                          {item.warum_wichtig && <p className="text-gray-500 text-sm mt-1">{item.warum_wichtig}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Warnings */}
+                {proactiveAnalysis.analysis.warnungen?.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.6 }}
+                    className="bg-orange-500/5 border border-orange-500/20 rounded-xl p-5"
+                  >
+                    <h3 className="text-orange-400 font-medium mb-3 flex items-center gap-2">
+                      <AlertCircle className="w-5 h-5" />
+                      Warnungen
+                    </h3>
+                    <ul className="space-y-2">
+                      {proactiveAnalysis.analysis.warnungen.map((warning, i) => (
+                        <li key={i} className="text-orange-300 text-sm flex items-start gap-2">
+                          <span className="text-orange-400">•</span>
+                          {warning}
+                        </li>
+                      ))}
+                    </ul>
+                  </motion.div>
+                )}
+
+                {/* Refresh Button */}
+                <div className="flex justify-center pt-4">
+                  <Button
+                    variant="ghost"
+                    onClick={loadProactiveAnalysis}
+                    disabled={loadingProactive}
+                    className="text-gray-400"
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-2 ${loadingProactive ? 'animate-spin' : ''}`} />
+                    Analyse aktualisieren
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div className="bg-[#121212] border border-white/5 rounded-xl p-8 text-center">
+                <Brain className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+                <p className="text-gray-500 mb-4">KI-Analyse nicht verfügbar</p>
+                <Button onClick={loadProactiveAnalysis} className="btn-secondary">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Analyse starten
+                </Button>
+              </div>
+            )}
+          </div>
+        </TabsContent>
 
         {/* Documents Tab */}
         <TabsContent value="documents">

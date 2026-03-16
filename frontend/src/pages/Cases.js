@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
-import { casesAPI } from '../lib/api';
+import { casesAPI, aiAPI, documentsAPI } from '../lib/api';
 import { toast } from 'sonner';
 
 const STATUS_COLORS = {
@@ -53,10 +53,40 @@ export default function Cases() {
     reference_number: '',
     status: 'open'
   });
+  
+  // AI Suggestions state
+  const [suggestions, setSuggestions] = useState(null);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [selectedDocIds, setSelectedDocIds] = useState([]);
 
   useEffect(() => {
     loadCases();
   }, []);
+  
+  // Debounced AI suggestions when title/description changes
+  useEffect(() => {
+    if (!editingCase && formData.title.length > 5) {
+      const timer = setTimeout(() => {
+        loadSuggestions();
+      }, 1500); // Wait 1.5 seconds after typing
+      return () => clearTimeout(timer);
+    }
+  }, [formData.title, formData.description]);
+  
+  const loadSuggestions = async () => {
+    if (!formData.title) return;
+    
+    setLoadingSuggestions(true);
+    try {
+      const response = await aiAPI.suggestDocuments(formData.title, formData.description);
+      if (response.data.success) {
+        setSuggestions(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to load suggestions:', error);
+    }
+    setLoadingSuggestions(false);
+  };
 
   const loadCases = async () => {
     try {
@@ -72,19 +102,42 @@ export default function Cases() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      let newCaseId = null;
+      
       if (editingCase) {
         await casesAPI.update(editingCase.id, formData);
-        toast.success('Case updated');
+        toast.success('Fall aktualisiert');
       } else {
-        await casesAPI.create(formData);
-        toast.success('Case created');
+        const response = await casesAPI.create(formData);
+        newCaseId = response.data.id;
+        toast.success('Fall erstellt');
+        
+        // Auto-link selected documents
+        if (selectedDocIds.length > 0 && newCaseId) {
+          for (const docId of selectedDocIds) {
+            try {
+              await documentsAPI.update(docId, { case_id: newCaseId });
+            } catch (err) {
+              console.error('Failed to link document:', err);
+            }
+          }
+          toast.success(`${selectedDocIds.length} Dokumente automatisch verknüpft`);
+        }
       }
+      
       setIsDialogOpen(false);
       setEditingCase(null);
       setFormData({ title: '', description: '', reference_number: '', status: 'open' });
+      setSuggestions(null);
+      setSelectedDocIds([]);
       loadCases();
+      
+      // Navigate to new case if created
+      if (newCaseId) {
+        navigate(`/cases/${newCaseId}`);
+      }
     } catch (error) {
-      toast.error('Failed to save case');
+      toast.error('Speichern fehlgeschlagen');
     }
   };
 
@@ -96,7 +149,17 @@ export default function Cases() {
       reference_number: caseItem.reference_number || '',
       status: caseItem.status
     });
+    setSuggestions(null);
+    setSelectedDocIds([]);
     setIsDialogOpen(true);
+  };
+  
+  const toggleDocSelection = (docId) => {
+    setSelectedDocIds(prev => 
+      prev.includes(docId) 
+        ? prev.filter(id => id !== docId)
+        : [...prev, docId]
+    );
   };
 
   const handleDelete = async (id) => {
@@ -320,11 +383,77 @@ export default function Cases() {
               </Select>
             </div>
             
+            {/* AI Document Suggestions */}
+            {!editingCase && (loadingSuggestions || suggestions) && (
+              <div className="pt-4 border-t border-white/10">
+                <div className="flex items-center gap-2 mb-3">
+                  <Sparkles className={`w-4 h-4 text-purple-400 ${loadingSuggestions ? 'animate-pulse' : ''}`} />
+                  <span className="text-sm text-gray-300 font-medium">
+                    {loadingSuggestions ? 'KI sucht relevante Dokumente...' : 'KI-Dokumentenvorschläge'}
+                  </span>
+                </div>
+                
+                {suggestions?.suggestions?.length > 0 && (
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {suggestions.suggestions.map((doc) => (
+                      <label
+                        key={doc.id}
+                        className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                          selectedDocIds.includes(doc.id)
+                            ? 'bg-purple-500/10 border-purple-500/30'
+                            : 'bg-white/5 border-white/10 hover:border-white/20'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedDocIds.includes(doc.id)}
+                          onChange={() => toggleDocSelection(doc.id)}
+                          className="mt-1"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white text-sm font-medium truncate">
+                            {doc.display_name || doc.original_filename}
+                          </p>
+                          {doc.relevanz && (
+                            <p className="text-purple-400 text-xs mt-1">{doc.relevanz}</p>
+                          )}
+                          {doc.sender && (
+                            <p className="text-gray-500 text-xs">Von: {doc.sender}</p>
+                          )}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                
+                {suggestions?.analysis?.empfohlene_aktionen?.length > 0 && (
+                  <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                    <p className="text-blue-300 text-xs font-medium mb-1">Empfohlene Aktionen:</p>
+                    <ul className="text-blue-200 text-xs space-y-1">
+                      {suggestions.analysis.empfohlene_aktionen.map((action, i) => (
+                        <li key={i}>• {action}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                
+                {selectedDocIds.length > 0 && (
+                  <p className="text-purple-400 text-xs mt-2">
+                    {selectedDocIds.length} Dokument(e) werden automatisch verknüpft
+                  </p>
+                )}
+              </div>
+            )}
+            
             <div className="flex justify-end gap-3 pt-4">
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => setIsDialogOpen(false)}
+                onClick={() => {
+                  setIsDialogOpen(false);
+                  setSuggestions(null);
+                  setSelectedDocIds([]);
+                }}
                 className="text-gray-400"
               >
                 {t('common.cancel')}

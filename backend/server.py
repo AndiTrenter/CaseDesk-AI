@@ -2153,6 +2153,62 @@ async def get_case_documents(case_id: str, user: dict = Depends(require_auth)):
     return documents
 
 
+# ==================== Proactive AI Assistant ====================
+
+@api_router.post("/ai/suggest-documents")
+async def suggest_documents_for_case(
+    case_title: str = Form(...),
+    case_description: str = Form(None),
+    user: dict = Depends(require_auth)
+):
+    """Suggest relevant documents when creating a case"""
+    from ai_service import get_ai_service, ProactiveAssistant
+    
+    ai_service = await get_ai_service(db)
+    assistant = ProactiveAssistant(ai_service, db)
+    
+    result = await assistant.suggest_documents_for_case(
+        user["id"], case_title, case_description
+    )
+    return result
+
+
+@api_router.get("/cases/{case_id}/proactive-analysis")
+async def get_proactive_case_analysis(case_id: str, user: dict = Depends(require_auth)):
+    """Get proactive AI analysis for a case"""
+    from ai_service import get_ai_service, ProactiveAssistant
+    
+    ai_service = await get_ai_service(db)
+    assistant = ProactiveAssistant(ai_service, db)
+    
+    result = await assistant.analyze_case_proactively(user["id"], case_id)
+    return result
+
+
+@api_router.get("/documents/{document_id}/auto-link")
+async def auto_link_document(document_id: str, user: dict = Depends(require_auth)):
+    """Automatically find links for a document"""
+    from ai_service import get_ai_service, ProactiveAssistant
+    
+    ai_service = await get_ai_service(db)
+    assistant = ProactiveAssistant(ai_service, db)
+    
+    result = await assistant.auto_link_documents(user["id"], document_id)
+    return result
+
+
+@api_router.get("/ai/daily-briefing")
+async def get_daily_briefing(user: dict = Depends(require_auth)):
+    """Get daily briefing with important items"""
+    from ai_service import get_ai_service, ProactiveAssistant
+    
+    ai_service = await get_ai_service(db)
+    assistant = ProactiveAssistant(ai_service, db)
+    
+    result = await assistant.get_daily_briefing(user["id"])
+    return result
+
+
 # Include router
 app.include_router(api_router)
 
