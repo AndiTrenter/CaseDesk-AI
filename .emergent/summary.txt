@@ -2,86 +2,91 @@
 The user wants to build a self-hosted, privacy-focused, modular web application named CaseDesk AI. This application is intended for private and business use for managing documents, emails, calendars, and cases with AI assistance.
 
 **PRODUCT REQUIREMENTS:**
-- **100% Self-Hosted:** Must run entirely independently of  via Docker Compose, with no runtime dependencies on the Emergent platform.
+- **100% Self-Hosted:** Must run entirely independently via Docker Compose, with no runtime dependencies on the Emergent platform.
 - **Setup Wizard:** An initial setup process for creating the admin user, configuring email accounts, and setting up AI providers (local or external).
-- **Multi-Tenancy:** Support for multiple users with strictly separated data (documents, cases, calendars, etc.).
-- **Document Processing:** Upload various formats (PDF, DOCX, images), with OCR for scanned documents, metadata extraction, full-text and semantic search, and association with cases.
+- **Multi-Tenancy & User Management:** Support for multiple users with strictly separated data. Admins should be able to invite new users via email links.
+- **Document Processing:** Upload various formats (PDF, DOCX, images), with OCR for scanned documents, metadata extraction, full-text and semantic search, and association with cases. Documents should be selectable and assignable to cases from both the main documents view and within a specific case view.
 - **Intelligent Renaming:** Documents should be automatically renamed to the format: .
-- **Email Processing:** Fetch emails and attachments via IMAP, analyze content, identify tasks/deadlines, and mark emails as read after processing.
-- **Configurable AI:**
-    - Allow users to choose between a local LLM (like Ollama, installed via Docker) or an external one (like OpenAI).
-    - An internet access toggle to enable/disable external AI and web research.
+- **Email Processing:** Fetch emails and attachments via IMAP, analyze content, identify tasks/deadlines, and mark emails as read after processing. SMTP settings should be configurable for sending emails.
+- **Configurable & Multilingual AI:**
+    - Allow users to choose between a local LLM (like Ollama) or an external one (like OpenAI).
+    - The AI must always respond in the language set in the user's preferences.
     - The AI should assist by answering questions, summarizing, drafting replies, and finding missing documents, but MUST NOT invent facts.
-- **AI-Powered Response Generation:** The AI assistant must be able to take a case, generate a complete response letter, automatically find and attach all necessary documents from that case, and provide the complete package for download, printing, or sending via email.
-- **Core Features:** Calendar, task management, and an audit trail to track actions within a case (e.g., when a response was sent).
-- **Tech Stack:** The user preferred React/Next.js for the frontend, FastAPI/NestJS for the backend, and PostgreSQL for the database.
+    - The AI should have knowledge of all documents belonging to a user to provide context-aware assistance and suggest cross-references.
+- **Proactive AI Assistant:** The AI should proactively prepare information for the user, such as a daily briefing, suggesting relevant documents for a new case, and providing analysis within a case.
+- **AI-Powered Response Generation:** The AI assistant must be able to take a case, generate a complete response letter (in selectable formats like PDF or DOCX), automatically find and attach all necessary documents from that case, and provide the complete package for download or sending via email.
+- **Core Features:** Calendar, task management, and an audit trail to track actions within a case.
 - **No Branding:** The application must not contain any Made with Emergent watermarks or branding.
 
 **User's preferred language**: German
 
 **what currently exists?**
-A functional full-stack application foundation has been successfully created. The backend is built with FastAPI and PostgreSQL, and the frontend with React and TailwindCSS. The entire application, including a PostgreSQL database and an Ollama instance for local AI, is containerized and managed by .
+A comprehensive full-stack application with a FastAPI backend, React frontend, and PostgreSQL database, all containerized with Docker.
 
-Key implemented features include:
-- A setup wizard for initial configuration (admin user, AI provider).
-- JWT-based user authentication.
-- A dashboard with pages for Cases, Documents, Tasks, Calendar, AI Assistant, and Settings.
-- Document upload with automatic OCR, intelligent renaming, and auto-tagging.
-- A semantic search that queries both document titles and their content.
-- An AI abstraction layer that allows switching between the local Ollama instance and an external OpenAI key.
-- A settings page to manage user preferences, AI configuration, and IMAP email accounts.
-- Basic IMAP email fetching capabilities.
-- All Emergent branding has been removed as requested.
+Key implemented features:
+- **Core:** Setup wizard, JWT authentication, multi-user support with an email invitation system, and a light/dark theme toggle.
+- **Document Management:** Document upload with OCR, intelligent renaming, and semantic search. Users can perform multi-select on documents to assign them to a case, and also upload/link documents from within a case view.
+- **Case Management:** A case detail page with tabs for documents, correspondence, and history.
+- **AI Integration:** An AI abstraction layer supports both local (Ollama) and external (OpenAI) models. The AI assistant has access to all of the user's documents for context-aware chat.
+- **Proactive AI:** A Daily Briefing on the dashboard, document suggestions during case creation, and a proactive analysis tab within cases.
+- **Response Generation:** Backend and frontend infrastructure for generating a response package for a case, including a drafted letter and attachments.
+- **Settings:** UI for managing AI providers, IMAP/SMTP email accounts, and user administration (invitations).
 
 **Last working item**:
-- **Last item agent was working:** The agent acknowledged a new, large feature request from the user and was about to begin implementation. The goal is to build a comprehensive workflow where the AI assistant can generate a complete response package for a case, including a drafted letter and all relevant attachments, ready for download or email. This also includes implementing document viewing, editing, and deletion, and creating an audit trail for these actions.
-- **Status:** NOT STARTED
+- **Last item agent was working:** The agent was trying to fix a bug where the AI assistant was not responding in the user's configured language (German), instead replying in English. An initial attempt was made to fix this by strengthening the system prompt.
+- **Status:** IN PROGRESS
 - **Agent Testing Done:** N
-- **Which testing method agent to use?** both
+- **Which testing method agent to use?** backend testing agent
 - **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
-There are no known outstanding bugs or issues. The agent successfully resolved previous authentication and UI problems. All pending work is related to new or incomplete features.
+- **Issue 1: AI Assistant does not respect user's language (P0)**
+  - **Description:** The AI assistant responds in English even when the user's language is set to German and the query is in German. The user provided a screenshot as proof.
+  - **Attempted fixes:** The agent modified the system prompt in  to be more explicit about using the user's language. This did not solve the issue.
+  - **Next debug checklist:**
+    1.  Inspect  -> .
+    2.  Verify the  parameter is correctly passed from the  endpoint down to the service.
+    3.  Log the exact final prompt being sent to the LLM (OpenAI/Ollama) to ensure the language instruction () is present and formatted correctly.
+    4.  Experiment with different prompting techniques. Instead of just a system message, try adding the instruction as the last part of the user's message, e.g., .
+    5.  Check if the  object correctly stores and retrieves the language preference.
+  - **Why fix this issue and what will be achieved with the fix?** This is a critical usability feature. The application is intended for a German-speaking user, and the AI must communicate effectively in their native language.
+  - **Status:** IN PROGRESS
+  - **Is recurring issue?** Y
+  - **Should Test frontend/backend/both after fix?** backend
+  - **Blocked on other issue:** No
 
 **In progress Task List**:
-- **Task 1: Implement AI Response Package Generation (P0)**
-    - **Description:** This is the next major feature requested by the user. It involves several interconnected parts to create a seamless workflow for responding to cases.
-    - **Where to resume:** The agent must start implementing the plan it laid out:
-        1.  **Backend:**
-            -   Create endpoints for viewing (), editing, and deleting documents.
-            -   Create a new endpoint () to trigger the AI package generation. This service will use the AI to draft a reply, find all relevant documents in the case, and package them (e.g., as a ZIP archive).
-            -   Integrate an SMTP service for sending the package via email.
-            -   Implement the audit trail logic to log these events in the case history.
-        2.  **Frontend:**
-            -   Implement an in-browser document viewer for PDFs and images.
-            -   Add UI controls (buttons, modals) for editing, renaming, and deleting documents.
-            -   Create a UI element within the case view to trigger the Generate Response feature.
-            -   Display the generated package with options to download or send by email.
-    - **What will be achieved with this?** This will deliver the core intelligent assistant functionality, moving it from a simple Q&A bot to a proactive tool that prepares complete, actionable outputs.
-    - **Status:** NOT STARTED
-    - **Should Test frontend/backend/both after fix?** both
-    - **Blocked on something:** No.
+There are no other tasks in progress. The current focus is on the language bug.
 
 **Upcoming and Future Tasks**
 - **Upcoming Tasks:**
-  - **Task 2: Full IMAP Email Processing Loop (P1)**: The backend service for fetching emails needs to be completed. This includes parsing attachments into documents, using the AI service to create tasks/events from email content, and reliably marking emails as read on the IMAP server.  (placeholder likely needed).
-  - **Task 3: Implement Data Export (P1)**: The Export tab in the settings UI is a placeholder. The backend functionality to export all of a user's data (cases, documents, etc.) needs to be built. .
+  - **Task 1: Allow choice of response format (PDF/DOCX) (P1):** The user requested that the AI-generated response letter can be created as either a PDF or a DOCX file. This requires adding a selection UI in the frontend and a conversion/generation library in the backend.
+  - **Task 2: Full IMAP Email Processing Loop (P1):** Complete the backend service to parse attachments from fetched emails, use AI to create tasks/events, and reliably mark emails as read.
+  - **Task 3: Implement Data Export (P1):** Build the backend logic for the Export tab in settings to allow users to download all their data.
 - **Future Tasks:**
-  - **Task 4: Calendar/Task Automation (P2)**: Implement the logic to automatically create calendar events and tasks based on deadlines and actions identified by the AI in documents and emails.
-  - **Task 5: User Role Model (P2)**: Implement a role-based access control system (Admin, User) as mentioned in the initial requirements. This will involve changes to the  model and middleware for route protection.
+  - **Task 4: Calendar/Task Automation (P2):** Implement logic to automatically create calendar events and tasks from deadlines identified by the AI in documents/emails.
+  - **Task 5: Refine User Role Model (P2):** Further develop the role-based access control system (e.g., distinguishing between Admin and standard User permissions).
 
 **Completed work in this session**
-- **Project Foundation:** Created the full-stack application structure with FastAPI, React, and PostgreSQL. (DONE)
-- **Dockerization:** Set up  for all services, including backend, frontend, PostgreSQL, and Ollama. (DONE)
-- **Authentication & Setup:** Implemented JWT authentication and a multi-step setup wizard. (DONE)
-- **AI Document Processing:** Integrated AI for intelligent document renaming, auto-tagging, and full-text content search. (DONE)
-- **AI Provider Abstraction:** Created a service to seamlessly switch between local (Ollama) and external (OpenAI) LLMs. (DONE)
-- **UI/UX:** Built the main application layout and pages for all core features, and removed all Emergent branding. (DONE)
-- **IMAP Integration (v1):** Added backend endpoints and frontend UI to configure and list emails from an IMAP account. (DONE)
-- **Bug Fixes:** Resolved authentication errors and a modal z-index issue. (DONE)
+- **AI Response Package Generation:** Implemented the core workflow for generating case responses, including UI triggers and backend endpoints. (DONE)
+- **Document & Case Management Enhancements:**
+    - Implemented multi-select for documents to assign them to a case. (DONE)
+    - Added functionality to upload and link documents directly from the case detail page. (DONE)
+- **User Management & Authentication:**
+    - Created a user invitation system allowing admins to add users via email link. (DONE)
+    - Built the registration page for invited users. (DONE)
+- **Proactive AI Features:**
+    - Implemented a Daily Briefing on the dashboard. (DONE)
+    - Added proactive AI analysis and document suggestions to cases. (DONE)
+    - Enhanced the AI chat to be aware of all user's documents for contextual answers. (DONE)
+- **UI & UX Improvements:**
+    - Added a functional Light/Dark mode theme switcher. (DONE)
+    - Added SMTP configuration fields to the email settings UI. (DONE)
+- **Bug Fixes:**
+    - Resolved a frontend crash related to an empty  value when assigning documents to a case. (DONE)
 
 **Earlier issues found/mentioned but not fixed**
-None. The agent has been effective at addressing issues as they arose.
+None.
 
 **Known issue recurrence from previous fork**
 - **Issue recurrence in previous fork**: None.
@@ -94,65 +99,66 @@ None. The agent has been effective at addressing issues as they arose.
 **Key Technical Concepts**
 - **Backend**: FastAPI, SQLAlchemy (ORM), Pydantic, PostgreSQL
 - **Frontend**: React, React Router, Axios, Tailwind CSS, Shadcn UI
-- **AI**: Ollama (local), OpenAI (external), an abstraction layer in Python to switch between them. Full-text search is implemented using PostgreSQL's  extension.
-- **Deployment**: Docker Compose for orchestrating all services.
+- **AI**: Ollama (local), OpenAI (external), Python abstraction layer,  for full-text search.
+- **Deployment**: Docker Compose for orchestrating all services (backend, frontend, db, ollama).
 
 **key DB schema**
 - **users**: uid=0(root) gid=0(root) groups=0(root), , ,  (JSONB)
 - **cases**: uid=0(root) gid=0(root) groups=0(root), , , 
-- **documents**: uid=0(root) gid=0(root) groups=0(root), , , , , ,  (A full-text search index exists on  and ).
-- **email_accounts**: uid=0(root) gid=0(root) groups=0(root), , , , 
+- **documents**: uid=0(root) gid=0(root) groups=0(root), , , , , , 
+- **email_accounts**: uid=0(root) gid=0(root) groups=0(root), , , , , 
+- **invitations**: uid=0(root) gid=0(root) groups=0(root), , , , 
 
 **changes in tech stack**
-- The project was correctly migrated from the agent's default of MongoDB to PostgreSQL to meet the user's explicit requirement.
+- No changes in this session. The stack remains React, FastAPI, and PostgreSQL.
 
 **All files of reference**
-- : Defines the entire application stack, including the  service.
-- : The central file for all backend API routes.
-- : Contains the core logic for document processing and interacting with LLMs.
-- : The UI for uploading and viewing documents.
-- : The hub for all user-configurable settings, including AI provider and email accounts.
-- : Contains the frontend routing logic.
-- : Contains the detailed product requirements and a log of completed work.
+- : Contains the AI chat logic and the system prompt that needs fixing for the language issue.
+- : Contains all API endpoints, including  which is the entry point for the failing feature.
+- : Recently updated with multi-select and case assignment features.
+- : Recently updated to allow document uploads and linking.
+- : Contains the UI for user management and email configuration.
+- : Manages the application's light/dark theme.
+- : The product requirements document, updated throughout the session.
 
 **Areas that need refactoring**:
-- The codebase is currently well-structured. No immediate refactoring is required.
+- : This file has become a monolith, containing routes for users, cases, documents, AI, settings, and more. It should be broken down into smaller, domain-specific router files (e.g., , ) and included in the main app to improve maintainability.
 
 **key api endpoints**
-- : Finalizes the initial application setup.
-- : Logs in a user and provides a JWT token.
-- : Handles file uploads and triggers AI processing.
-- : Performs a full-text search across documents.
-- : The endpoint for the conversational AI assistant.
-- : Endpoint to configure a user's IMAP email account.
-- : Endpoint to fetch emails for the configured account.
+- : Endpoint for the AI assistant (CURRENTLY BUGGED).
+- : Create user invitation tokens.
+- : Register a new user using an invitation token.
+- : Assigns multiple documents to a specific case.
+- : Manages documents within a case (add/remove).
+- : Gets the AI-generated daily summary.
+- : Suggests documents for a case.
+- : Triggers the AI response package generation.
 
 **Critical Info for New Agent**
-- **User Language is German:** All responses and communications must be in German.
-- **Self-Hosted is Paramount:** The application must remain 100% independent of any Emergent platform services. All features must be built to run within the provided Docker Compose environment.
-- **Current Task is High Priority:** The immediate focus must be on implementing the AI Response Package Generation feature (document viewer, CRUD, AI-driven packaging, and email/download options). This is the user's latest and most critical request.
-- **Use Existing Abstractions:** The  should be used for all new AI-related tasks to maintain the ability to switch between local and external providers.
+- **User Language is German:** All communication MUST be in German.
+- **Top Priority is the Language Bug:** The immediate and most critical task is to fix the AI assistant so it reliably responds in the user's selected language. The user has pointed this out twice.
+- **User's Goal:** The user wants a smart, proactive assistant that minimizes manual work. All new features should align with this goal.
+- **Self-Hosted Architecture:** Continue to ensure all features are self-contained within the Docker environment.
 
 **documents and test reports created in this job**
 - 
-- 
-- 
+- Test reports from multiple  runs are available in .
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User (latest):** Requested a major feature set: document viewer, document CRUD (edit/rename/delete), AI assistant to generate a full response package (letter + attachments), options to download/email it, and an audit trail for these actions. **Status: Pending Implementation.**
-2.  **Agent:** Acknowledged the request and created a plan.
-3.  **User:** Asked if the app would be fully functional with an internet connection and OpenAI key.
-4.  **Agent:** Confirmed that core AI features would work and outlined the next steps.
-5.  **Agent:** Confirmed the login page UI was fixed and the Emergent badge was removed.
-6.  **User:** Requested several new features at once: local Ollama in Docker, auto-OCR, intelligent document renaming/tagging, and full-text search. **Status: Completed.**
-7.  **Agent:** Acknowledged the features and began implementation.
-8.  **User:** Asked for login credentials to test the preview URL.
-9.  **Agent:** Provided the credentials.
-10. **User:** Re-emphasized that the project must be fully self-hosted, without dependencies or watermarks. **Status: Acknowledged and Completed.**
+1.  **User (latest):** Reported that the AI assistant is still not responding in the selected language (German). **Status: In Progress.**
+2.  **User:** Pointed out a frontend crash with a screenshot when trying to assign a document to a case. **Status: Resolved.**
+3.  **User:** Provided login credentials for the preview. **Status: Acknowledged.**
+4.  **User:** Requested several new features: multilingual AI assistant, assigning documents to cases from both the documents and case pages. **Status: Completed (with bug).**
+5.  **User:** Requested a proactive AI system that prepares important information automatically. **Status: Completed.**
+6.  **Agent:** Finished implementation of proactive AI and asked for the next steps.
+7.  **User:** Acknowledged the completion and requested more features: fix theme switcher, add user invitations, and enhance the AI to know about all user documents. **Status: Completed.**
+8.  **Agent:** Finished the AI response package generation and asked for next steps.
+9.  **User:** Confirmed the plan and added a request for SMTP settings and selectable output format (PDF/DOCX) for generated letters. **Status: Partially Completed (SMTP UI done, format selection pending).**
+10. **Agent:** Proposed a plan to implement the AI response package feature.
 
 **Project Health Check:**
-- **Broken:** No known broken functionality.
-- **Mocked:** The Data Export feature in the settings UI is a placeholder with no backend logic. The full email processing pipeline (e.g., creating tasks from email content) is not yet implemented.
+- **Broken:** The AI assistant's multilingual capability is broken. It defaults to English regardless of user settings.
+- **Mocked:** The Data Export feature remains a UI placeholder. The choice between PDF/DOCX for response generation is not yet implemented.
 
 **3rd Party Integrations**
 - **OpenAI GPT-4:** Used for external AI processing. Requires a User-provided API Key.
@@ -161,16 +167,12 @@ None. The agent has been effective at addressing issues as they arose.
 **Testing status**
 - **Testing agent used after significant changes:** YES
 - **Troubleshoot agent used after agent stuck in loop:** NO
-- **Test files created:**
-  - 
-  - 
-- **Known regressions:** None.
+- **Test files created:** None
+- **Known regressions:** The AI language functionality is not working as intended.
 
 **Credentials to test flow:**
 - **E-Mail:** 
 - **Passwort:** 
 
 **What agent forgot to execute**
-The agent has followed the user's requests closely. The forgotten items are features from the original, extensive problem statement that have not yet been prioritized, such as:
-- A detailed user role model (Admin, User).
-- Full automation of task/event creation from documents and emails.</analysis>
+- The user's request to allow selecting the output format (PDF or DOCX) for the AI-generated response letter has not been implemented yet. This was mentioned along with the SMTP settings request.</analysis>

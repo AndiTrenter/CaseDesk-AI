@@ -116,7 +116,7 @@ Bei Freigabe von Internetzugriff + OpenAI API-Key sind alle KI-Features voll fun
 - GPU-Unterstützung (optional)
 
 ## Login für Preview
-- **URL:** https://case-response-pkg.preview.emergentagent.com
+- **URL:** https://doc-case-mgmt.preview.emergentagent.com
 - **Email:** admin@casedesk.app
 - **Passwort:** admin123
 

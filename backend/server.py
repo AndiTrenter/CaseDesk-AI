@@ -1401,6 +1401,10 @@ async def ai_chat(
     ).sort("start_date", 1).to_list(10)
     context["upcoming_events"] = upcoming_events
     
+    # Determine user's language preference (user_settings takes priority over user doc)
+    user_settings = await db.user_settings.find_one({"user_id": user["id"]}, {"_id": 0})
+    user_language = (user_settings or {}).get("language") or user.get("language") or "de"
+    
     # Get AI service and generate response
     try:
         ai_service = await get_ai_service(db)
@@ -1409,7 +1413,7 @@ async def ai_chat(
         ai_response = await assistant.chat(
             message=message,
             context=context,
-            language=user.get("language", "de")
+            language=user_language
         )
     except Exception as e:
         logger.error(f"AI chat error: {e}")
@@ -1538,6 +1542,13 @@ async def update_user_settings(
         {"$set": update_data},
         upsert=True
     )
+    
+    # Also sync language to user document for consistency
+    if language is not None:
+        await db.users.update_one(
+            {"id": user["id"]},
+            {"$set": {"language": language, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
     
     return {"success": True, "message": "Settings updated"}
 
