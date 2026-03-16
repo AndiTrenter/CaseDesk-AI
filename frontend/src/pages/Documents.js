@@ -722,14 +722,14 @@ export default function Documents() {
             <div>
               <Label className="text-gray-300">Fall zuweisen</Label>
               <Select
-                value={editForm.case_id}
-                onValueChange={(value) => setEditForm(prev => ({ ...prev, case_id: value }))}
+                value={editForm.case_id || "none"}
+                onValueChange={(value) => setEditForm(prev => ({ ...prev, case_id: value === "none" ? "" : value }))}
               >
                 <SelectTrigger className="mt-1 bg-black/30 border-white/10 text-white">
                   <SelectValue placeholder="Kein Fall" />
                 </SelectTrigger>
                 <SelectContent className="bg-[#1A1A1A] border-white/10">
-                  <SelectItem value="">Kein Fall</SelectItem>
+                  <SelectItem value="none">Kein Fall</SelectItem>
                   {cases.map(c => (
                     <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>
                   ))}
