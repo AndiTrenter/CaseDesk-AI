@@ -2,48 +2,56 @@
 
 ## Project Overview
 **Name:** CaseDesk AI  
-**Version:** 1.1.0  
+**Version:** 1.2.0  
 **Type:** Self-hosted Document & Case Management with AI Support  
 **Last Updated:** 2026-03-16
 
 ## Aktueller Status: FEATURE-COMPLETE ✅
 
-### Neue Features (2026-03-16)
+### Neueste Features (2026-03-16)
+
+#### ✅ Proaktiver KI-Assistent
+- **Tägliches KI-Briefing** auf dem Dashboard mit Prioritäten, Fristen, Empfehlungen
+- **KI-Assistent-Tab** in der Fall-Detailansicht (als erster Tab!)
+- **Proaktive Fallanalyse** mit dringenden Aktionen, erkannten Fristen, nächsten Schritten
+- **Automatische Dokumentenvorschläge** beim Erstellen eines Falls
+- **Automatische Dokumentenverknüpfung** nach Fall-Erstellung
+- Automatische Erkennung fehlender Dokumente
+- Warnungen bei erkannten Risiken
+
+#### ✅ KI mit vollem Dokumentenwissen
+- Der KI-Chat hat Zugriff auf ALLE Dokumente, Fälle, Aufgaben und Termine
+- Kann Querverweise zwischen Dokumenten herstellen
+- Findet zusammengehörige Dokumente automatisch
+- Erkennt Fristen und wichtige Daten in Dokumenten
+- Gibt proaktive Handlungsempfehlungen
 
 #### ✅ Theme-Umschalter (Hell/Dunkel)
 - Sonnen/Mond-Icon in der Sidebar zum Umschalten
 - Theme-Auswahl auch in User Preferences
 - Theme wird im localStorage persistiert
-- CSS-Variablen werden dynamisch aktualisiert
 
 #### ✅ Benutzereinladungssystem
 - Admin kann neue Benutzer per E-Mail einladen
 - Einladungslink mit Token (7 Tage gültig)
 - Registrierungsseite für eingeladene Benutzer
 - SMTP-Einstellungen für E-Mail-Versand
-- Einladungen können storniert werden
-- API-Endpunkte: POST /api/users/invite, GET /api/auth/invitation/{token}, POST /api/auth/register/{token}
 
-#### ✅ Erweiterter KI-Assistent
-- Kennt ALLE Dokumente des Benutzers
-- Kann Querverweise zwischen Dokumenten herstellen
-- Kennt alle Fälle, Aufgaben und Termine
-- Gibt proaktive Empfehlungen
-- Vollständiger Kontext bei jeder Anfrage
-
-#### ✅ Response-Paket-Generierung (für Fälle)
+#### ✅ Response-Paket-Generierung
 - KI analysiert Fall und schlägt Antworttyp vor
-- Generiert komplettes Antwortschreiben
+- Generiert komplettes Antwortschreiben (PDF/DOCX/TXT)
 - Dokumente als Anlagen auswählbar
-- Download als ZIP-Paket
-- Versand per E-Mail möglich
+- Download als ZIP-Paket oder Versand per E-Mail
 - Audit-Trail für alle Aktionen
 
 ### Mit OpenAI funktioniert alles sofort!
 Bei Freigabe von Internetzugriff + OpenAI API-Key sind alle KI-Features voll funktionsfähig:
+- Proaktives Tagesbriefing auf dem Dashboard
+- Automatische Fallanalyse mit dringenden Aktionen und Empfehlungen
+- Dokumentenvorschläge beim Fall-Erstellen
 - Dokumentenanalyse & Auto-Tagging
 - Intelligente Umbenennung
-- KI-Chat mit Dokumentenwissen
+- KI-Chat mit vollem Dokumentenwissen
 - E-Mail-Analyse
 - Fristenerkennung
 - Response-Generierung

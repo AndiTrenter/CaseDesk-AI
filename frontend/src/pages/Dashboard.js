@@ -21,6 +21,8 @@ export default function Dashboard() {
   const [loadingBriefing, setLoadingBriefing] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  const [briefingError, setBriefingError] = useState(false);
+
   // Theme-aware classes
   const bgCard = theme === 'dark' ? 'bg-[#121212]' : 'bg-white';
   const borderColor = theme === 'dark' ? 'border-white/5' : 'border-gray-200';
@@ -45,13 +47,17 @@ export default function Dashboard() {
 
   const loadDailyBriefing = async () => {
     setLoadingBriefing(true);
+    setBriefingError(false);
     try {
       const response = await aiAPI.dailyBriefing();
       if (response.data.success) {
         setBriefing(response.data);
+      } else {
+        setBriefingError(true);
       }
     } catch (error) {
       console.error('Failed to load briefing:', error);
+      setBriefingError(true);
     }
     setLoadingBriefing(false);
   };
@@ -208,6 +214,39 @@ export default function Dashboard() {
                 <RefreshCw className="w-5 h-5 text-purple-400 animate-spin" />
                 <span className={textSecondary}>KI-Briefing wird geladen...</span>
               </div>
+            </motion.div>
+          )}
+          
+          {/* AI Unavailable Notice */}
+          {briefingError && !briefing && !loadingBriefing && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className={`${bgCard} border ${borderColor} rounded-xl p-6 mb-8`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gray-500/20 rounded-lg flex items-center justify-center">
+                    <Sparkles className="w-5 h-5 text-gray-400" />
+                  </div>
+                  <div>
+                    <h2 className={`font-semibold ${textPrimary}`}>KI-Tagesbriefing</h2>
+                    <p className={`text-sm ${textMuted}`}>KI-Service nicht verfügbar</p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={loadDailyBriefing}
+                  className={textSecondary}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Erneut versuchen
+                </Button>
+              </div>
+              <p className={`text-sm ${textMuted} mt-3`}>
+                Konfigurieren Sie Ollama oder OpenAI in den Einstellungen, um KI-Funktionen zu aktivieren.
+              </p>
             </motion.div>
           )}
 

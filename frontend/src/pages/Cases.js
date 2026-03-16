@@ -57,6 +57,7 @@ export default function Cases() {
   // AI Suggestions state
   const [suggestions, setSuggestions] = useState(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState(false);
   const [selectedDocIds, setSelectedDocIds] = useState([]);
 
   useEffect(() => {
@@ -70,6 +71,9 @@ export default function Cases() {
         loadSuggestions();
       }, 1500); // Wait 1.5 seconds after typing
       return () => clearTimeout(timer);
+    } else {
+      setSuggestions(null);
+      setSuggestionsError(false);
     }
   }, [formData.title, formData.description]);
   
@@ -77,13 +81,17 @@ export default function Cases() {
     if (!formData.title) return;
     
     setLoadingSuggestions(true);
+    setSuggestionsError(false);
     try {
       const response = await aiAPI.suggestDocuments(formData.title, formData.description);
       if (response.data.success) {
         setSuggestions(response.data);
+      } else {
+        setSuggestionsError(true);
       }
     } catch (error) {
       console.error('Failed to load suggestions:', error);
+      setSuggestionsError(true);
     }
     setLoadingSuggestions(false);
   };
@@ -384,14 +392,21 @@ export default function Cases() {
             </div>
             
             {/* AI Document Suggestions */}
-            {!editingCase && (loadingSuggestions || suggestions) && (
+            {!editingCase && (loadingSuggestions || suggestions || suggestionsError) && formData.title.length > 5 && (
               <div className="pt-4 border-t border-white/10">
                 <div className="flex items-center gap-2 mb-3">
-                  <Sparkles className={`w-4 h-4 text-purple-400 ${loadingSuggestions ? 'animate-pulse' : ''}`} />
+                  <Sparkles className={`w-4 h-4 ${suggestionsError ? 'text-gray-400' : 'text-purple-400'} ${loadingSuggestions ? 'animate-pulse' : ''}`} />
                   <span className="text-sm text-gray-300 font-medium">
-                    {loadingSuggestions ? 'KI sucht relevante Dokumente...' : 'KI-Dokumentenvorschläge'}
+                    {loadingSuggestions ? 'KI sucht relevante Dokumente...' : 
+                     suggestionsError ? 'KI nicht verfügbar' : 'KI-Dokumentenvorschläge'}
                   </span>
                 </div>
+                
+                {suggestionsError && !loadingSuggestions && (
+                  <p className="text-gray-500 text-xs mb-3">
+                    Konfigurieren Sie Ollama oder OpenAI in den Einstellungen.
+                  </p>
+                )}
                 
                 {suggestions?.suggestions?.length > 0 && (
                   <div className="space-y-2 max-h-48 overflow-y-auto">
