@@ -5,7 +5,7 @@ import {
   FileText, Upload, Search, Trash2, 
   Eye, FileImage, File, MoreVertical, RefreshCw,
   Tag, Calendar, User, AlertCircle, CheckCircle,
-  Loader2, Edit, Download, X, Plus
+  Loader2, Edit, Download, X, Plus, Briefcase, CheckSquare
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -44,6 +44,12 @@ export default function Documents() {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [editingDoc, setEditingDoc] = useState(null);
   const [processing, setProcessing] = useState({});
+  
+  // Multi-select state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedDocIds, setSelectedDocIds] = useState([]);
+  const [assignCaseDialogOpen, setAssignCaseDialogOpen] = useState(false);
+  const [assignCaseId, setAssignCaseId] = useState('');
   
   // Edit form state
   const [editForm, setEditForm] = useState({
@@ -179,6 +185,59 @@ export default function Documents() {
       tags: prev.tags.filter(tag => tag !== tagToRemove) 
     }));
   };
+  
+  // Multi-select functions
+  const toggleSelection = (docId) => {
+    setSelectedDocIds(prev => 
+      prev.includes(docId) 
+        ? prev.filter(id => id !== docId)
+        : [...prev, docId]
+    );
+  };
+  
+  const selectAll = () => {
+    if (selectedDocIds.length === filteredDocuments.length) {
+      setSelectedDocIds([]);
+    } else {
+      setSelectedDocIds(filteredDocuments.map(d => d.id));
+    }
+  };
+  
+  const handleAssignToCase = async () => {
+    if (!assignCaseId || selectedDocIds.length === 0) return;
+    
+    try {
+      for (const docId of selectedDocIds) {
+        await documentUpdateAPI.update(docId, { case_id: assignCaseId });
+      }
+      toast.success(`${selectedDocIds.length} Dokument(e) zum Fall hinzugefügt`);
+      setAssignCaseDialogOpen(false);
+      setSelectedDocIds([]);
+      setSelectionMode(false);
+      setAssignCaseId('');
+      loadDocuments();
+    } catch (error) {
+      toast.error('Zuweisung fehlgeschlagen');
+    }
+  };
+  
+  const handleBulkDelete = async () => {
+    if (selectedDocIds.length === 0) return;
+    
+    if (!window.confirm(`${selectedDocIds.length} Dokument(e) wirklich löschen?`)) return;
+    
+    try {
+      for (const docId of selectedDocIds) {
+        await documentsAPI.delete(docId);
+      }
+      toast.success(`${selectedDocIds.length} Dokument(e) gelöscht`);
+      setSelectedDocIds([]);
+      setSelectionMode(false);
+      loadDocuments();
+    } catch (error) {
+      toast.error('Löschen fehlgeschlagen');
+    }
+  };
 
   const getFileIcon = (mimeType) => {
     if (mimeType?.startsWith('image/')) return FileImage;
@@ -199,6 +258,9 @@ export default function Documents() {
     };
     return colors[importance] || colors.mittel;
   };
+  
+  // Filter documents based on search
+  const filteredDocuments = documents;
 
   return (
     <div className="page-container" data-testid="documents-page">
@@ -218,6 +280,20 @@ export default function Documents() {
             accept=".pdf,.png,.jpg,.jpeg,.docx"
             className="hidden"
           />
+          
+          {/* Selection Mode Toggle */}
+          <Button
+            variant={selectionMode ? "default" : "ghost"}
+            onClick={() => {
+              setSelectionMode(!selectionMode);
+              setSelectedDocIds([]);
+            }}
+            className={selectionMode ? "btn-secondary" : "text-gray-400"}
+          >
+            <CheckSquare className="w-4 h-4 mr-2" />
+            {selectionMode ? 'Auswahl beenden' : 'Auswählen'}
+          </Button>
+          
           <Button
             onClick={() => fileInputRef.current?.click()}
             className="btn-primary flex items-center gap-2"
@@ -233,6 +309,46 @@ export default function Documents() {
           </Button>
         </div>
       </div>
+      
+      {/* Selection Actions Bar */}
+      {selectionMode && (
+        <div className="bg-[#121212] border border-white/10 rounded-xl p-4 mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selectedDocIds.length === filteredDocuments.length && filteredDocuments.length > 0}
+                onChange={selectAll}
+                className="rounded"
+              />
+              <span className="text-gray-300 text-sm">Alle auswählen</span>
+            </label>
+            <span className="text-gray-500 text-sm">
+              {selectedDocIds.length} von {filteredDocuments.length} ausgewählt
+            </span>
+          </div>
+          
+          {selectedDocIds.length > 0 && (
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => setAssignCaseDialogOpen(true)}
+                className="btn-secondary"
+              >
+                <Briefcase className="w-4 h-4 mr-2" />
+                Zu Fall hinzufügen
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={handleBulkDelete}
+                className="text-red-400 hover:bg-red-500/10"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Löschen
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Search */}
       <form onSubmit={handleSearch} className="flex items-center gap-3 mb-6">
@@ -287,9 +403,10 @@ export default function Documents() {
         </motion.div>
       ) : (
         <div className="space-y-3">
-          {documents.map((doc, index) => {
+          {filteredDocuments.map((doc, index) => {
             const FileIcon = getFileIcon(doc.mime_type);
             const isProcessing = processing[doc.id];
+            const isSelected = selectedDocIds.includes(doc.id);
             
             return (
               <motion.div
@@ -297,12 +414,29 @@ export default function Documents() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.03 }}
-                className="bg-[#121212] border border-white/5 rounded-xl p-4 hover:border-white/10 transition-colors group"
+                className={`bg-[#121212] border rounded-xl p-4 hover:border-white/10 transition-colors group ${
+                  isSelected ? 'border-blue-500/50 bg-blue-500/5' : 'border-white/5'
+                }`}
                 data-testid={`document-card-${index}`}
               >
                 <div className="flex items-start gap-4">
+                  {/* Selection Checkbox */}
+                  {selectionMode && (
+                    <div className="flex-shrink-0 pt-1">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelection(doc.id)}
+                        className="w-4 h-4 rounded"
+                      />
+                    </div>
+                  )}
+                  
                   {/* Icon */}
-                  <div className="w-12 h-12 bg-white/5 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <div 
+                    className="w-12 h-12 bg-white/5 rounded-lg flex items-center justify-center flex-shrink-0 cursor-pointer"
+                    onClick={() => selectionMode && toggleSelection(doc.id)}
+                  >
                     <FileIcon className="w-6 h-6 text-gray-400" />
                   </div>
                   
@@ -323,6 +457,11 @@ export default function Documents() {
                       
                       {/* Status badges */}
                       <div className="flex items-center gap-2 flex-shrink-0">
+                        {doc.case_id && (
+                          <span className="flex items-center gap-1 px-2 py-0.5 bg-purple-500/10 text-purple-400 text-xs rounded border border-purple-500/20">
+                            <Briefcase className="w-3 h-3" /> Im Fall
+                          </span>
+                        )}
                         {doc.ai_analyzed && (
                           <span className="flex items-center gap-1 px-2 py-0.5 bg-green-500/10 text-green-400 text-xs rounded border border-green-500/20">
                             <CheckCircle className="w-3 h-3" /> KI
@@ -647,6 +786,61 @@ export default function Documents() {
               </Button>
               <Button onClick={handleSaveEdit} className="btn-primary">
                 Speichern
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign to Case Dialog */}
+      <Dialog open={assignCaseDialogOpen} onOpenChange={setAssignCaseDialogOpen}>
+        <DialogContent className="bg-[#121212] border-white/10 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle>Dokumente zu Fall hinzufügen</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <p className="text-gray-400 text-sm">
+              {selectedDocIds.length} Dokument(e) werden dem ausgewählten Fall zugeordnet.
+            </p>
+            
+            <div>
+              <Label className="text-gray-300">Fall auswählen</Label>
+              <Select
+                value={assignCaseId}
+                onValueChange={setAssignCaseId}
+              >
+                <SelectTrigger className="mt-1 bg-black/30 border-white/10 text-white">
+                  <SelectValue placeholder="Fall auswählen..." />
+                </SelectTrigger>
+                <SelectContent className="bg-[#1A1A1A] border-white/10">
+                  {cases.map(c => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.title}
+                      {c.reference_number && ` (${c.reference_number})`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {cases.length === 0 && (
+              <p className="text-amber-400 text-sm">
+                Keine Fälle vorhanden. Erstellen Sie zuerst einen Fall.
+              </p>
+            )}
+            
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="ghost" onClick={() => setAssignCaseDialogOpen(false)} className="text-gray-400">
+                Abbrechen
+              </Button>
+              <Button 
+                onClick={handleAssignToCase} 
+                disabled={!assignCaseId}
+                className="btn-primary"
+              >
+                <Briefcase className="w-4 h-4 mr-2" />
+                Zuweisen
               </Button>
             </div>
           </div>

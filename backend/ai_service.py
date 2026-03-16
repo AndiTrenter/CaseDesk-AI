@@ -234,8 +234,86 @@ Extrahiere die Metadaten als JSON."""
 class ChatAssistant:
     """AI Chat Assistant for document and case queries - Full Knowledge Agent"""
     
+    LANGUAGE_INSTRUCTIONS = {
+        "de": {
+            "instruction": "WICHTIG: Du MUSST ausschließlich auf Deutsch antworten. Alle deine Antworten müssen auf Deutsch sein.",
+            "system_intro": "Du bist CaseDesk AI, ein persönlicher KI-Assistent und Agent für Dokumenten- und Fallverwaltung.",
+            "capabilities_title": "DEINE FÄHIGKEITEN:",
+            "doc_knowledge": "**Dokumentenwissen**: Du kennst alle Dokumente des Benutzers und kannst:",
+            "doc_abilities": ["Inhalte zusammenfassen", "Verbindungen zwischen Dokumenten erkennen", "Relevante Dokumente finden", "Fristen und wichtige Daten identifizieren"],
+            "case_support": "**Fallunterstützung**: Du kannst:",
+            "case_abilities": ["Dokumente zu passenden Fällen vorschlagen", "Querverweise herstellen", "Bei Antworten helfen"],
+            "assistant": "**Persönliche Assistenz**: Du kannst:",
+            "assistant_abilities": ["Aufgaben und Termine im Blick behalten", "An Fristen erinnern", "Handlungsempfehlungen geben"],
+            "rules_title": "WICHTIGE REGELN:",
+            "rules": ["NIEMALS Fakten erfinden", "Bei Unsicherheit nachfragen", "Dokumente klar referenzieren", "Praktische Empfehlungen geben"]
+        },
+        "en": {
+            "instruction": "IMPORTANT: You MUST respond exclusively in English. All your responses must be in English.",
+            "system_intro": "You are CaseDesk AI, a personal AI assistant and agent for document and case management.",
+            "capabilities_title": "YOUR CAPABILITIES:",
+            "doc_knowledge": "**Document Knowledge**: You know all user documents and can:",
+            "doc_abilities": ["Summarize content", "Recognize connections between documents", "Find relevant documents", "Identify deadlines and important dates"],
+            "case_support": "**Case Support**: You can:",
+            "case_abilities": ["Suggest documents for cases", "Create cross-references", "Help with responses"],
+            "assistant": "**Personal Assistance**: You can:",
+            "assistant_abilities": ["Keep track of tasks and appointments", "Remind of deadlines", "Give recommendations"],
+            "rules_title": "IMPORTANT RULES:",
+            "rules": ["NEVER invent facts", "Ask when uncertain", "Reference documents clearly", "Give practical recommendations"]
+        },
+        "fr": {
+            "instruction": "IMPORTANT: Tu DOIS répondre exclusivement en français. Toutes tes réponses doivent être en français.",
+            "system_intro": "Tu es CaseDesk AI, un assistant IA personnel et agent pour la gestion de documents et de dossiers.",
+            "capabilities_title": "TES CAPACITÉS:",
+            "doc_knowledge": "**Connaissance des documents**: Tu connais tous les documents de l'utilisateur et peux:",
+            "doc_abilities": ["Résumer le contenu", "Reconnaître les liens entre documents", "Trouver des documents pertinents", "Identifier les délais"],
+            "case_support": "**Support de dossiers**: Tu peux:",
+            "case_abilities": ["Suggérer des documents pour les dossiers", "Créer des références croisées", "Aider avec les réponses"],
+            "assistant": "**Assistance personnelle**: Tu peux:",
+            "assistant_abilities": ["Suivre les tâches et rendez-vous", "Rappeler les délais", "Donner des recommandations"],
+            "rules_title": "RÈGLES IMPORTANTES:",
+            "rules": ["JAMAIS inventer des faits", "Demander en cas de doute", "Référencer clairement les documents", "Donner des recommandations pratiques"]
+        },
+        "es": {
+            "instruction": "IMPORTANTE: DEBES responder exclusivamente en español. Todas tus respuestas deben ser en español.",
+            "system_intro": "Eres CaseDesk AI, un asistente de IA personal y agente para la gestión de documentos y casos.",
+            "capabilities_title": "TUS CAPACIDADES:",
+            "doc_knowledge": "**Conocimiento de documentos**: Conoces todos los documentos del usuario y puedes:",
+            "doc_abilities": ["Resumir contenido", "Reconocer conexiones entre documentos", "Encontrar documentos relevantes", "Identificar plazos"],
+            "case_support": "**Soporte de casos**: Puedes:",
+            "case_abilities": ["Sugerir documentos para casos", "Crear referencias cruzadas", "Ayudar con respuestas"],
+            "assistant": "**Asistencia personal**: Puedes:",
+            "assistant_abilities": ["Seguir tareas y citas", "Recordar plazos", "Dar recomendaciones"],
+            "rules_title": "REGLAS IMPORTANTES:",
+            "rules": ["NUNCA inventar hechos", "Preguntar cuando hay duda", "Referenciar documentos claramente", "Dar recomendaciones prácticas"]
+        }
+    }
+    
     def __init__(self, ai_service: AIService):
         self.ai = ai_service
+    
+    def _build_system_prompt(self, language: str) -> str:
+        """Build system prompt in the user's language"""
+        lang = self.LANGUAGE_INSTRUCTIONS.get(language, self.LANGUAGE_INSTRUCTIONS["en"])
+        
+        prompt = f"""{lang['system_intro']}
+
+{lang['instruction']}
+
+{lang['capabilities_title']}
+1. {lang['doc_knowledge']}
+   - {chr(10) + '   - '.join(lang['doc_abilities'])}
+
+2. {lang['case_support']}
+   - {chr(10) + '   - '.join(lang['case_abilities'])}
+
+3. {lang['assistant']}
+   - {chr(10) + '   - '.join(lang['assistant_abilities'])}
+
+{lang['rules_title']}
+- {chr(10) + '- '.join(lang['rules'])}"""
+        
+        return prompt
     
     async def chat(
         self, 
@@ -246,62 +324,37 @@ class ChatAssistant:
         """
         Process chat message with full document knowledge
         The assistant knows about ALL user documents and can make cross-references
+        Always responds in the user's configured language
         """
         
-        lang_instruction = "Antworte auf Deutsch." if language == "de" else "Answer in English."
-        
-        system_prompt = f"""Du bist CaseDesk AI, ein persönlicher KI-Assistent und Agent für Dokumenten- und Fallverwaltung.
-Du hast vollständigen Zugriff auf ALLE Dokumente, Fälle, Aufgaben und Termine des Benutzers.
-
-{lang_instruction}
-
-DEINE FÄHIGKEITEN:
-1. **Dokumentenwissen**: Du kennst alle Dokumente des Benutzers und kannst:
-   - Inhalte zusammenfassen
-   - Verbindungen zwischen Dokumenten erkennen (z.B. gleicher Absender, ähnliches Thema)
-   - Relevante Dokumente für Anfragen finden
-   - Fristen und wichtige Daten identifizieren
-
-2. **Fallunterstützung**: Du kannst:
-   - Dokumente zu passenden Fällen vorschlagen
-   - Querverweise zwischen Fällen und Dokumenten herstellen
-   - Bei der Vorbereitung von Antworten helfen
-
-3. **Persönliche Assistenz**: Du kannst:
-   - Aufgaben und Termine im Blick behalten
-   - An Fristen erinnern
-   - Handlungsempfehlungen geben
-   - Bei Behördenangelegenheiten den besten legitimen Weg aufzeigen
-
-4. **Proaktive Hilfe**: Du analysierst aktiv:
-   - Welche Dokumente zusammengehören könnten
-   - Ob Fristen drohen
-   - Welche Aufgaben dringend sind
-
-WICHTIGE REGELN:
-- NIEMALS Fakten erfinden - nur auf Basis der vorhandenen Daten arbeiten
-- Bei Unsicherheit nachfragen
-- Dokumente klar referenzieren (Name, Datum, Absender)
-- Praktische, umsetzbare Empfehlungen geben
-- Wenn ein relevantes Dokument zu einem Fall passt, das explizit erwähnen"""
+        system_prompt = self._build_system_prompt(language)
 
         # Build comprehensive context
-        context_text = self._build_context(context, message) if context else ""
+        context_text = self._build_context(context, message, language) if context else ""
 
         prompt = message
         if context_text:
-            prompt = f"{context_text}\n\n---\nBenutzeranfrage: {message}"
+            prompt = f"{context_text}\n\n---\n{message}"
 
         return await self.ai.generate(prompt, system_prompt, max_tokens=3000)
     
-    def _build_context(self, context: Dict[str, Any], message: str) -> str:
-        """Build a comprehensive context string for the AI"""
+    def _build_context(self, context: Dict[str, Any], message: str, language: str = "de") -> str:
+        """Build a comprehensive context string for the AI in the user's language"""
         parts = []
+        
+        # Language-specific labels
+        labels = {
+            "de": {"current_case": "AKTUELLER FALL", "title": "Titel", "desc": "Beschreibung", "status": "Status", "ref": "Aktenzeichen", "not_specified": "Nicht angegeben", "docs_in_case": "Dokumente in diesem Fall", "sender": "Absender", "date": "Datum", "summary": "Zusammenfassung", "content": "Inhalt (Auszug)", "all_docs": "ALLE DOKUMENTE DES BENUTZERS", "from": "Von", "type": "Typ", "case": "Fall", "all_cases": "ALLE FÄLLE", "open_tasks": "OFFENE AUFGABEN", "due": "Fällig", "priority": "Priorität", "events": "ANSTEHENDE TERMINE"},
+            "en": {"current_case": "CURRENT CASE", "title": "Title", "desc": "Description", "status": "Status", "ref": "Reference", "not_specified": "Not specified", "docs_in_case": "Documents in this case", "sender": "Sender", "date": "Date", "summary": "Summary", "content": "Content (excerpt)", "all_docs": "ALL USER DOCUMENTS", "from": "From", "type": "Type", "case": "Case", "all_cases": "ALL CASES", "open_tasks": "OPEN TASKS", "due": "Due", "priority": "Priority", "events": "UPCOMING EVENTS"},
+            "fr": {"current_case": "DOSSIER ACTUEL", "title": "Titre", "desc": "Description", "status": "Statut", "ref": "Référence", "not_specified": "Non spécifié", "docs_in_case": "Documents dans ce dossier", "sender": "Expéditeur", "date": "Date", "summary": "Résumé", "content": "Contenu (extrait)", "all_docs": "TOUS LES DOCUMENTS", "from": "De", "type": "Type", "case": "Dossier", "all_cases": "TOUS LES DOSSIERS", "open_tasks": "TÂCHES OUVERTES", "due": "Échéance", "priority": "Priorité", "events": "ÉVÉNEMENTS À VENIR"},
+            "es": {"current_case": "CASO ACTUAL", "title": "Título", "desc": "Descripción", "status": "Estado", "ref": "Referencia", "not_specified": "No especificado", "docs_in_case": "Documentos en este caso", "sender": "Remitente", "date": "Fecha", "summary": "Resumen", "content": "Contenido (extracto)", "all_docs": "TODOS LOS DOCUMENTOS", "from": "De", "type": "Tipo", "case": "Caso", "all_cases": "TODOS LOS CASOS", "open_tasks": "TAREAS ABIERTAS", "due": "Vence", "priority": "Prioridad", "events": "EVENTOS PRÓXIMOS"}
+        }
+        l = labels.get(language, labels["en"])
         
         # Current case context
         if context.get("current_case"):
             case = context["current_case"]
-            parts.append(f"## AKTUELLER FALL\nTitel: {case.get('title')}\nBeschreibung: {case.get('description')}\nStatus: {case.get('status')}\nAktenzeichen: {case.get('reference_number', 'Nicht angegeben')}")
+            parts.append(f"## {l['current_case']}\n{l['title']}: {case.get('title')}\n{l['desc']}: {case.get('description')}\n{l['status']}: {case.get('status')}\n{l['ref']}: {case.get('reference_number', l['not_specified'])}")
             
             if context.get("case_documents"):
                 parts.append("\n### Dokumente in diesem Fall:")

@@ -2,7 +2,7 @@
 
 ## Project Overview
 **Name:** CaseDesk AI  
-**Version:** 1.2.0  
+**Version:** 1.3.0  
 **Type:** Self-hosted Document & Case Management with AI Support  
 **Last Updated:** 2026-03-16
 
@@ -10,51 +10,46 @@
 
 ### Neueste Features (2026-03-16)
 
+#### ✅ KI-Assistent mit Sprachunterstützung
+- KI antwortet **ausschließlich** in der eingestellten Benutzersprache (DE, EN, FR, ES)
+- Versteht und beantwortet Anfragen in der jeweiligen Sprache
+- Alle Kontext-Labels werden in der Benutzersprache angezeigt
+
+#### ✅ Dokumente zu Fällen zuweisen
+- **In Fällen**: Dokumente hochladen oder vorhandene verknüpfen
+- **In Dokumenten**: Mehrfachauswahl-Modus zum Zuweisen zu Fällen
+- Dokumente können aus Fällen entfernt werden
+- "Im Fall" Badge zeigt verknüpfte Dokumente
+
 #### ✅ Proaktiver KI-Assistent
 - **Tägliches KI-Briefing** auf dem Dashboard mit Prioritäten, Fristen, Empfehlungen
 - **KI-Assistent-Tab** in der Fall-Detailansicht (als erster Tab!)
 - **Proaktive Fallanalyse** mit dringenden Aktionen, erkannten Fristen, nächsten Schritten
 - **Automatische Dokumentenvorschläge** beim Erstellen eines Falls
 - **Automatische Dokumentenverknüpfung** nach Fall-Erstellung
-- Automatische Erkennung fehlender Dokumente
-- Warnungen bei erkannten Risiken
 
 #### ✅ KI mit vollem Dokumentenwissen
 - Der KI-Chat hat Zugriff auf ALLE Dokumente, Fälle, Aufgaben und Termine
 - Kann Querverweise zwischen Dokumenten herstellen
 - Findet zusammengehörige Dokumente automatisch
-- Erkennt Fristen und wichtige Daten in Dokumenten
-- Gibt proaktive Handlungsempfehlungen
 
 #### ✅ Theme-Umschalter (Hell/Dunkel)
 - Sonnen/Mond-Icon in der Sidebar zum Umschalten
 - Theme-Auswahl auch in User Preferences
-- Theme wird im localStorage persistiert
 
 #### ✅ Benutzereinladungssystem
 - Admin kann neue Benutzer per E-Mail einladen
 - Einladungslink mit Token (7 Tage gültig)
 - Registrierungsseite für eingeladene Benutzer
-- SMTP-Einstellungen für E-Mail-Versand
 
 #### ✅ Response-Paket-Generierung
 - KI analysiert Fall und schlägt Antworttyp vor
 - Generiert komplettes Antwortschreiben (PDF/DOCX/TXT)
 - Dokumente als Anlagen auswählbar
 - Download als ZIP-Paket oder Versand per E-Mail
-- Audit-Trail für alle Aktionen
 
 ### Mit OpenAI funktioniert alles sofort!
-Bei Freigabe von Internetzugriff + OpenAI API-Key sind alle KI-Features voll funktionsfähig:
-- Proaktives Tagesbriefing auf dem Dashboard
-- Automatische Fallanalyse mit dringenden Aktionen und Empfehlungen
-- Dokumentenvorschläge beim Fall-Erstellen
-- Dokumentenanalyse & Auto-Tagging
-- Intelligente Umbenennung
-- KI-Chat mit vollem Dokumentenwissen
-- E-Mail-Analyse
-- Fristenerkennung
-- Response-Generierung
+Bei Freigabe von Internetzugriff + OpenAI API-Key sind alle KI-Features voll funktionsfähig.
 
 ## Implementierte Features (Komplett)
 

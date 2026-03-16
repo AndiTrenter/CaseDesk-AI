@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
@@ -6,7 +6,7 @@ import {
   ArrowLeft, FileText, Mail, Send, Download, Edit, Trash2,
   Plus, RefreshCw, Loader2, Sparkles, History, CheckCircle,
   AlertCircle, Calendar, User, Paperclip, Eye, X, Save,
-  Lightbulb, Clock, Bell, ChevronRight, Brain
+  Lightbulb, Clock, Bell, ChevronRight, Brain, Upload, Link
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { casesAPI, caseResponseAPI, correspondenceAPI, mailAPI, documentUpdateAPI, proactiveAI } from '../lib/api';
+import { casesAPI, caseResponseAPI, correspondenceAPI, mailAPI, documentUpdateAPI, proactiveAI, documentsAPI } from '../lib/api';
 import { toast } from 'sonner';
 
 const STATUS_COLORS = {
@@ -55,6 +55,12 @@ export default function CaseDetail() {
   // Proactive AI state
   const [proactiveAnalysis, setProactiveAnalysis] = useState(null);
   const [loadingProactive, setLoadingProactive] = useState(false);
+  
+  // Document management state
+  const [allDocuments, setAllDocuments] = useState([]);
+  const [addDocDialogOpen, setAddDocDialogOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
   
   // Dialog states
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
@@ -119,6 +125,61 @@ export default function CaseDetail() {
       console.error('Failed to load proactive analysis:', error);
     }
     setLoadingProactive(false);
+  };
+  
+  const loadAllDocuments = async () => {
+    try {
+      const response = await documentsAPI.list();
+      // Filter out documents already in this case
+      const caseDocIds = documents.map(d => d.id);
+      setAllDocuments(response.data.filter(d => !caseDocIds.includes(d.id)));
+    } catch (error) {
+      console.error('Failed to load all documents:', error);
+    }
+  };
+  
+  const handleAddDocuments = async (docIds) => {
+    try {
+      for (const docId of docIds) {
+        await documentUpdateAPI.update(docId, { case_id: caseId });
+      }
+      toast.success(`${docIds.length} Dokument(e) hinzugefügt`);
+      setAddDocDialogOpen(false);
+      loadCaseData();
+    } catch (error) {
+      toast.error('Hinzufügen fehlgeschlagen');
+    }
+  };
+  
+  const handleRemoveDocument = async (docId) => {
+    try {
+      await documentUpdateAPI.update(docId, { case_id: '' });
+      toast.success('Dokument entfernt');
+      loadCaseData();
+    } catch (error) {
+      toast.error('Entfernen fehlgeschlagen');
+    }
+  };
+  
+  const handleFileUpload = async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    setUploading(true);
+    try {
+      for (const file of files) {
+        toast.info(`Lade ${file.name} hoch...`, { id: `upload-${file.name}` });
+        await documentsAPI.upload(file, caseId);
+        toast.success(`${file.name} hochgeladen`, { id: `upload-${file.name}` });
+      }
+      loadCaseData();
+    } catch (error) {
+      toast.error('Upload fehlgeschlagen');
+    }
+    setUploading(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const handleAnalyzeCase = async () => {
@@ -566,63 +627,117 @@ export default function CaseDetail() {
 
         {/* Documents Tab */}
         <TabsContent value="documents">
-          <div className="space-y-3">
-            {documents.length === 0 ? (
-              <div className="text-center py-12 bg-[#121212] rounded-xl border border-white/5">
-                <FileText className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-                <p className="text-gray-500">Keine Dokumente in diesem Fall</p>
-              </div>
-            ) : (
-              documents.map((doc, index) => (
-                <motion.div
-                  key={doc.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.03 }}
-                  className="bg-[#121212] border border-white/5 rounded-xl p-4 hover:border-white/10 transition-colors group"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="w-10 h-10 bg-white/5 rounded-lg flex items-center justify-center">
-                      <FileText className="w-5 h-5 text-gray-400" />
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-white font-medium truncate">
-                        {doc.display_name || doc.original_filename}
-                      </h3>
-                      {doc.ai_summary && (
-                        <p className="text-gray-400 text-sm mt-1 line-clamp-1">{doc.ai_summary}</p>
-                      )}
-                      <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
-                        {doc.sender && <span>{doc.sender}</span>}
-                        {doc.document_date && <span>{doc.document_date}</span>}
+          <div className="space-y-4">
+            {/* Document Actions */}
+            <div className="flex gap-3">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                multiple
+                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp"
+                className="hidden"
+              />
+              <Button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="btn-primary"
+              >
+                {uploading ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Upload className="w-4 h-4 mr-2" />
+                )}
+                Dokument hochladen
+              </Button>
+              <Button
+                onClick={() => {
+                  loadAllDocuments();
+                  setAddDocDialogOpen(true);
+                }}
+                className="btn-secondary"
+              >
+                <Link className="w-4 h-4 mr-2" />
+                Vorhandenes verknüpfen
+              </Button>
+            </div>
+            
+            {/* Documents List */}
+            <div className="space-y-3">
+              {documents.length === 0 ? (
+                <div className="text-center py-12 bg-[#121212] rounded-xl border border-white/5">
+                  <FileText className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+                  <p className="text-gray-500 mb-4">Keine Dokumente in diesem Fall</p>
+                  <div className="flex justify-center gap-3">
+                    <Button onClick={() => fileInputRef.current?.click()} className="btn-primary">
+                      <Upload className="w-4 h-4 mr-2" /> Hochladen
+                    </Button>
+                    <Button onClick={() => { loadAllDocuments(); setAddDocDialogOpen(true); }} className="btn-secondary">
+                      <Link className="w-4 h-4 mr-2" /> Verknüpfen
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                documents.map((doc, index) => (
+                  <motion.div
+                    key={doc.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.03 }}
+                    className="bg-[#121212] border border-white/5 rounded-xl p-4 hover:border-white/10 transition-colors group"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="w-10 h-10 bg-white/5 rounded-lg flex items-center justify-center">
+                        <FileText className="w-5 h-5 text-gray-400" />
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-white font-medium truncate">
+                          {doc.display_name || doc.original_filename}
+                        </h3>
+                        {doc.ai_summary && (
+                          <p className="text-gray-400 text-sm mt-1 line-clamp-1">{doc.ai_summary}</p>
+                        )}
+                        <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                          {doc.sender && <span>{doc.sender}</span>}
+                          {doc.document_date && <span>{doc.document_date}</span>}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setDocumentViewerOpen(doc)}
+                          className="opacity-0 group-hover:opacity-100"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <a
+                          href={documentUpdateAPI.downloadUrl(doc.id)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="opacity-0 group-hover:opacity-100"
+                        >
+                          <Button size="sm" variant="ghost">
+                            <Download className="w-4 h-4" />
+                          </Button>
+                        </a>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleRemoveDocument(doc.id)}
+                          className="opacity-0 group-hover:opacity-100 text-red-400"
+                          title="Aus Fall entfernen"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setDocumentViewerOpen(doc)}
-                        className="opacity-0 group-hover:opacity-100"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <a
-                        href={documentUpdateAPI.downloadUrl(doc.id)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="opacity-0 group-hover:opacity-100"
-                      >
-                        <Button size="sm" variant="ghost">
-                          <Download className="w-4 h-4" />
-                        </Button>
-                      </a>
-                    </div>
-                  </div>
-                </motion.div>
-              ))
-            )}
+                  </motion.div>
+                ))
+              )}
+            </div>
           </div>
         </TabsContent>
 
@@ -1179,6 +1294,65 @@ export default function CaseDetail() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Document Dialog */}
+      <Dialog open={addDocDialogOpen} onOpenChange={setAddDocDialogOpen}>
+        <DialogContent className="bg-[#121212] border-white/10 text-white max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Dokumente zum Fall hinzufügen</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {allDocuments.length === 0 ? (
+              <div className="text-center py-8">
+                <FileText className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+                <p className="text-gray-500">Keine weiteren Dokumente verfügbar</p>
+                <p className="text-gray-600 text-sm mt-1">Alle Dokumente sind bereits diesem Fall zugeordnet oder es gibt keine weiteren.</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-gray-400 text-sm">Wählen Sie Dokumente aus, die zu diesem Fall hinzugefügt werden sollen:</p>
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {allDocuments.map((doc) => (
+                    <label
+                      key={doc.id}
+                      className="flex items-start gap-3 p-3 rounded-lg border border-white/10 hover:border-white/20 cursor-pointer transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            handleAddDocuments([doc.id]);
+                          }
+                        }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white font-medium truncate">
+                          {doc.display_name || doc.original_filename}
+                        </p>
+                        {doc.ai_summary && (
+                          <p className="text-gray-400 text-sm mt-1 line-clamp-1">{doc.ai_summary}</p>
+                        )}
+                        <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                          {doc.sender && <span>Von: {doc.sender}</span>}
+                          {doc.document_date && <span>{doc.document_date}</span>}
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+            
+            <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+              <Button variant="ghost" onClick={() => setAddDocDialogOpen(false)} className="text-gray-400">
+                Schließen
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
