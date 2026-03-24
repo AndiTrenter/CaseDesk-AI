@@ -1,195 +1,71 @@
 # CaseDesk AI - Product Requirements Document
 
-## Project Overview
-**Name:** CaseDesk AI  
-**Version:** 1.3.0  
-**Type:** Self-hosted Document & Case Management with AI Support  
-**Last Updated:** 2026-03-16
+## Original Problem Statement
+Self-hosted, privacy-focused, modular web application for managing documents, emails, calendars, and cases with AI assistance. Must run entirely via Docker Compose with zero external dependencies.
 
-## Aktueller Status: FEATURE-COMPLETE ✅
+## User Personas
+- **Admin**: Sets up the system, manages users, configures AI providers and email accounts
+- **Standard User**: Manages documents, cases, emails, tasks, calendar entries with AI assistance
 
-### Neueste Features (2026-03-16)
+## Core Requirements
+1. **100% Self-Hosted**: Docker Compose, no runtime dependencies on Emergent or external platforms
+2. **Setup Wizard**: Admin creation, AI provider config (Ollama local / OpenAI external), language selection
+3. **Multi-Tenancy**: Multiple users with strictly separated data, admin-invitable via email links
+4. **Document Processing**: Upload (PDF, DOCX, images), OCR, intelligent renaming, semantic search, case association
+5. **Email Processing**: IMAP fetch, AI analysis, attachment import, deadline detection, auto-task creation
+6. **AI Assistant**: Context-aware, document-aware, multilingual, budget plan creation from real data
+7. **Response Generation**: AI-drafted letters in PDF/DOCX, with document attachments as download package
+8. **Proactive AI**: Daily briefing, document suggestions, case analysis
+9. **Calendar & Tasks**: Task management with priorities and deadlines, calendar events
+10. **Data Export**: Full ZIP export with all documents and metadata
+11. **No Branding**: No Emergent watermarks
 
-#### ✅ KI-Assistent mit Sprachunterstützung
-- KI antwortet **ausschließlich** in der eingestellten Benutzersprache (DE, EN, FR, ES)
-- Versteht und beantwortet Anfragen in der jeweiligen Sprache
-- Alle Kontext-Labels werden in der Benutzersprache angezeigt
+## Tech Stack
+- **Backend**: FastAPI, Python 3.11
+- **Frontend**: React, Tailwind CSS, Shadcn UI
+- **Database**: MongoDB
+- **AI**: Ollama (local) / OpenAI (external)
+- **OCR**: Tesseract via separate microservice
+- **Deployment**: Docker Compose (MongoDB, Backend, Frontend/Nginx, OCR, Ollama)
 
-#### ✅ Dokumente zu Fällen zuweisen
-- **In Fällen**: Dokumente hochladen oder vorhandene verknüpfen
-- **In Dokumenten**: Mehrfachauswahl-Modus zum Zuweisen zu Fällen
-- Dokumente können aus Fällen entfernt werden
-- "Im Fall" Badge zeigt verknüpfte Dokumente
+## What's Been Implemented
 
-#### ✅ Proaktiver KI-Assistent
-- **Tägliches KI-Briefing** auf dem Dashboard mit Prioritäten, Fristen, Empfehlungen
-- **KI-Assistent-Tab** in der Fall-Detailansicht (als erster Tab!)
-- **Proaktive Fallanalyse** mit dringenden Aktionen, erkannten Fristen, nächsten Schritten
-- **Automatische Dokumentenvorschläge** beim Erstellen eines Falls
-- **Automatische Dokumentenverknüpfung** nach Fall-Erstellung
+### Completed Features
+- [x] Setup Wizard with admin creation
+- [x] JWT authentication with multi-user support
+- [x] User invitation system (email links)
+- [x] Document upload with OCR processing
+- [x] Intelligent document renaming
+- [x] Document semantic/full-text search
+- [x] Multi-select documents -> assign to case
+- [x] Upload/link documents from case view
+- [x] Case management with detail tabs
+- [x] AI abstraction layer (Ollama + OpenAI)
+- [x] AI Chat with full document knowledge and German language support
+- [x] AI Chat with document download links (referenced documents)
+- [x] Proactive AI: Daily briefing, document suggestions, case analysis
+- [x] Response generation in PDF/DOCX format with attachments
+- [x] IMAP email fetch with auto AI processing and deadline task creation
+- [x] SMTP configuration UI
+- [x] Data export as ZIP with all documents
+- [x] Light/Dark theme toggle
+- [x] Docker Compose self-hosted setup (MongoDB, Nginx, OCR, Ollama)
+- [x] AI language fix (reads from user_settings, syncs to user doc)
 
-#### ✅ KI mit vollem Dokumentenwissen
-- Der KI-Chat hat Zugriff auf ALLE Dokumente, Fälle, Aufgaben und Termine
-- Kann Querverweise zwischen Dokumenten herstellen
-- Findet zusammengehörige Dokumente automatisch
+### P2 Backlog
+- [ ] Calendar/Task Automation: Auto-create calendar events from AI-detected deadlines
+- [ ] Refine User Role Model: Admin vs Standard User permissions
+- [ ] Backend API refactoring: Split monolithic server.py into domain routers
 
-#### ✅ Theme-Umschalter (Hell/Dunkel)
-- Sonnen/Mond-Icon in der Sidebar zum Umschalten
-- Theme-Auswahl auch in User Preferences
-
-#### ✅ Benutzereinladungssystem
-- Admin kann neue Benutzer per E-Mail einladen
-- Einladungslink mit Token (7 Tage gültig)
-- Registrierungsseite für eingeladene Benutzer
-
-#### ✅ Response-Paket-Generierung
-- KI analysiert Fall und schlägt Antworttyp vor
-- Generiert komplettes Antwortschreiben (PDF/DOCX/TXT)
-- Dokumente als Anlagen auswählbar
-- Download als ZIP-Paket oder Versand per E-Mail
-
-### Mit OpenAI funktioniert alles sofort!
-Bei Freigabe von Internetzugriff + OpenAI API-Key sind alle KI-Features voll funktionsfähig.
-
-## Implementierte Features (Komplett)
-
-### ✅ Backend (FastAPI + MongoDB)
-- User Authentication mit JWT
-- Setup-Wizard mit Ollama/OpenAI-Auswahl
-- Cases CRUD mit Status-Tracking
-- Documents CRUD mit Auto-Processing
-- Tasks CRUD mit Prioritäten
-- Events CRUD für Kalender
-- Drafts CRUD
-- AI Chat mit Ollama/OpenAI-Abstraktion
-- System & User Settings
-- Audit Logging
-
-### ✅ Intelligente Dokumentenverarbeitung
-- Auto-OCR bei Upload (Tesseract)
-- KI-basierte Metadatenextraktion
-- Auto-Umbenennung: `Datum – Absender – Dokumenttyp – Referenz – Kurzthema`
-- Auto-Tag-Generierung
-- Fristenerkennung mit Aufgabenerstellung
-- Wichtigkeits-Bewertung
-
-### ✅ Volltextsuche
-- MongoDB Text-Index für deutsche Sprache
-- Suche in Dokumenteninhalt (OCR-Text)
-- Suche in Namen, Tags, Zusammenfassungen
-- Relevanz-basiertes Ranking
-
-### ✅ E-Mail-Integration (NEU)
-- IMAP E-Mail-Abruf
-- E-Mail-Verarbeitung mit KI
-- Anhänge als Dokumente importieren
-- E-Mail-zu-Fall-Verknüpfung
-- E-Mails als gelesen markieren
-
-### ✅ Dokumenten-Vorschau (NEU)
-- Vorschau-Endpoint mit Metadaten
-- Download-Endpoint
-- OCR-Text-Anzeige
-
-### ✅ Datenexport (NEU)
-- Vollständiger JSON-Export aller Daten
-- Fall-spezifischer Export
-- Download als Datei
-
-### ✅ Frontend (React + Tailwind)
-- Setup-Wizard (5 Schritte)
-- Login-Seite
-- Dashboard mit Statistiken
-- Dokumentenseite mit Upload, Suche, Reprocessing
-- Fallverwaltung
-- E-Mail-Seite mit Abruf und Verknüpfung
-- Aufgaben-Board
-- Kalender
-- KI-Chat-Interface
-- Einstellungen (User, E-Mail, KI, Datenschutz, Export)
-
-### ✅ Docker-Infrastruktur
-- docker-compose.yml mit allen Services
-- Ollama mit Llama 3.2 (Auto-Download)
-- PostgreSQL, Redis
-- Tesseract OCR Service
-- GPU-Unterstützung (optional)
-
-## Login für Preview
-- **URL:** https://doc-case-mgmt.preview.emergentagent.com
-- **Email:** admin@casedesk.app
-- **Passwort:** admin123
-
-## Konfiguration für volle KI-Funktion
-
-1. **Settings → Privacy:** Internetzugriff auf "Erlaubt" setzen
-2. **Settings → AI Configuration:** OpenAI auswählen
-3. **OpenAI API-Key eingeben**
-
-Danach funktionieren:
-- Dokumentenanalyse bei Upload
-- KI-Chat
-- E-Mail-Zusammenfassungen
-- Fristenerkennung
-
-## Verbleibende optionale Features (P2)
-
-### P2 (Nice-to-Have)
-- Team-Rollen und Berechtigungen (Feinabstimmung)
-- CalDAV-Kalendersync
-- Mobile Optimierung
-- Webhook-Integrationen
-- Browser-basierte PDF-Vorschau mit Annotation
-
-## Erledigte Features (Vollständig)
-
-### ✅ SMTP E-Mail-Versand
-- SMTP-Einstellungen in E-Mail-Konto-Konfiguration
-- Versand von Korrespondenz per E-Mail
-
-### ✅ KI-gestützte Entwurfserstellung
-- Response-Generierung für Fälle
-- Verschiedene Antworttypen (Widerspruch, Antrag, etc.)
-
-### ✅ Dokumenten-Viewer
-- PDF-Anzeige im Browser
-- Bild-Vorschau
-- OCR-Text-Anzeige
-
-### ✅ Benutzereinladungssystem
-- Admin kann Benutzer einladen
-- Registrierung über Einladungslink
-
-### ✅ Theme-Umschalter
-- Hell/Dunkel-Modus
-
-## Architektur
-
+## Key Architecture
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      CaseDesk AI                            │
-├─────────────────────────────────────────────────────────────┤
-│  Frontend (React)      │  Backend (FastAPI)                 │
-│  - Dashboard           │  - REST API                        │
-│  - Dokumente           │  - AI Abstraction Layer            │
-│  - Fälle               │  - Document Processor              │
-│  - E-Mails             │  - Email Service                   │
-│  - Aufgaben            │  - Search Engine                   │
-│  - Kalender            │  - Export Service                  │
-│  - KI-Chat             │  - Auth & Sessions                 │
-├─────────────────────────────────────────────────────────────┤
-│  Ollama       │ PostgreSQL │  Redis    │ OCR Service       │
-│  (Llama 3.2) │ (Datenbank)│ (Cache)   │ (Tesseract)       │
-└─────────────────────────────────────────────────────────────┘
+docker-compose.yml
+├── mongodb (Port 27017) - Document DB
+├── backend (Port 8001) - FastAPI REST API
+├── frontend (Port 80) - React + Nginx (proxies /api to backend)
+├── ocr (Port 8002) - Tesseract OCR microservice
+└── ollama (Port 11434) - Local LLM server
 ```
 
-## Installation
-
-```bash
-git clone https://github.com/yourusername/casedesk-ai.git
-cd casedesk-ai
-cp .env.example .env
-# .env anpassen (SECRET_KEY!)
-docker-compose up -d
-# Browser: http://localhost:3000
-```
+## Credentials
+- Admin: admin@casedesk.app / admin123
