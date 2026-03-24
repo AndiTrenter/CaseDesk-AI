@@ -8,93 +8,34 @@
   <Support>https://github.com/AndiTrenter/CaseDesk-AI/issues</Support>
   <Project>https://github.com/AndiTrenter/CaseDesk-AI</Project>
   <Overview>
-    CaseDesk AI - Self-hosted, privacy-focused document and case management with AI assistance.
+CaseDesk AI - Self-hosted document and case management with AI.
 
-    Features: Document OCR, intelligent renaming, AI chat with full document knowledge,
-    email processing (IMAP/SMTP), case management, response generation (PDF/DOCX),
-    calendar/task automation, multi-user with role-based access.
+HINWEIS: Dieses Template installiert NUR das Frontend.
+Fuer den vollstaendigen Stack (Backend, MongoDB, OCR, optional Ollama)
+verwende docker-compose auf Unraid:
 
-    IMPORTANT: This template installs the frontend only. Use the included
-    docker-compose.unraid.yml for the full stack (MongoDB, Backend, OCR, Ollama).
+  cd /mnt/user/appdata
+  git clone https://github.com/AndiTrenter/CaseDesk-AI.git casedesk
+  cd casedesk
+  cp .env.example .env
+  nano .env
+  docker compose -f docker-compose.unraid.yml pull
+  docker compose -f docker-compose.unraid.yml up -d
 
-    Full install guide: https://github.com/AndiTrenter/CaseDesk-AI#quick-start-unraid
+Vollstaendige Anleitung: https://github.com/AndiTrenter/CaseDesk-AI#installation-auf-unraid
   </Overview>
   <Category>Productivity: Tools:</Category>
   <WebUI>http://[IP]:[PORT:9090]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/AndiTrenter/CaseDesk-AI/main/unraid-template/casedesk-ai.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/AndiTrenter/CaseDesk-AI/main/unraid-template/icon.png</Icon>
-  <ExtraParams>--restart unless-stopped</ExtraParams>
   <Description>
-    CaseDesk AI is a self-hosted, privacy-focused document and case management system
-    with AI assistance. It runs 100% locally with no cloud dependencies.
-    Supports local AI (Ollama) or OpenAI. Features include document OCR,
-    intelligent renaming, AI chat, email processing, and response generation.
+CaseDesk AI - Self-hosted, privacy-focused document and case management
+with AI (OpenAI or local Ollama). Features: Document OCR, AI chat,
+email processing, response generation (PDF/DOCX), calendar automation.
+
+WICHTIG: Dieses Template ist nur das Frontend.
+Fuer den vollstaendigen Stack bitte docker-compose verwenden.
+Siehe README: https://github.com/AndiTrenter/CaseDesk-AI#installation-auf-unraid
   </Description>
-  <Networking>
-    <Mode>bridge</Mode>
-    <Publish>
-      <Port>
-        <HostPort>9090</HostPort>
-        <ContainerPort>80</ContainerPort>
-        <Protocol>tcp</Protocol>
-      </Port>
-    </Publish>
-  </Networking>
-  <Data>
-    <Volume>
-      <HostDir>/mnt/user/appdata/casedesk/mongodb</HostDir>
-      <ContainerDir>/data/db</ContainerDir>
-      <Mode>rw</Mode>
-    </Volume>
-    <Volume>
-      <HostDir>/mnt/user/appdata/casedesk/uploads</HostDir>
-      <ContainerDir>/app/uploads</ContainerDir>
-      <Mode>rw</Mode>
-    </Volume>
-    <Volume>
-      <HostDir>/mnt/user/appdata/casedesk/ollama</HostDir>
-      <ContainerDir>/root/.ollama</ContainerDir>
-      <Mode>rw</Mode>
-    </Volume>
-  </Data>
-  <Environment>
-    <Variable>
-      <Value>casedesk</Value>
-      <Name>MONGO_USER</Name>
-      <Mode/>
-    </Variable>
-    <Variable>
-      <Value>change-me-to-a-strong-password</Value>
-      <Name>MONGO_PASSWORD</Name>
-      <Mode/>
-    </Variable>
-    <Variable>
-      <Value>casedesk</Value>
-      <Name>DB_NAME</Name>
-      <Mode/>
-    </Variable>
-    <Variable>
-      <Value>change-this-to-a-random-secret</Value>
-      <Name>SECRET_KEY</Name>
-      <Mode/>
-    </Variable>
-    <Variable>
-      <Value></Value>
-      <Name>OPENAI_API_KEY</Name>
-      <Mode/>
-    </Variable>
-    <Variable>
-      <Value>true</Value>
-      <Name>ENABLE_OLLAMA</Name>
-      <Mode/>
-    </Variable>
-  </Environment>
-  <Config Name="WebUI Port" Target="80" Default="9090" Mode="tcp" Description="Web interface port" Type="Port" Display="always" Required="true" Mask="false">9090</Config>
-  <Config Name="MongoDB Data" Target="/data/db" Default="/mnt/user/appdata/casedesk/mongodb" Mode="rw" Description="MongoDB data storage" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/casedesk/mongodb</Config>
-  <Config Name="Uploads" Target="/app/uploads" Default="/mnt/user/appdata/casedesk/uploads" Mode="rw" Description="Document uploads storage" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/casedesk/uploads</Config>
-  <Config Name="Ollama Models" Target="/root/.ollama" Default="/mnt/user/appdata/casedesk/ollama" Mode="rw" Description="Ollama AI model storage" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/casedesk/ollama</Config>
-  <Config Name="MongoDB User" Target="MONGO_USER" Default="casedesk" Mode="" Description="MongoDB username" Type="Variable" Display="always" Required="true" Mask="false">casedesk</Config>
-  <Config Name="MongoDB Password" Target="MONGO_PASSWORD" Default="" Mode="" Description="MongoDB password - CHANGE THIS!" Type="Variable" Display="always" Required="true" Mask="true"></Config>
-  <Config Name="Secret Key" Target="SECRET_KEY" Default="" Mode="" Description="JWT secret key - CHANGE THIS!" Type="Variable" Display="always" Required="true" Mask="true"></Config>
-  <Config Name="OpenAI API Key" Target="OPENAI_API_KEY" Default="" Mode="" Description="Optional: OpenAI API key for cloud AI" Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="WebUI Port" Target="80" Default="9090" Mode="tcp" Description="Web-Oberflaeche Port" Type="Port" Display="always" Required="true" Mask="false">9090</Config>
 </Container>

@@ -1,21 +1,18 @@
 # ============================================
-# CaseDesk AI - Unraid Docker Compose
+# CaseDesk AI - Unraid Production Deploy
 # ============================================
-# Optimized for Unraid with /mnt/user/appdata paths
+# Verwendet ausschliesslich fertige GHCR-Images.
+# Kein lokaler Build noetig.
 #
-# Usage:
+# Installation:
 #   cp .env.example .env
-#   nano .env  (adjust passwords & keys)
+#   nano .env
+#   docker compose -f docker-compose.unraid.yml pull
 #   docker compose -f docker-compose.unraid.yml up -d
 #
-# With Ollama (CPU):
+# Mit Ollama (lokale KI, optional):
 #   docker compose -f docker-compose.unraid.yml --profile ollama up -d
-#
-# With Ollama (GPU/NVIDIA):
-#   docker compose -f docker-compose.unraid.yml --profile gpu up -d
 # ============================================
-
-version: '3.8'
 
 services:
   mongodb:
@@ -26,35 +23,28 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-casedesk_secret}
     volumes:
       - /mnt/user/appdata/casedesk/mongodb:/data/db
-    ports:
-      - "${MONGO_PORT:-27017}:27017"
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
-    network_mode: bridge
 
   backend:
     image: ghcr.io/anditrenter/casedesk-ai/backend:latest
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
     container_name: casedesk-backend
     environment:
       MONGO_URL: mongodb://${MONGO_USER:-casedesk}:${MONGO_PASSWORD:-casedesk_secret}@mongodb:27017
       DB_NAME: ${DB_NAME:-casedesk}
       SECRET_KEY: ${SECRET_KEY:-change-this-in-production}
+      AI_PROVIDER: ${AI_PROVIDER:-openai}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OLLAMA_URL: http://ollama:11434
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
       UPLOAD_DIR: /app/uploads
       OCR_SERVICE_URL: http://ocr:8002
       CORS_ORIGINS: "*"
     volumes:
       - /mnt/user/appdata/casedesk/uploads:/app/uploads
-    ports:
-      - "${BACKEND_PORT:-8001}:8001"
     depends_on:
       mongodb:
         condition: service_healthy
@@ -68,11 +58,6 @@ services:
 
   frontend:
     image: ghcr.io/anditrenter/casedesk-ai/frontend:latest
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        REACT_APP_BACKEND_URL: ""
     container_name: casedesk-frontend
     ports:
       - "${FRONTEND_PORT:-9090}:80"
@@ -83,9 +68,6 @@ services:
 
   ocr:
     image: ghcr.io/anditrenter/casedesk-ai/ocr:latest
-    build:
-      context: ./ocr
-      dockerfile: Dockerfile
     container_name: casedesk-ocr
     volumes:
       - /mnt/user/appdata/casedesk/uploads:/app/uploads:ro
@@ -96,7 +78,6 @@ services:
       retries: 3
     restart: unless-stopped
 
-  # Ollama CPU (activate with --profile ollama)
   ollama:
     image: ollama/ollama:latest
     container_name: casedesk-ollama
@@ -104,32 +85,8 @@ services:
       - ollama
     volumes:
       - /mnt/user/appdata/casedesk/ollama:/root/.ollama
-    ports:
-      - "11434:11434"
     environment:
       - OLLAMA_HOST=0.0.0.0
-    restart: unless-stopped
-    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull ${OLLAMA_MODEL:-llama3.2} && wait"]
-
-  # Ollama GPU (activate with --profile gpu)
-  ollama-gpu:
-    image: ollama/ollama:latest
-    container_name: casedesk-ollama
-    profiles:
-      - gpu
-    volumes:
-      - /mnt/user/appdata/casedesk/ollama:/root/.ollama
-    ports:
-      - "11434:11434"
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     restart: unless-stopped
     entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull ${OLLAMA_MODEL:-llama3.2} && wait"]
 

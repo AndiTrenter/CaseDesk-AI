@@ -1,183 +1,163 @@
 # CaseDesk AI
 
-Selbstgehostete, datenschutzkonforme Dokumenten- und Fallverwaltung mit KI-Unterstützung.
+Selbstgehostete, datenschutzkonforme Dokumenten- und Fallverwaltung mit KI-Unterstuetzung.
 
 ## Features
 
-- **Dokumentenverwaltung** mit OCR und intelligentem Umbenennen
-- **Fallverwaltung** mit KI-gestützter Analyse
-- **E-Mail-Verarbeitung** via IMAP mit automatischer KI-Analyse
-- **KI-Assistent** mit vollständiger Dokumentenkenntnis (Ollama lokal oder OpenAI)
-- **Antwort-Generierung** als PDF/DOCX mit Anlagen
-- **Automatische Frist-Erkennung** mit Aufgaben- und Kalender-Erstellung
-- **Hintergrund-E-Mail-Sync** (konfigurierbar pro Konto)
-- **Mehrbenutzersystem** mit Rollen (Admin/Benutzer) und Einladungssystem
-- **Datenexport** als ZIP mit allen Dokumenten
-- **Dark/Light Theme**
-- **Mehrsprachig** (DE, EN, FR, ES)
-- **100% Self-Hosted** — keine Cloud-Abhängigkeiten
+- Dokumentenverwaltung mit OCR und intelligentem Umbenennen
+- Fallverwaltung mit KI-gestuetzter Analyse
+- E-Mail-Verarbeitung via IMAP mit automatischer KI-Analyse
+- KI-Assistent mit vollstaendiger Dokumentenkenntnis (OpenAI oder Ollama)
+- Antwort-Generierung als PDF/DOCX mit Anlagen
+- Automatische Frist-Erkennung mit Aufgaben- und Kalender-Erstellung
+- Hintergrund-E-Mail-Sync (konfigurierbar pro Konto)
+- Mehrbenutzersystem mit Rollen (Admin/Benutzer) und Einladungssystem
+- Datenexport als ZIP mit allen Dokumenten
+- Dark/Light Theme
+- 100% Self-Hosted, keine Cloud-Abhaengigkeiten
 
 ---
 
-## Quick Start (Docker)
+## Installation auf Unraid
 
 ### Voraussetzungen
 
-- Docker & Docker Compose v2+
-- (Optional) NVIDIA GPU für schnellere lokale KI
+- Unraid mit Docker-Unterstuetzung
+- OpenAI API-Key (von https://platform.openai.com/api-keys)
 
-### Installation
-
-```bash
-git clone https://github.com/AndiTrenter/CaseDesk-AI.git
-cd CaseDesk-AI
-
-cp .env.example .env
-nano .env   # Passwörter und SECRET_KEY ändern!
-
-# Nur mit OpenAI (kein Ollama):
-docker compose up -d
-
-# Mit Ollama (lokale KI, CPU):
-docker compose --profile ollama up -d
-
-# Mit Ollama + NVIDIA GPU:
-docker compose --profile gpu up -d
-```
-
-Die App ist erreichbar unter **http://localhost:9090** (oder dem Port aus `.env`).
-
-### Erster Start
-
-1. Browser öffnen: `http://localhost:9090`
-2. Der Setup-Assistent führt durch:
-   - Admin-Konto erstellen
-   - KI-Anbieter wählen (Ollama lokal oder OpenAI)
-   - Sprache einstellen
-3. Fertig! Dokumente hochladen und loslegen.
-
----
-
-## Quick Start (Unraid)
-
-### Option A: Docker Compose auf Unraid
+### Schritt fuer Schritt
 
 ```bash
-# Im Unraid Terminal:
+# 1. Repository klonen
 cd /mnt/user/appdata
 git clone https://github.com/AndiTrenter/CaseDesk-AI.git casedesk
 cd casedesk
 
+# 2. Konfiguration erstellen
 cp .env.example .env
-nano .env   # Passwörter ändern!
-
-# Ohne Ollama (nur OpenAI):
-docker compose -f docker-compose.unraid.yml up -d
-
-# Mit Ollama (CPU):
-docker compose -f docker-compose.unraid.yml --profile ollama up -d
-
-# Mit Ollama (NVIDIA GPU):
-docker compose -f docker-compose.unraid.yml --profile gpu up -d
+nano .env
 ```
 
-### Option B: Unraid Community Applications
+In der `.env` diese Werte anpassen:
 
-1. Lade die Template-XML von `unraid-template/casedesk-ai.xml`
-2. In Unraid: **Docker** → **Add Container** → **Template** → XML-URL einfügen
-3. Konfiguriere Passwörter und Ports
-4. Starten
+| Variable | Was eintragen |
+|----------|--------------|
+| `MONGO_PASSWORD` | Sicheres Passwort waehlen |
+| `SECRET_KEY` | `openssl rand -hex 32` ausfuehren, Ergebnis eintragen |
+| `OPENAI_API_KEY` | Deinen OpenAI API-Key eintragen |
 
-### Daten-Pfade auf Unraid
+```bash
+# 3. Images laden und starten
+docker compose -f docker-compose.unraid.yml pull
+docker compose -f docker-compose.unraid.yml up -d
+```
 
-| Pfad | Beschreibung |
-|------|-------------|
-| `/mnt/user/appdata/casedesk/mongodb` | MongoDB-Datenbank |
-| `/mnt/user/appdata/casedesk/uploads` | Hochgeladene Dokumente |
-| `/mnt/user/appdata/casedesk/ollama` | KI-Modelle (Ollama) |
+Die App ist erreichbar unter **http://[DEINE-IP]:9090**
+
+### Erster Start
+
+1. Browser oeffnen: `http://[DEINE-IP]:9090`
+2. Der Setup-Assistent fuehrt durch:
+   - Admin-Konto erstellen
+   - KI-Anbieter waehlen
+   - Sprache einstellen
+3. Fertig!
+
+### Optional: Lokale KI mit Ollama
+
+Wenn du statt OpenAI eine lokale KI nutzen moechtest:
+
+```bash
+# In .env aendern:
+# AI_PROVIDER=ollama
+# OPENAI_API_KEY=  (leer lassen)
+
+docker compose -f docker-compose.unraid.yml --profile ollama up -d
+```
 
 ---
 
-## Umgebungsvariablen
+## Konfiguration (.env)
 
-| Variable | Beschreibung | Standard |
-|----------|-------------|---------|
-| `MONGO_USER` | MongoDB Benutzername | `casedesk` |
-| `MONGO_PASSWORD` | MongoDB Passwort | **ÄNDERN!** |
-| `DB_NAME` | Datenbankname | `casedesk` |
-| `SECRET_KEY` | JWT-Signaturschlüssel | **ÄNDERN!** |
-| `FRONTEND_PORT` | Web-Oberfläche Port | `9090` |
-| `BACKEND_PORT` | API Port | `8001` |
-| `MONGO_PORT` | MongoDB Port | `27017` |
-| `ENABLE_OLLAMA` | Ollama aktivieren | `true` |
-| `OPENAI_API_KEY` | OpenAI API Key (optional) | leer |
-| `OLLAMA_MODEL` | Ollama Modell | `llama3.2` |
+| Variable | Pflicht | Beschreibung | Standard |
+|----------|---------|-------------|---------|
+| `MONGO_USER` | Ja | MongoDB Benutzername | `casedesk` |
+| `MONGO_PASSWORD` | Ja | MongoDB Passwort | **AENDERN!** |
+| `DB_NAME` | Ja | Datenbankname | `casedesk` |
+| `SECRET_KEY` | Ja | JWT-Signaturschluessel | **AENDERN!** |
+| `FRONTEND_PORT` | Ja | Web-Oberflaeche Port | `9090` |
+| `AI_PROVIDER` | Ja | `openai` oder `ollama` | `openai` |
+| `OPENAI_API_KEY` | Wenn OpenAI | OpenAI API-Key | - |
+| `OLLAMA_URL` | Wenn Ollama | Ollama Server URL | `http://ollama:11434` |
+| `OLLAMA_MODEL` | Wenn Ollama | Ollama Modell | `llama3.2` |
 
 ---
 
 ## Services
 
-| Service | Port | Beschreibung |
-|---------|------|-------------|
-| Frontend (Nginx) | 9090 | Web-Oberfläche + API-Proxy |
-| Backend (FastAPI) | 8001 | REST API |
-| MongoDB | 27017 | Dokumentendatenbank |
-| OCR | 8002 | Tesseract OCR-Service |
-| Ollama | 11434 | Lokaler KI-Server (optional) |
+| Service | Beschreibung |
+|---------|-------------|
+| Frontend (Nginx) | Web-Oberflaeche, Port 9090 |
+| Backend (FastAPI) | REST API (intern) |
+| MongoDB | Datenbank (intern, nicht exponiert) |
+| OCR | Tesseract OCR-Service (intern) |
+| Ollama | Lokaler KI-Server (optional) |
 
 ---
 
 ## Docker Images (GHCR)
 
-```bash
-# Images direkt von GitHub Container Registry:
-docker pull ghcr.io/anditrenter/casedesk-ai/backend:latest
-docker pull ghcr.io/anditrenter/casedesk-ai/frontend:latest
-docker pull ghcr.io/anditrenter/casedesk-ai/ocr:latest
 ```
+ghcr.io/anditrenter/casedesk-ai/backend:latest
+ghcr.io/anditrenter/casedesk-ai/frontend:latest
+ghcr.io/anditrenter/casedesk-ai/ocr:latest
+```
+
+---
+
+## Daten-Pfade auf Unraid
+
+| Pfad | Beschreibung |
+|------|-------------|
+| `/mnt/user/appdata/casedesk/mongodb` | MongoDB-Datenbank |
+| `/mnt/user/appdata/casedesk/uploads` | Hochgeladene Dokumente |
+| `/mnt/user/appdata/casedesk/ollama` | KI-Modelle (nur bei Ollama) |
 
 ---
 
 ## Backup
 
 ```bash
-# MongoDB Backup
+# MongoDB
 docker exec casedesk-mongodb mongodump --out /dump \
-  -u casedesk -p <PASSWORT> --authenticationDatabase admin
+  -u casedesk -p DEIN_PASSWORT --authenticationDatabase admin
 docker cp casedesk-mongodb:/dump ./backup
 
-# Uploads Backup
-docker cp casedesk-backend:/app/uploads ./backup/uploads
+# Uploads
+cp -r /mnt/user/appdata/casedesk/uploads ./backup/uploads
 ```
-
----
 
 ## Update
 
 ```bash
+cd /mnt/user/appdata/casedesk
 git pull
-docker compose build
-docker compose up -d
+docker compose -f docker-compose.unraid.yml pull
+docker compose -f docker-compose.unraid.yml up -d
 ```
 
 ---
 
-## Entwicklung
+## Fuer Entwickler
+
+Lokale Entwicklung mit Build:
 
 ```bash
-# Backend
-cd backend
-pip install -r requirements.txt
-uvicorn server:app --host 0.0.0.0 --port 8001 --reload
-
-# Frontend
-cd frontend
-yarn install
-yarn start
+# docker-compose.yml = lokaler Build
+docker compose up -d
 
 # Tests
-cd backend
-python -m pytest tests/ -v
+cd backend && python -m pytest tests/ -v
 ```
 
 ---
@@ -185,31 +165,16 @@ python -m pytest tests/ -v
 ## Architektur
 
 ```
-CaseDesk-AI/
-├── backend/
-│   ├── server.py           # FastAPI Hauptapp
-│   ├── deps.py             # Shared: DB, Auth, Helpers
-│   ├── ai_service.py       # KI-Abstraktionsschicht
-│   ├── email_service.py    # IMAP/SMTP Service
-│   ├── response_service.py # Antwort-Generierung (PDF/DOCX)
-│   ├── background_sync.py  # Automatische E-Mail-Synchronisation
-│   └── routers/            # Domain-spezifische API-Router
-│       ├── auth.py         # Login, Registrierung, Benutzer
-│       ├── cases.py        # Fallverwaltung
-│       ├── documents.py    # Dokumentenverwaltung + OCR
-│       ├── tasks.py        # Aufgabenverwaltung
-│       ├── events.py       # Kalender + Frist-Automatisierung
-│       ├── ai.py           # KI-Chat + Proaktive KI
-│       ├── emails.py       # E-Mail-Verarbeitung
-│       ├── settings.py     # Einstellungen + Dashboard + Export
-│       └── correspondence.py # Antwort-Generierung + Korrespondenz
-├── frontend/               # React + Tailwind + Shadcn UI
-├── ocr/                    # Tesseract OCR Microservice
-├── docker-compose.yml      # Standard Docker Compose
-├── docker-compose.unraid.yml # Unraid-optimiert
-├── .env.example            # Umgebungsvariablen Template
-├── .github/workflows/      # CI/CD: Build + Push zu GHCR
-└── unraid-template/        # Unraid Community App Template
+backend/
+  server.py             # FastAPI App + /api/health
+  deps.py               # DB, Auth, Helpers
+  ai_service.py         # KI-Abstraktionsschicht (OpenAI/Ollama)
+  email_service.py      # IMAP/SMTP
+  response_service.py   # PDF/DOCX-Generierung
+  background_sync.py    # Automatischer E-Mail-Sync
+  routers/              # API-Router (auth, cases, documents, ...)
+frontend/               # React + Tailwind + Shadcn UI
+ocr/                    # Tesseract OCR Microservice
 ```
 
 ## Lizenz

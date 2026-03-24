@@ -1,7 +1,11 @@
-version: '3.8'
+# ============================================
+# CaseDesk AI - Entwickler-Compose (lokaler Build)
+# ============================================
+# Nur fuer lokale Entwicklung.
+# Fuer Produktion/Unraid: docker-compose.unraid.yml
+# ============================================
 
 services:
-  # ==================== MongoDB ====================
   mongodb:
     image: mongo:7
     container_name: casedesk-mongodb
@@ -19,19 +23,18 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # ==================== Backend ====================
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: ghcr.io/anditrenter/casedesk-ai/backend:latest
     container_name: casedesk-backend
     environment:
       MONGO_URL: mongodb://${MONGO_USER:-casedesk}:${MONGO_PASSWORD:-casedesk_secret}@mongodb:27017
       DB_NAME: ${DB_NAME:-casedesk}
-      SECRET_KEY: ${SECRET_KEY:-change-this-in-production}
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
+      AI_PROVIDER: ${AI_PROVIDER:-openai}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OLLAMA_URL: http://ollama:11434
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
       UPLOAD_DIR: /app/uploads
       OCR_SERVICE_URL: http://ocr:8002
       CORS_ORIGINS: "*"
@@ -50,14 +53,12 @@ services:
       start_period: 15s
     restart: unless-stopped
 
-  # ==================== Frontend ====================
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
         REACT_APP_BACKEND_URL: ""
-    image: ghcr.io/anditrenter/casedesk-ai/frontend:latest
     container_name: casedesk-frontend
     ports:
       - "${FRONTEND_PORT:-9090}:80"
@@ -66,12 +67,10 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # ==================== OCR Service ====================
   ocr:
     build:
       context: ./ocr
       dockerfile: Dockerfile
-    image: ghcr.io/anditrenter/casedesk-ai/ocr:latest
     container_name: casedesk-ocr
     volumes:
       - uploads_data:/app/uploads:ro
@@ -82,41 +81,17 @@ services:
       retries: 3
     restart: unless-stopped
 
-  # ==================== Ollama (optional) ====================
   ollama:
     image: ollama/ollama:latest
     container_name: casedesk-ollama
     profiles:
       - ollama
-      - gpu
     volumes:
       - ollama_data:/root/.ollama
     ports:
       - "11434:11434"
     environment:
       - OLLAMA_HOST=0.0.0.0
-    restart: unless-stopped
-    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull ${OLLAMA_MODEL:-llama3.2} && wait"]
-
-  # Ollama with GPU support
-  ollama-gpu:
-    image: ollama/ollama:latest
-    container_name: casedesk-ollama
-    profiles:
-      - gpu
-    volumes:
-      - ollama_data:/root/.ollama
-    ports:
-      - "11434:11434"
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     restart: unless-stopped
     entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull ${OLLAMA_MODEL:-llama3.2} && wait"]
 

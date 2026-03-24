@@ -469,18 +469,24 @@ DEBES responder SIEMPRE y EXCLUSIVAMENTE en ESPAÑOL!""",
 
 
 async def get_ai_service(db) -> AIService:
-    """Get configured AI service from database settings"""
+    """Get configured AI service from database settings or environment"""
+    import os
+    
     settings = await db.system_settings.find_one({}, {"_id": 0})
     
-    if not settings:
-        # Default to Ollama
-        return AIService(provider="ollama")
+    # Environment variable AI_PROVIDER takes priority (for Docker deploy)
+    env_provider = os.environ.get("AI_PROVIDER")
+    env_api_key = os.environ.get("OPENAI_API_KEY")
     
-    provider = settings.get("ai_provider", "ollama")
-    api_key = settings.get("openai_api_key")
+    if settings:
+        provider = env_provider or settings.get("ai_provider", "ollama")
+        api_key = env_api_key or settings.get("openai_api_key")
+    else:
+        provider = env_provider or "openai"
+        api_key = env_api_key
     
     if provider == "disabled":
-        provider = "ollama"  # Fallback to Ollama even if "disabled"
+        provider = "ollama"
     
     return AIService(provider=provider, api_key=api_key)
 
