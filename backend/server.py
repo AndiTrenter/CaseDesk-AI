@@ -103,6 +103,8 @@ api_router.include_router(correspondence_router, tags=["Correspondence"])
 app.include_router(api_router)
 
 
-@app.get("/api/docs", include_in_schema=False)
-async def api_docs():
-    return {"message": "Visit /docs for Swagger UI or /redoc for ReDoc"}
+# Health endpoint - directly on app for visibility and Docker healthcheck
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint used by Docker Compose healthcheck"""
+    return {"status": "healthy", "service": "casedesk-backend", "version": "1.0.0"}
