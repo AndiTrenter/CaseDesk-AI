@@ -356,3 +356,19 @@ class SetupStatus(BaseModel):
     setup_completed: bool = False
     has_admin: bool
     version: str = "1.0.0"
+
+
+# AI Memory / User Profile Models
+class AIProfileFact(BaseDocument):
+    key: str
+    value: str
+    source: str = "conversation"
+    extracted_at: datetime = Field(default_factory=utc_now)
+
+
+class AIProfile(BaseDocument):
+    id: str = Field(default_factory=generate_uuid)
+    user_id: str
+    facts: List[AIProfileFact] = []
+    summary: str = ""
+    updated_at: datetime = Field(default_factory=utc_now)

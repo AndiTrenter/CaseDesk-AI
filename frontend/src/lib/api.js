@@ -156,11 +156,12 @@ export const draftsAPI = {
 
 // AI
 export const aiAPI = {
-  chat: (message, sessionId, caseId) => {
+  chat: (message, sessionId, caseId, documentId) => {
     const formData = new FormData();
     formData.append('message', message);
     if (sessionId) formData.append('session_id', sessionId);
     if (caseId) formData.append('case_id', caseId);
+    if (documentId) formData.append('document_id', documentId);
     return api.post('/ai/chat', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 120000
@@ -177,6 +178,9 @@ export const aiAPI = {
       timeout: 120000
     });
   },
+  getProfile: () => api.get('/ai/profile'),
+  deleteProfileFact: (index) => api.delete(`/ai/profile/facts/${index}`),
+  clearProfile: () => api.delete('/ai/profile'),
 };
 
 // Proactive AI

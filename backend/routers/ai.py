@@ -16,9 +16,10 @@ async def ai_chat(
     message: str = Form(...),
     session_id: str = Form(None),
     case_id: str = Form(None),
+    document_id: str = Form(None),
     user: dict = Depends(require_auth)
 ):
-    from ai_service import get_ai_service, ChatAssistant
+    from ai_service import get_ai_service, ChatAssistant, AIMemory
     
     settings = await db.system_settings.find_one({}, {"_id": 0})
     if settings and settings.get("internet_access") == "denied" and settings.get("ai_provider") == "openai":
@@ -38,6 +39,7 @@ async def ai_chat(
         "role": "user",
         "content": message,
         "case_id": case_id,
+        "document_id": document_id,
         "document_ids": [],
         "created_at": now
     }
@@ -59,6 +61,14 @@ async def ai_chat(
     
     context["all_documents"] = all_docs
     context["all_cases"] = all_cases
+    
+    # Focused document context
+    if document_id:
+        focused_doc = await db.documents.find_one(
+            {"id": document_id, "user_id": user["id"]}, {"_id": 0}
+        )
+        if focused_doc:
+            context["focused_document"] = focused_doc
     
     if case_id:
         case = await db.cases.find_one({"id": case_id, "user_id": user["id"]}, {"_id": 0})
@@ -87,6 +97,12 @@ async def ai_chat(
     try:
         ai_service = await get_ai_service(db)
         assistant = ChatAssistant(ai_service)
+        memory = AIMemory(ai_service, db)
+        
+        # Load user profile and inject into context
+        profile = await memory.get_profile(user["id"])
+        profile_context = memory.build_profile_context(profile, user_language)
+        context["user_profile_context"] = profile_context
         
         for doc in all_docs:
             doc["download_url"] = f"/api/documents/{doc['id']}/download"
@@ -102,6 +118,11 @@ async def ai_chat(
                     "name": doc_name,
                     "download_url": f"/api/documents/{doc['id']}/download"
                 })
+        
+        # Extract facts in background (fire and forget)
+        import asyncio
+        asyncio.create_task(memory.extract_and_store_facts(user["id"], message, ai_response))
+        
     except Exception as e:
         logger.error(f"AI chat error: {e}")
         ai_response = f"KI-Fehler: {str(e)}"
@@ -114,6 +135,7 @@ async def ai_chat(
         "role": "assistant",
         "content": ai_response,
         "case_id": case_id,
+        "document_id": document_id,
         "document_ids": [],
         "created_at": datetime.now(timezone.utc).isoformat()
     }
@@ -175,3 +197,36 @@ async def get_daily_briefing(user: dict = Depends(require_auth)):
     ai_service = await get_ai_service(db)
     assistant = ProactiveAssistant(ai_service, db)
     return await assistant.get_daily_briefing(user["id"])
+
+
+@router.get("/ai/profile")
+async def get_ai_profile(user: dict = Depends(require_auth)):
+    """Get the user's AI memory profile"""
+    from ai_service import get_ai_service, AIMemory
+    ai_service = await get_ai_service(db)
+    memory = AIMemory(ai_service, db)
+    profile = await memory.get_profile(user["id"])
+    return {"success": True, "profile": profile}
+
+
+@router.delete("/ai/profile/facts/{fact_index}")
+async def delete_ai_profile_fact(fact_index: int, user: dict = Depends(require_auth)):
+    """Delete a specific fact from the user's AI profile"""
+    profile = await db.ai_profiles.find_one({"user_id": user["id"]}, {"_id": 0})
+    if not profile or fact_index >= len(profile.get("facts", [])):
+        return {"success": False, "error": "Fakt nicht gefunden"}
+    
+    facts = profile.get("facts", [])
+    facts.pop(fact_index)
+    await db.ai_profiles.update_one(
+        {"user_id": user["id"]},
+        {"$set": {"facts": facts, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"success": True}
+
+
+@router.delete("/ai/profile")
+async def clear_ai_profile(user: dict = Depends(require_auth)):
+    """Clear the entire AI memory profile"""
+    await db.ai_profiles.delete_one({"user_id": user["id"]})
+    return {"success": True}

@@ -385,12 +385,34 @@ DEBES responder SIEMPRE y EXCLUSIVAMENTE en ESPAÑOL!""",
         
         # Language-specific labels
         labels = {
-            "de": {"current_case": "AKTUELLER FALL", "title": "Titel", "desc": "Beschreibung", "status": "Status", "ref": "Aktenzeichen", "not_specified": "Nicht angegeben", "docs_in_case": "Dokumente in diesem Fall", "sender": "Absender", "date": "Datum", "summary": "Zusammenfassung", "content": "Inhalt", "all_docs": "ALLE DOKUMENTE DES BENUTZERS (vollständig bekannt)", "from": "Von", "type": "Typ", "case": "Fall", "all_cases": "ALLE FÄLLE", "open_tasks": "OFFENE AUFGABEN", "due": "Fällig", "priority": "Priorität", "events": "ANSTEHENDE TERMINE", "download_hint": "Dokumente können vom Benutzer heruntergeladen werden."},
-            "en": {"current_case": "CURRENT CASE", "title": "Title", "desc": "Description", "status": "Status", "ref": "Reference", "not_specified": "Not specified", "docs_in_case": "Documents in this case", "sender": "Sender", "date": "Date", "summary": "Summary", "content": "Content", "all_docs": "ALL USER DOCUMENTS (fully known)", "from": "From", "type": "Type", "case": "Case", "all_cases": "ALL CASES", "open_tasks": "OPEN TASKS", "due": "Due", "priority": "Priority", "events": "UPCOMING EVENTS", "download_hint": "Documents can be downloaded by the user."},
-            "fr": {"current_case": "DOSSIER ACTUEL", "title": "Titre", "desc": "Description", "status": "Statut", "ref": "Référence", "not_specified": "Non spécifié", "docs_in_case": "Documents dans ce dossier", "sender": "Expéditeur", "date": "Date", "summary": "Résumé", "content": "Contenu", "all_docs": "TOUS LES DOCUMENTS", "from": "De", "type": "Type", "case": "Dossier", "all_cases": "TOUS LES DOSSIERS", "open_tasks": "TÂCHES OUVERTES", "due": "Échéance", "priority": "Priorité", "events": "ÉVÉNEMENTS À VENIR", "download_hint": "Les documents peuvent être téléchargés."},
-            "es": {"current_case": "CASO ACTUAL", "title": "Título", "desc": "Descripción", "status": "Estado", "ref": "Referencia", "not_specified": "No especificado", "docs_in_case": "Documentos en este caso", "sender": "Remitente", "date": "Fecha", "summary": "Resumen", "content": "Contenido", "all_docs": "TODOS LOS DOCUMENTOS", "from": "De", "type": "Tipo", "case": "Caso", "all_cases": "TODOS LOS CASOS", "open_tasks": "TAREAS ABIERTAS", "due": "Vence", "priority": "Prioridad", "events": "EVENTOS PRÓXIMOS", "download_hint": "Los documentos se pueden descargar."}
+            "de": {"current_case": "AKTUELLER FALL", "title": "Titel", "desc": "Beschreibung", "status": "Status", "ref": "Aktenzeichen", "not_specified": "Nicht angegeben", "docs_in_case": "Dokumente in diesem Fall", "sender": "Absender", "date": "Datum", "summary": "Zusammenfassung", "content": "Inhalt", "all_docs": "ALLE DOKUMENTE DES BENUTZERS (vollständig bekannt)", "from": "Von", "type": "Typ", "case": "Fall", "all_cases": "ALLE FÄLLE", "open_tasks": "OFFENE AUFGABEN", "due": "Fällig", "priority": "Priorität", "events": "ANSTEHENDE TERMINE", "download_hint": "Dokumente können vom Benutzer heruntergeladen werden.", "focused_doc": "FOKUS-DOKUMENT (Der Benutzer fragt speziell zu diesem Dokument)"},
+            "en": {"current_case": "CURRENT CASE", "title": "Title", "desc": "Description", "status": "Status", "ref": "Reference", "not_specified": "Not specified", "docs_in_case": "Documents in this case", "sender": "Sender", "date": "Date", "summary": "Summary", "content": "Content", "all_docs": "ALL USER DOCUMENTS (fully known)", "from": "From", "type": "Type", "case": "Case", "all_cases": "ALL CASES", "open_tasks": "OPEN TASKS", "due": "Due", "priority": "Priority", "events": "UPCOMING EVENTS", "download_hint": "Documents can be downloaded by the user.", "focused_doc": "FOCUSED DOCUMENT (User is asking specifically about this document)"},
+            "fr": {"current_case": "DOSSIER ACTUEL", "title": "Titre", "desc": "Description", "status": "Statut", "ref": "Référence", "not_specified": "Non spécifié", "docs_in_case": "Documents dans ce dossier", "sender": "Expéditeur", "date": "Date", "summary": "Résumé", "content": "Contenu", "all_docs": "TOUS LES DOCUMENTS", "from": "De", "type": "Type", "case": "Dossier", "all_cases": "TOUS LES DOSSIERS", "open_tasks": "TÂCHES OUVERTES", "due": "Échéance", "priority": "Priorité", "events": "ÉVÉNEMENTS À VENIR", "download_hint": "Les documents peuvent être téléchargés.", "focused_doc": "DOCUMENT CIBLÉ (L'utilisateur pose des questions sur ce document)"},
+            "es": {"current_case": "CASO ACTUAL", "title": "Título", "desc": "Descripción", "status": "Estado", "ref": "Referencia", "not_specified": "No especificado", "docs_in_case": "Documentos en este caso", "sender": "Remitente", "date": "Fecha", "summary": "Resumen", "content": "Contenido", "all_docs": "TODOS LOS DOCUMENTOS", "from": "De", "type": "Tipo", "case": "Caso", "all_cases": "TODOS LOS CASOS", "open_tasks": "TAREAS ABIERTAS", "due": "Vence", "priority": "Prioridad", "events": "EVENTOS PRÓXIMOS", "download_hint": "Los documentos se pueden descargar.", "focused_doc": "DOCUMENTO ENFOCADO (El usuario pregunta sobre este documento)"}
         }
         lbl = labels.get(language, labels["de"])
+        
+        # User profile context (from AI Memory)
+        if context.get("user_profile_context"):
+            parts.append(context["user_profile_context"])
+        
+        # Focused document context (highest priority - full content)
+        if context.get("focused_document"):
+            doc = context["focused_document"]
+            parts.append(f"\n## {lbl['focused_doc']}")
+            parts.append(f"**{doc.get('display_name', doc.get('original_filename'))}**")
+            if doc.get('sender'):
+                parts.append(f"{lbl['sender']}: {doc['sender']}")
+            if doc.get('document_date'):
+                parts.append(f"{lbl['date']}: {doc['document_date']}")
+            if doc.get('document_type'):
+                parts.append(f"{lbl['type']}: {doc['document_type']}")
+            if doc.get('tags'):
+                parts.append(f"Tags: {', '.join(doc['tags'])}")
+            if doc.get('ai_summary'):
+                parts.append(f"{lbl['summary']}: {doc['ai_summary']}")
+            if doc.get('ocr_text'):
+                parts.append(f"\n{lbl['content']}:\n{doc['ocr_text'][:6000]}")
         
         # Current case context
         if context.get("current_case"):
@@ -465,6 +487,140 @@ DEBES responder SIEMPRE y EXCLUSIVAMENTE en ESPAÑOL!""",
                 event_info = f"- **{event.get('title')}** | {event.get('start_date')}"
                 parts.append(event_info)
         
+        return "\n".join(parts)
+
+
+class AIMemory:
+    """Persistent AI Memory - extracts and stores user facts across conversations"""
+
+    EXTRACT_PROMPT_DE = """Analysiere die folgende Konversation und extrahiere NEUE persoenliche Fakten ueber den Benutzer.
+
+WICHTIG: Extrahiere NUR konkrete, faktische Informationen wie:
+- Familienmitglieder (Ehepartner, Kinder, Eltern)
+- Beruf, Arbeitgeber, Qualifikationen
+- Adresse, Wohnort
+- Versicherungen, Vertraege, Mitgliedschaften
+- Gesundheitliche Informationen
+- Finanzielle Details (Konten, Schulden, Vermoegen)
+- Wichtige Termine, Fristen
+- Vorlieben, Gewohnheiten
+- Kontaktpersonen (Anwalt, Steuerberater, Arzt)
+
+Antworte NUR mit einem validen JSON-Objekt:
+{
+    "neue_fakten": [
+        {"key": "kategorie", "value": "konkreter Fakt"}
+    ],
+    "zusammenfassung_update": "Aktualisierte Zusammenfassung des Benutzerprofils in 2-3 Saetzen oder leer wenn keine neuen Fakten"
+}
+
+Wenn KEINE neuen Fakten gefunden wurden, antworte mit:
+{"neue_fakten": [], "zusammenfassung_update": ""}"""
+
+    def __init__(self, ai_service: 'AIService', db):
+        self.ai = ai_service
+        self.db = db
+
+    async def get_profile(self, user_id: str) -> dict:
+        """Load the user's AI profile"""
+        profile = await self.db.ai_profiles.find_one(
+            {"user_id": user_id}, {"_id": 0}
+        )
+        return profile or {"user_id": user_id, "facts": [], "summary": ""}
+
+    async def extract_and_store_facts(self, user_id: str, user_message: str, ai_response: str):
+        """Extract personal facts from a conversation turn and store them"""
+        try:
+            profile = await self.get_profile(user_id)
+            existing_facts = profile.get("facts", [])
+
+            existing_str = ""
+            if existing_facts:
+                existing_str = "\n\nBEREITS BEKANNTE FAKTEN:\n"
+                for f in existing_facts:
+                    existing_str += f"- {f['key']}: {f['value']}\n"
+                existing_str += "\nExtrahiere NUR NEUE Fakten, die noch nicht bekannt sind."
+
+            prompt = f"""KONVERSATION:
+Benutzer: {user_message}
+Assistent: {ai_response[:1500]}
+{existing_str}
+
+Extrahiere neue persoenliche Fakten."""
+
+            result = await self.ai.generate(prompt, self.EXTRACT_PROMPT_DE, max_tokens=1000)
+
+            json_match = re.search(r'\{[\s\S]*\}', result)
+            if not json_match:
+                return
+
+            data = json.loads(json_match.group())
+            neue_fakten = data.get("neue_fakten", [])
+
+            if not neue_fakten:
+                return
+
+            now = datetime.now().isoformat()
+            new_fact_docs = []
+            for f in neue_fakten:
+                if f.get("key") and f.get("value"):
+                    new_fact_docs.append({
+                        "key": f["key"],
+                        "value": f["value"],
+                        "source": "conversation",
+                        "extracted_at": now
+                    })
+
+            if not new_fact_docs:
+                return
+
+            summary_update = data.get("zusammenfassung_update", "")
+
+            update_ops = {
+                "$push": {"facts": {"$each": new_fact_docs}},
+                "$set": {"updated_at": now},
+                "$setOnInsert": {"user_id": user_id, "id": str(__import__('uuid').uuid4())}
+            }
+            if summary_update:
+                update_ops["$set"]["summary"] = summary_update
+
+            await self.db.ai_profiles.update_one(
+                {"user_id": user_id},
+                update_ops,
+                upsert=True
+            )
+            logger.info(f"Extracted {len(new_fact_docs)} new facts for user {user_id}")
+
+        except Exception as e:
+            logger.error(f"Fact extraction error: {e}")
+
+    def build_profile_context(self, profile: dict, language: str = "de") -> str:
+        """Build a context string from the user profile for injection into system prompt"""
+        facts = profile.get("facts", [])
+        summary = profile.get("summary", "")
+
+        if not facts and not summary:
+            return ""
+
+        if language == "de":
+            parts = ["\n## PERSOENLICHES PROFIL DES BENUTZERS (aus frueheren Gespraechen gelernt):"]
+            if summary:
+                parts.append(f"Zusammenfassung: {summary}")
+            if facts:
+                parts.append("Bekannte Fakten:")
+                for f in facts[-30:]:
+                    parts.append(f"- {f['key']}: {f['value']}")
+            parts.append("Nutze dieses Wissen um personalisierte, kontextbezogene Antworten zu geben.")
+        else:
+            parts = ["\n## USER'S PERSONAL PROFILE (learned from previous conversations):"]
+            if summary:
+                parts.append(f"Summary: {summary}")
+            if facts:
+                parts.append("Known facts:")
+                for f in facts[-30:]:
+                    parts.append(f"- {f['key']}: {f['value']}")
+            parts.append("Use this knowledge to provide personalized, context-aware responses.")
+
         return "\n".join(parts)
 
 

@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   FileText, Upload, Search, Trash2, 
   Eye, FileImage, File, MoreVertical, RefreshCw,
   Tag, Calendar, User, AlertCircle, CheckCircle,
-  Loader2, Edit, Download, X, Plus, Briefcase, CheckSquare
+  Loader2, Edit, Download, X, Plus, Briefcase, CheckSquare, Bot
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -35,6 +36,7 @@ import { toast } from 'sonner';
 
 export default function Documents() {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const fileInputRef = useRef(null);
   const [documents, setDocuments] = useState([]);
   const [cases, setCases] = useState([]);
@@ -532,6 +534,13 @@ export default function Documents() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="bg-[#1A1A1A] border-white/10">
+                      <DropdownMenuItem 
+                        onClick={() => navigate(`/ai?document_id=${doc.id}`)}
+                        className="text-purple-300 focus:bg-purple-500/10"
+                        data-testid={`ask-ai-doc-${doc.id}`}
+                      >
+                        <Bot className="w-4 h-4 mr-2" /> KI fragen
+                      </DropdownMenuItem>
                       <DropdownMenuItem 
                         onClick={() => setSelectedDoc(doc)}
                         className="text-gray-300 focus:bg-white/10"

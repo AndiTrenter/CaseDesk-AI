@@ -6,7 +6,7 @@ import {
   ArrowLeft, FileText, Mail, Send, Download, Edit, Trash2,
   Plus, RefreshCw, Loader2, Sparkles, History, CheckCircle,
   AlertCircle, Calendar, User, Paperclip, Eye, X, Save,
-  Lightbulb, Clock, Bell, ChevronRight, Brain, Upload, Link
+  Lightbulb, Clock, Bell, ChevronRight, Brain, Upload, Link, Bot
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -382,19 +382,29 @@ export default function CaseDetail() {
             )}
           </div>
           
-          <Button 
-            onClick={handleAnalyzeCase}
-            disabled={analyzing}
-            className="btn-primary flex items-center gap-2"
-            data-testid="generate-response-btn"
-          >
-            {analyzing ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Sparkles className="w-4 h-4" />
-            )}
-            Antwort generieren
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button 
+              onClick={() => navigate(`/ai?case_id=${caseId}`)}
+              className="btn-secondary flex items-center gap-2"
+              data-testid="ask-ai-case-btn"
+            >
+              <Bot className="w-4 h-4" />
+              KI fragen
+            </Button>
+            <Button 
+              onClick={handleAnalyzeCase}
+              disabled={analyzing}
+              className="btn-primary flex items-center gap-2"
+              data-testid="generate-response-btn"
+            >
+              {analyzing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
+              Antwort generieren
+            </Button>
+          </div>
         </div>
       </div>
 
