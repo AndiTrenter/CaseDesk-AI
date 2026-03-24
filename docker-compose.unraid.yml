@@ -1,7 +1,23 @@
+# ============================================
+# CaseDesk AI - Unraid Docker Compose
+# ============================================
+# Optimized for Unraid with /mnt/user/appdata paths
+#
+# Usage:
+#   cp .env.example .env
+#   nano .env  (adjust passwords & keys)
+#   docker compose -f docker-compose.unraid.yml up -d
+#
+# With Ollama (CPU):
+#   docker compose -f docker-compose.unraid.yml --profile ollama up -d
+#
+# With Ollama (GPU/NVIDIA):
+#   docker compose -f docker-compose.unraid.yml --profile gpu up -d
+# ============================================
+
 version: '3.8'
 
 services:
-  # ==================== MongoDB ====================
   mongodb:
     image: mongo:7
     container_name: casedesk-mongodb
@@ -9,7 +25,7 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-casedesk}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-casedesk_secret}
     volumes:
-      - mongodb_data:/data/db
+      - /mnt/user/appdata/casedesk/mongodb:/data/db
     ports:
       - "${MONGO_PORT:-27017}:27017"
     healthcheck:
@@ -18,13 +34,13 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    network_mode: bridge
 
-  # ==================== Backend ====================
   backend:
+    image: ghcr.io/anditrenter/casedesk-ai/backend:latest
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: ghcr.io/anditrenter/casedesk-ai/backend:latest
     container_name: casedesk-backend
     environment:
       MONGO_URL: mongodb://${MONGO_USER:-casedesk}:${MONGO_PASSWORD:-casedesk_secret}@mongodb:27017
@@ -36,7 +52,7 @@ services:
       OCR_SERVICE_URL: http://ocr:8002
       CORS_ORIGINS: "*"
     volumes:
-      - uploads_data:/app/uploads
+      - /mnt/user/appdata/casedesk/uploads:/app/uploads
     ports:
       - "${BACKEND_PORT:-8001}:8001"
     depends_on:
@@ -50,14 +66,13 @@ services:
       start_period: 15s
     restart: unless-stopped
 
-  # ==================== Frontend ====================
   frontend:
+    image: ghcr.io/anditrenter/casedesk-ai/frontend:latest
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
         REACT_APP_BACKEND_URL: ""
-    image: ghcr.io/anditrenter/casedesk-ai/frontend:latest
     container_name: casedesk-frontend
     ports:
       - "${FRONTEND_PORT:-9090}:80"
@@ -66,15 +81,14 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # ==================== OCR Service ====================
   ocr:
+    image: ghcr.io/anditrenter/casedesk-ai/ocr:latest
     build:
       context: ./ocr
       dockerfile: Dockerfile
-    image: ghcr.io/anditrenter/casedesk-ai/ocr:latest
     container_name: casedesk-ocr
     volumes:
-      - uploads_data:/app/uploads:ro
+      - /mnt/user/appdata/casedesk/uploads:/app/uploads:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
       interval: 30s
@@ -82,15 +96,14 @@ services:
       retries: 3
     restart: unless-stopped
 
-  # ==================== Ollama (optional) ====================
+  # Ollama CPU (activate with --profile ollama)
   ollama:
     image: ollama/ollama:latest
     container_name: casedesk-ollama
     profiles:
       - ollama
-      - gpu
     volumes:
-      - ollama_data:/root/.ollama
+      - /mnt/user/appdata/casedesk/ollama:/root/.ollama
     ports:
       - "11434:11434"
     environment:
@@ -98,14 +111,14 @@ services:
     restart: unless-stopped
     entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull ${OLLAMA_MODEL:-llama3.2} && wait"]
 
-  # Ollama with GPU support
+  # Ollama GPU (activate with --profile gpu)
   ollama-gpu:
     image: ollama/ollama:latest
     container_name: casedesk-ollama
     profiles:
       - gpu
     volumes:
-      - ollama_data:/root/.ollama
+      - /mnt/user/appdata/casedesk/ollama:/root/.ollama
     ports:
       - "11434:11434"
     environment:
@@ -119,11 +132,6 @@ services:
               capabilities: [gpu]
     restart: unless-stopped
     entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull ${OLLAMA_MODEL:-llama3.2} && wait"]
-
-volumes:
-  mongodb_data:
-  uploads_data:
-  ollama_data:
 
 networks:
   default:

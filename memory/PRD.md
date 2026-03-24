@@ -1,63 +1,58 @@
 # CaseDesk AI - Product Requirements Document
 
 ## Original Problem Statement
-Self-hosted, privacy-focused, modular web application for managing documents, emails, calendars, and cases with AI assistance. Must run entirely via Docker Compose with zero external dependencies.
+Self-hosted, privacy-focused, modular web application for managing documents, emails, calendars, and cases with AI assistance. Must run entirely via Docker Compose with zero external dependencies. Installable on Unraid via Docker/Community Applications.
 
-## User Personas
-- **Admin**: Sets up the system, manages users, configures AI providers and email accounts
-- **Standard User**: Manages own documents, cases, emails, tasks, calendar entries with AI assistance. Cannot access system settings or user management.
+## Repository
+https://github.com/AndiTrenter/CaseDesk-AI
 
 ## Tech Stack
 - **Backend**: FastAPI, Python 3.11, Motor (MongoDB async)
-- **Frontend**: React, Tailwind CSS, Shadcn UI
-- **Database**: MongoDB
-- **AI**: Ollama (local) / OpenAI (external)
+- **Frontend**: React, Tailwind CSS, Shadcn UI, Nginx (production)
+- **Database**: MongoDB 7
+- **AI**: Ollama (local, optional) / OpenAI (external, optional)
 - **OCR**: Tesseract via microservice
-- **Deployment**: Docker Compose (MongoDB, Backend, Frontend/Nginx, OCR, Ollama)
+- **CI/CD**: GitHub Actions → GHCR (ghcr.io/anditrenter/casedesk-ai/*)
+- **Deployment**: Docker Compose, Unraid Template
 
-## Architecture
+## Architecture (Refactored)
 ```
-server.py              <- Slim main app (~100 lines), lifespan, router inclusion
+server.py              <- Slim main app (~100 lines)
 deps.py                <- Shared: db, auth, helpers
-background_sync.py     <- Automatic email sync every 60s
+background_sync.py     <- Auto email sync every 60s
 routers/
-  auth.py              <- Login, register, users, invitations
-  cases.py             <- Cases CRUD
-  documents.py         <- Documents CRUD, upload, OCR, auto-deadlines
-  tasks.py             <- Tasks CRUD
-  events.py            <- Events CRUD, auto calendar from deadlines
-  ai.py                <- AI Chat, proactive AI, daily briefing
-  emails.py            <- Emails, IMAP fetch, auto processing
-  settings.py          <- Settings (admin/user), dashboard, export
-  correspondence.py    <- Response generation, drafts, correspondence
+  auth.py, cases.py, documents.py, tasks.py, events.py,
+  ai.py, emails.py, settings.py, correspondence.py
 ```
 
-## Completed Features (as of 2026-03-24)
-- [x] Setup Wizard with admin creation
-- [x] JWT authentication with multi-user support
-- [x] Role-based access control (Admin vs Standard User)
-- [x] User invitation system (email links)
-- [x] Document upload with OCR processing
-- [x] Intelligent document renaming (Date-Sender-Type-Ref-Topic)
-- [x] Document full-text + semantic search
-- [x] Multi-select documents -> assign to case
-- [x] Upload/link documents from case view
-- [x] Case management with detail tabs (docs, correspondence, history)
-- [x] AI abstraction layer (Ollama + OpenAI)
-- [x] AI Chat with FULL document knowledge (reads entire OCR content)
-- [x] AI Chat with referenced document download links
-- [x] AI language fix (reads from user_settings, syncs both collections)
+## All Completed Features
+- [x] Setup Wizard, JWT auth, multi-user with roles (Admin/User)
+- [x] User invitation system via email links
+- [x] Document upload + OCR + intelligent renaming + semantic search
+- [x] Multi-select documents → assign to case
+- [x] Case management with tabs (docs, correspondence, history)
+- [x] AI Chat with FULL document knowledge + referenced doc downloads
+- [x] AI language fix (de/en/fr/es from user_settings)
 - [x] Proactive AI: Daily briefing, document suggestions, case analysis
-- [x] Response generation in PDF/DOCX format with attachments
-- [x] Calendar/Task automation: Deadlines auto-create tasks AND calendar events
-- [x] IMAP email fetch with auto AI processing, task/event creation
-- [x] Background email sync every 60 seconds (configurable per account)
-- [x] SMTP configuration for sending emails
-- [x] Data export as ZIP with all documents and metadata
-- [x] Light/Dark theme toggle
-- [x] Docker Compose self-hosted (MongoDB, Nginx proxy, OCR, Ollama)
-- [x] Backend refactored from monolithic 2300-line server.py into 10 domain routers
-- [x] No Emergent branding
+- [x] Response generation in PDF/DOCX with attachments
+- [x] Calendar/Task automation from AI-detected deadlines
+- [x] IMAP email fetch + auto AI processing + task/event creation
+- [x] Background email sync (configurable per account)
+- [x] SMTP config for sending
+- [x] Data export as ZIP with all documents
+- [x] Light/Dark theme
+- [x] Docker self-hosted: MongoDB, Nginx proxy, OCR, Ollama (optional)
+- [x] Ollama optional via Docker profiles (--profile ollama/gpu)
+- [x] Frontend port variable (FRONTEND_PORT, default 9090)
+- [x] Google Fonts localized (no external CDN)
+- [x] Backend tests (21 pytest tests, CI-ready)
+- [x] GitHub Actions: build + push to GHCR (backend, frontend, ocr)
+- [x] docker-compose.unraid.yml with /mnt/user/appdata paths
+- [x] Unraid Community App XML template
+- [x] README.md in German with full install guide
+- [x] .env.example with all variables documented
+- [x] Backend refactored from 2300-line monolith into 10 domain routers
+- [x] No Emergent branding, no external dependencies
 
 ## Credentials
 - Admin: admin@casedesk.app / admin123
