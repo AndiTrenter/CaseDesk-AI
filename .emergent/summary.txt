@@ -2,177 +2,199 @@
 The user wants to build a self-hosted, privacy-focused, modular web application named CaseDesk AI. This application is intended for private and business use for managing documents, emails, calendars, and cases with AI assistance.
 
 **PRODUCT REQUIREMENTS:**
-- **100% Self-Hosted:** Must run entirely independently via Docker Compose, with no runtime dependencies on the Emergent platform.
-- **Setup Wizard:** An initial setup process for creating the admin user, configuring email accounts, and setting up AI providers (local or external).
-- **Multi-Tenancy & User Management:** Support for multiple users with strictly separated data. Admins should be able to invite new users via email links.
-- **Document Processing:** Upload various formats (PDF, DOCX, images), with OCR for scanned documents, metadata extraction, full-text and semantic search, and association with cases. Documents should be selectable and assignable to cases from both the main documents view and within a specific case view.
-- **Intelligent Renaming:** Documents should be automatically renamed to the format: .
-- **Email Processing:** Fetch emails and attachments via IMAP, analyze content, identify tasks/deadlines, and mark emails as read after processing. SMTP settings should be configurable for sending emails.
-- **Configurable & Multilingual AI:**
-    - Allow users to choose between a local LLM (like Ollama) or an external one (like OpenAI).
-    - The AI must always respond in the language set in the user's preferences.
-    - The AI should assist by answering questions, summarizing, drafting replies, and finding missing documents, but MUST NOT invent facts.
-    - The AI should have knowledge of all documents belonging to a user to provide context-aware assistance and suggest cross-references.
-- **Proactive AI Assistant:** The AI should proactively prepare information for the user, such as a daily briefing, suggesting relevant documents for a new case, and providing analysis within a case.
-- **AI-Powered Response Generation:** The AI assistant must be able to take a case, generate a complete response letter (in selectable formats like PDF or DOCX), automatically find and attach all necessary documents from that case, and provide the complete package for download or sending via email.
-- **Core Features:** Calendar, task management, and an audit trail to track actions within a case.
-- **No Branding:** The application must not contain any Made with Emergent watermarks or branding.
+- **100% Self-Hosted & Deployable:** Must run entirely independently via Docker Compose on an Unraid server, installable directly from the GitHub repository with no runtime dependencies on the Emergent platform or other external services.
+- **Contextual & Personalized AI:**
+    - The AI must be able to answer questions about specific documents or cases when invoked from their context.
+    - The AI must develop a persistent memory of the user, learning key facts from conversations (e.g., family details) and documents (e.g., legal agreements) to provide highly personalized and context-aware assistance.
+    - The AI must understand the entirety of a user's documents to identify connections and generate new artifacts (e.g., create a budget plan by analyzing bank statements and insurance policies).
+- **Core Functionality:** Setup wizard, multi-tenancy with admin/user roles, document processing (upload, OCR, search), email processing (IMAP/SMTP), and AI-powered response generation (PDF/DOCX).
 
 **User's preferred language**: German
 
 **what currently exists?**
-A comprehensive full-stack application with a FastAPI backend, React frontend, and PostgreSQL database, all containerized with Docker.
+A robust full-stack application with a FastAPI backend, React frontend, and MongoDB database, fully containerized with Docker.
 
-Key implemented features:
-- **Core:** Setup wizard, JWT authentication, multi-user support with an email invitation system, and a light/dark theme toggle.
-- **Document Management:** Document upload with OCR, intelligent renaming, and semantic search. Users can perform multi-select on documents to assign them to a case, and also upload/link documents from within a case view.
-- **Case Management:** A case detail page with tabs for documents, correspondence, and history.
-- **AI Integration:** An AI abstraction layer supports both local (Ollama) and external (OpenAI) models. The AI assistant has access to all of the user's documents for context-aware chat.
-- **Proactive AI:** A Daily Briefing on the dashboard, document suggestions during case creation, and a proactive analysis tab within cases.
-- **Response Generation:** Backend and frontend infrastructure for generating a response package for a case, including a drafted letter and attachments.
-- **Settings:** UI for managing AI providers, IMAP/SMTP email accounts, and user administration (invitations).
+The backend has been significantly refactored from a monolith into a modular structure with multiple router files. The application is now fully self-hostable and production-ready for Unraid deployment. This includes:
+- A development  (for local builds) and a production  (using pre-built GHCR images).
+- A complete  in the root directory with configurable ports and settings.
+- A GitHub Actions workflow that builds and pushes , , and  images to GHCR with a  tag upon every push to the main branch.
+- An Unraid application template ().
+- Removal of all external dependencies (, ) and localization of fonts.
+- An  environment variable to easily switch between usage: openai [-h] [-v] [-b API_BASE] [-k API_KEY] [-p PROXY [PROXY ...]]
+              [-o ORGANIZATION] [-t {openai,azure}]
+              [--api-version API_VERSION] [--azure-endpoint AZURE_ENDPOINT]
+              [--azure-ad-token AZURE_AD_TOKEN] [-V]
+              {api,tools,migrate,grit} ...
+
+positional arguments:
+  {api,tools,migrate,grit}
+    api                 Direct API calls
+    tools               Client side tools for convenience
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose         Set verbosity.
+  -b API_BASE, --api-base API_BASE
+                        What API base url to use.
+  -k API_KEY, --api-key API_KEY
+                        What API key to use.
+  -p PROXY [PROXY ...], --proxy PROXY [PROXY ...]
+                        What proxy to use.
+  -o ORGANIZATION, --organization ORGANIZATION
+                        Which organization to run as (will use your default
+                        organization if not specified)
+  -t {openai,azure}, --api-type {openai,azure}
+                        The backend API to call, must be `openai` or `azure`
+  --api-version API_VERSION
+                        The Azure API version, e.g.
+                        'https://learn.microsoft.com/en-us/azure/ai-
+                        services/openai/reference#rest-api-versioning'
+  --azure-endpoint AZURE_ENDPOINT
+                        The Azure endpoint, e.g.
+                        'https://endpoint.openai.azure.com'
+  --azure-ad-token AZURE_AD_TOKEN
+                        A token from Azure Active Directory,
+                        https://www.microsoft.com/en-
+                        us/security/business/identity-access/microsoft-entra-
+                        id
+  -V, --version         show program's version number and exit and . Ollama is now an optional service managed via Docker profiles.
+- A clean, minimal  and a comprehensive API test suite with 21 passing tests.
 
 **Last working item**:
-- **Last item agent was working:** The agent was trying to fix a bug where the AI assistant was not responding in the user's configured language (German), instead replying in English. An initial attempt was made to fix this by strengthening the system prompt.
-- **Status:** IN PROGRESS
+- **Last item agent was working:** The agent was preparing to implement two major new AI features requested by the user: contextual chat within documents and a persistent AI memory (user profile). The agent had just started analyzing the relevant frontend files (, , ) to plan the implementation.
+- **Status:** NOT STARTED
 - **Agent Testing Done:** N
-- **Which testing method agent to use?** backend testing agent
+- **Which testing method agent to use?** both
 - **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
-- **Issue 1: AI Assistant does not respect user's language (P0)**
-  - **Description:** The AI assistant responds in English even when the user's language is set to German and the query is in German. The user provided a screenshot as proof.
-  - **Attempted fixes:** The agent modified the system prompt in  to be more explicit about using the user's language. This did not solve the issue.
-  - **Next debug checklist:**
-    1.  Inspect  -> .
-    2.  Verify the  parameter is correctly passed from the  endpoint down to the service.
-    3.  Log the exact final prompt being sent to the LLM (OpenAI/Ollama) to ensure the language instruction () is present and formatted correctly.
-    4.  Experiment with different prompting techniques. Instead of just a system message, try adding the instruction as the last part of the user's message, e.g., .
-    5.  Check if the  object correctly stores and retrieves the language preference.
-  - **Why fix this issue and what will be achieved with the fix?** This is a critical usability feature. The application is intended for a German-speaking user, and the AI must communicate effectively in their native language.
-  - **Status:** IN PROGRESS
-  - **Is recurring issue?** Y
-  - **Should Test frontend/backend/both after fix?** backend
-  - **Blocked on other issue:** No
+There are no pending issues or bugs. All previously identified problems have been resolved.
 
 **In progress Task List**:
-There are no other tasks in progress. The current focus is on the language bug.
+- **Task 1: Contextual AI Chat (P0)**
+  - **Where to resume:** Implement UI changes in  and  to add an Ask AI option to the document/case action menu (e.g., the three-dot dropdown). This should open the  page/modal, passing the  or  as context.
+  - **What will be achieved with this?** Users will be able to start a conversation with the AI about a specific document or case directly from the respective view.
+  - **Status:** NOT STARTED
+  - **Should Test frontend/backend/both after fix?** both
+  - **Blocked on something:** No
+
+- **Task 2: Persistent AI User Profile/Memory (P0)**
+  - **Where to resume:**
+    1.  **Backend:** In , define a new Pydantic model and MongoDB collection (e.g., ) to store key-value facts and a summary about the user.
+    2.  **Backend:** In , modify the  to:
+        - On each chat response, perform an additional LLM call to extract persistent facts about the user from the conversation.
+        - Save these facts to the new  collection.
+        - On each new chat request, retrieve the user's AI profile and inject it into the system prompt's context, instructing the AI to use this knowledge.
+  - **What will be achieved with this?** The AI will remember personal details and key information across sessions, leading to more intelligent, personalized, and context-aware interactions, fulfilling a core user requirement.
+  - **Status:** NOT STARTED
+  - **Should Test frontend/backend/both after fix?** backend
+  - **Blocked on something:** No
 
 **Upcoming and Future Tasks**
-- **Upcoming Tasks:**
-  - **Task 1: Allow choice of response format (PDF/DOCX) (P1):** The user requested that the AI-generated response letter can be created as either a PDF or a DOCX file. This requires adding a selection UI in the frontend and a conversion/generation library in the backend.
-  - **Task 2: Full IMAP Email Processing Loop (P1):** Complete the backend service to parse attachments from fetched emails, use AI to create tasks/events, and reliably mark emails as read.
-  - **Task 3: Implement Data Export (P1):** Build the backend logic for the Export tab in settings to allow users to download all their data.
 - **Future Tasks:**
-  - **Task 4: Calendar/Task Automation (P2):** Implement logic to automatically create calendar events and tasks from deadlines identified by the AI in documents/emails.
-  - **Task 5: Refine User Role Model (P2):** Further develop the role-based access control system (e.g., distinguishing between Admin and standard User permissions).
+  - **Multilingual UI (P2):** The agent suggested a full i18n translation of the frontend, as some UI elements are still hardcoded in English.
+  - **Healthcheck Dashboard (P2):** The agent suggested creating a frontend dashboard to display the status of all backend services (MongoDB, OCR, Ollama, etc.) for easier administration on Unraid.
 
 **Completed work in this session**
-- **AI Response Package Generation:** Implemented the core workflow for generating case responses, including UI triggers and backend endpoints. (DONE)
-- **Document & Case Management Enhancements:**
-    - Implemented multi-select for documents to assign them to a case. (DONE)
-    - Added functionality to upload and link documents directly from the case detail page. (DONE)
-- **User Management & Authentication:**
-    - Created a user invitation system allowing admins to add users via email link. (DONE)
-    - Built the registration page for invited users. (DONE)
-- **Proactive AI Features:**
-    - Implemented a Daily Briefing on the dashboard. (DONE)
-    - Added proactive AI analysis and document suggestions to cases. (DONE)
-    - Enhanced the AI chat to be aware of all user's documents for contextual answers. (DONE)
-- **UI & UX Improvements:**
-    - Added a functional Light/Dark mode theme switcher. (DONE)
-    - Added SMTP configuration fields to the email settings UI. (DONE)
-- **Bug Fixes:**
-    - Resolved a frontend crash related to an empty  value when assigning documents to a case. (DONE)
+- **AI Language Bug Fix:** Resolved the critical bug where the AI would not respond in German.
+- **P1 Task Completion:**
+  - Implemented PDF/DOCX format selection for generated case responses.
+  - Implemented a full data export feature that creates a ZIP archive with all documents.
+  - Added a background service for automatic IMAP email processing.
+- **Major Backend Refactoring:** Decomposed the monolithic  into a clean, modular structure with 10+ router files under .
+- **Full Self-Hosting & Unraid Readiness:** Completed all 10 user-requested points to make the application truly deployable out of the box, including creating separate dev/prod compose files, removing all external dependencies, adding a GitHub Actions workflow to publish images to GHCR, and creating an Unraid template.
+- **Test Suite Creation:** Wrote a new API test suite () with 21 passing tests to ensure backend stability.
+- **Admin User Creation:** Successfully created a new admin user () as requested.
 
 **Earlier issues found/mentioned but not fixed**
 None.
 
 **Known issue recurrence from previous fork**
-- **Issue recurrence in previous fork**: None.
-- **Recurrence count**: 0
-- **Status**: NA
+- **Issue recurrence in previous fork**: AI not respecting the user's language setting.
+- **Recurrence count**: 1
+- **Status**: RESOLVED
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
-- **Backend**: FastAPI, SQLAlchemy (ORM), Pydantic, PostgreSQL
-- **Frontend**: React, React Router, Axios, Tailwind CSS, Shadcn UI
-- **AI**: Ollama (local), OpenAI (external), Python abstraction layer,  for full-text search.
-- **Deployment**: Docker Compose for orchestrating all services (backend, frontend, db, ollama).
+- **Backend**: FastAPI, Motor (async MongoDB), Pydantic, modular routers.
+- **Frontend**: React, React Router, Axios, Tailwind CSS, Shadcn UI.
+- **Database**: MongoDB.
+- **AI**: Abstraction layer for OpenAI (default) and Ollama (optional).
+- **Deployment**: Docker Compose with distinct dev/prod configurations. CI/CD via GitHub Actions pushing to GitHub Container Registry (GHCR).
 
 **key DB schema**
-- **users**: uid=0(root) gid=0(root) groups=0(root), , ,  (JSONB)
-- **cases**: uid=0(root) gid=0(root) groups=0(root), , , 
-- **documents**: uid=0(root) gid=0(root) groups=0(root), , , , , , 
-- **email_accounts**: uid=0(root) gid=0(root) groups=0(root), , , , , 
-- **invitations**: uid=0(root) gid=0(root) groups=0(root), , , , 
+- **users**: uid=0(root) gid=0(root) groups=0(root), , , , 
+- **user_settings**: , , 
+- **system_settings**: , , 
+- **(NEW PROPOSED)** : ,  (Array of key-value pairs),  (Text), .
 
 **changes in tech stack**
-- No changes in this session. The stack remains React, FastAPI, and PostgreSQL.
+- The project was confirmed to be using MongoDB, not PostgreSQL as mentioned in the initial handoff. The agent adapted all logic and compose files accordingly.
 
 **All files of reference**
-- : Contains the AI chat logic and the system prompt that needs fixing for the language issue.
-- : Contains all API endpoints, including  which is the entry point for the failing feature.
-- : Recently updated with multi-select and case assignment features.
-- : Recently updated to allow document uploads and linking.
-- : Contains the UI for user management and email configuration.
-- : Manages the application's light/dark theme.
-- : The product requirements document, updated throughout the session.
+- **For Contextual Chat:**
+  - : To add the Ask AI UI trigger.
+  - : To add the Ask AI UI trigger.
+  - : To handle receiving and using the initial context ().
+  - : To modify the  endpoint to accept context.
+- **For AI Memory:**
+  - : To add the new  schema.
+  - : To implement the logic for extracting, saving, and retrieving user facts.
 
 **Areas that need refactoring**:
-- : This file has become a monolith, containing routes for users, cases, documents, AI, settings, and more. It should be broken down into smaller, domain-specific router files (e.g., , ) and included in the main app to improve maintainability.
+The major backend refactoring is complete. No further refactoring is required at this time.
 
 **key api endpoints**
-- : Endpoint for the AI assistant (CURRENTLY BUGGED).
-- : Create user invitation tokens.
-- : Register a new user using an invitation token.
-- : Assigns multiple documents to a specific case.
-- : Manages documents within a case (add/remove).
-- : Gets the AI-generated daily summary.
-- : Suggests documents for a case.
-- : Triggers the AI response package generation.
+- : Provides the health status of the backend service.
+- : User login.
+- : The primary endpoint for AI chat. Needs to be enhanced to accept context (, ).
+- : CRUD for documents.
+- : CRUD for cases.
 
 **Critical Info for New Agent**
-- **User Language is German:** All communication MUST be in German.
-- **Top Priority is the Language Bug:** The immediate and most critical task is to fix the AI assistant so it reliably responds in the user's selected language. The user has pointed this out twice.
-- **User's Goal:** The user wants a smart, proactive assistant that minimizes manual work. All new features should align with this goal.
-- **Self-Hosted Architecture:** Continue to ensure all features are self-contained within the Docker environment.
+- **Priority:** The user's highest priority is now the implementation of the two new AI features: **Contextual Chat** and **Persistent AI Memory**. You must start with these tasks.
+- **Maintain Deployability:** All changes must preserve the out-of-the-box Unraid deployment readiness. Do not add external dependencies. Ensure the  file remains focused on pulling images from GHCR.
+- **User Profile Logic:** The core of the AI memory task is to design a robust system within  that can parse conversations, extract meaningful facts, and reliably inject them into future prompts without degrading performance or response quality. This may require a separate LLM call with a specific prompt for fact extraction.
 
 **documents and test reports created in this job**
 - 
-- Test reports from multiple  runs are available in .
+-  (and earlier)
+- 
+- 
+- 
+- 
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User (latest):** Reported that the AI assistant is still not responding in the selected language (German). **Status: In Progress.**
-2.  **User:** Pointed out a frontend crash with a screenshot when trying to assign a document to a case. **Status: Resolved.**
-3.  **User:** Provided login credentials for the preview. **Status: Acknowledged.**
-4.  **User:** Requested several new features: multilingual AI assistant, assigning documents to cases from both the documents and case pages. **Status: Completed (with bug).**
-5.  **User:** Requested a proactive AI system that prepares important information automatically. **Status: Completed.**
-6.  **Agent:** Finished implementation of proactive AI and asked for the next steps.
-7.  **User:** Acknowledged the completion and requested more features: fix theme switcher, add user invitations, and enhance the AI to know about all user documents. **Status: Completed.**
-8.  **Agent:** Finished the AI response package generation and asked for next steps.
-9.  **User:** Confirmed the plan and added a request for SMTP settings and selectable output format (PDF/DOCX) for generated letters. **Status: Partially Completed (SMTP UI done, format selection pending).**
-10. **Agent:** Proposed a plan to implement the AI response package feature.
+1.  **User (latest):** umsetzen (Implement it) - Explicit approval to begin work on the new AI features.
+2.  **User:** Laid out detailed requirements for contextual AI chat within documents/cases and a persistent AI memory that learns about the user (family, personal facts from documents).
+3.  **User:** Requested creation of a specific admin user.
+4.  **User:** erstelle einen admin... - request to create an admin user.
+5.  **User:** Approved the agent's work after the final round of deployment fixes.
+6.  **User:** Provided detailed, technical feedback on why the repo was still not distribution-ready for Unraid, listing 10 specific action items to fix.
+7.  **User:** Stated the GitHub action was still failing, pointing to a new commit.
+8.  **User:** git hib action macht fehler: - Pointed out the GitHub action was failing due to the  package and reiterated the requirement of having no Emergent dependencies.
+9.  **User:** mache die next action aufgabe sowie future aufgabe - instruction to implement the agent's proposed next steps (refactoring and automation).
+10. **User:** ok teste, erledige dann noch die p1 aufgaben... - approved the plan, provided more detailed requirements for the AI's intelligence, and reiterated the need for Docker self-sufficiency on Unraid.
 
 **Project Health Check:**
-- **Broken:** The AI assistant's multilingual capability is broken. It defaults to English regardless of user settings.
-- **Mocked:** The Data Export feature remains a UI placeholder. The choice between PDF/DOCX for response generation is not yet implemented.
+- **Broken:** None.
+- **Mocked:** None.
 
 **3rd Party Integrations**
-- **OpenAI GPT-4:** Used for external AI processing. Requires a User-provided API Key.
-- **Ollama:** Integrated via a Docker service for local, offline AI processing. Does not require a key.
+- **OpenAI:** Primary AI provider. Requires a user-provided API key.
+- **Ollama:** Optional, local AI provider, managed via Docker profiles.
 
 **Testing status**
 - **Testing agent used after significant changes:** YES
 - **Troubleshoot agent used after agent stuck in loop:** NO
-- **Test files created:** None
-- **Known regressions:** The AI language functionality is not working as intended.
+- **Test files created:** []
+- **Known regressions:** None. All tests are passing.
 
 **Credentials to test flow:**
 - **E-Mail:** 
 - **Passwort:** 
 
 **What agent forgot to execute**
-- The user's request to allow selecting the output format (PDF or DOCX) for the AI-generated response letter has not been implemented yet. This was mentioned along with the SMTP settings request.</analysis>
+- The agent initially overlooked the nuances of creating a truly distribution-ready repository, leading to multiple rounds of fixes for deployment configuration, external dependencies, and cleaning up . All these items have now been addressed.</analysis>

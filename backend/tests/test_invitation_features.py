@@ -9,7 +9,7 @@ import uuid
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://doc-case-mgmt.preview.emergentagent.com"
+    BASE_URL = "https://ai-memory-7.preview.emergentagent.com"
 
 # Test credentials
 ADMIN_EMAIL = "admin@casedesk.app"
