@@ -1410,11 +1410,26 @@ async def ai_chat(
         ai_service = await get_ai_service(db)
         assistant = ChatAssistant(ai_service)
         
+        # Enhance context with download info for documents
+        for doc in all_docs:
+            doc["download_url"] = f"/api/documents/{doc['id']}/download"
+        
         ai_response = await assistant.chat(
             message=message,
             context=context,
             language=user_language
         )
+        
+        # Extract referenced document IDs from the response
+        referenced_docs = []
+        for doc in all_docs:
+            doc_name = doc.get('display_name', doc.get('original_filename', ''))
+            if doc_name and doc_name.lower() in ai_response.lower():
+                referenced_docs.append({
+                    "id": doc["id"],
+                    "name": doc_name,
+                    "download_url": f"/api/documents/{doc['id']}/download"
+                })
     except Exception as e:
         logger.error(f"AI chat error: {e}")
         ai_response = f"KI-Fehler: {str(e)}"
@@ -1435,7 +1450,8 @@ async def ai_chat(
     return {
         "success": True,
         "response": ai_response,
-        "session_id": session_id
+        "session_id": session_id,
+        "referenced_documents": referenced_docs
     }
 
 
@@ -1707,15 +1723,55 @@ async def get_email(email_id: str, user: dict = Depends(require_auth)):
 
 @api_router.post("/emails/fetch/{account_id}")
 async def fetch_emails(account_id: str, user: dict = Depends(require_auth)):
-    """Fetch new emails from mail account"""
+    """Fetch new emails from mail account and process them with AI"""
     from email_service import EmailService
+    from ai_service import get_ai_service
     
     email_service = EmailService(db)
     result = await email_service.fetch_emails(account_id, user["id"])
     
-    if result.get("success"):
+    if result.get("success") and result.get("fetched_count", 0) > 0:
+        # Auto-process new emails with AI
+        ai_service = await get_ai_service(db)
+        processed = 0
+        tasks_created = 0
+        
+        for fetched_email in result.get("emails", []):
+            try:
+                process_result = await email_service.process_email_with_ai(
+                    fetched_email["id"], user["id"], ai_service
+                )
+                if process_result.get("success"):
+                    processed += 1
+                    
+                    # Auto-create tasks from detected deadlines
+                    for deadline in process_result.get("deadlines", []):
+                        task_id = str(uuid.uuid4())
+                        now = datetime.now(timezone.utc).isoformat()
+                        task = {
+                            "id": task_id,
+                            "user_id": user["id"],
+                            "case_id": fetched_email.get("case_id"),
+                            "title": f"Frist: {deadline.get('beschreibung', deadline) if isinstance(deadline, dict) else deadline}",
+                            "description": f"Erkannt aus E-Mail: {fetched_email.get('subject', '')}",
+                            "priority": "high",
+                            "status": "open",
+                            "due_date": deadline.get("datum") if isinstance(deadline, dict) else None,
+                            "source": "email_ai",
+                            "source_id": fetched_email["id"],
+                            "created_at": now,
+                            "updated_at": now
+                        }
+                        await db.tasks.insert_one(task)
+                        tasks_created += 1
+            except Exception as e:
+                logger.error(f"Error auto-processing email: {e}")
+        
+        result["processed_count"] = processed
+        result["tasks_created"] = tasks_created
+        
         await log_action(user["id"], "fetch_emails", "mail_account", account_id, 
-                        {"fetched_count": result.get("fetched_count", 0)})
+                        {"fetched_count": result.get("fetched_count", 0), "processed": processed, "tasks_created": tasks_created})
     
     return result
 
@@ -1840,10 +1896,13 @@ async def download_document(document_id: str, user: dict = Depends(require_auth)
 
 @api_router.get("/export/all")
 async def export_all_data(user: dict = Depends(require_auth)):
-    """Export all user data as JSON"""
+    """Export all user data as downloadable ZIP with documents"""
+    import zipfile
+    import tempfile
+    from fastapi.responses import FileResponse
+    
     user_id = user["id"]
     
-    # Gather all user data
     export_data = {
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "user": {
@@ -1853,20 +1912,36 @@ async def export_all_data(user: dict = Depends(require_auth)):
             "full_name": user.get("full_name")
         },
         "cases": await db.cases.find({"user_id": user_id}, {"_id": 0}).to_list(10000),
-        "documents": [],
         "tasks": await db.tasks.find({"user_id": user_id}, {"_id": 0}).to_list(10000),
         "events": await db.events.find({"user_id": user_id}, {"_id": 0}).to_list(10000),
         "drafts": await db.drafts.find({"user_id": user_id}, {"_id": 0}).to_list(10000),
-        "emails": await db.emails.find({"user_id": user_id}, {"_id": 0}).to_list(10000)
+        "emails": await db.emails.find({"user_id": user_id}, {"_id": 0}).to_list(10000),
+        "correspondence": await db.correspondence.find({"user_id": user_id}, {"_id": 0}).to_list(10000)
     }
     
-    # Documents without OCR text (too large)
-    docs = await db.documents.find({"user_id": user_id}, {"_id": 0, "ocr_text": 0}).to_list(10000)
-    export_data["documents"] = docs
+    docs = await db.documents.find({"user_id": user_id}, {"_id": 0}).to_list(10000)
+    export_data["documents"] = [
+        {k: v for k, v in d.items() if k != "ocr_text"} for d in docs
+    ]
+    
+    temp_dir = tempfile.mkdtemp()
+    zip_path = os.path.join(temp_dir, f"casedesk_export_{user_id[:8]}.zip")
+    
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        zipf.writestr("export_data.json", json.dumps(export_data, indent=2, ensure_ascii=False, default=str))
+        
+        for doc in docs:
+            if doc.get("storage_path") and os.path.exists(doc["storage_path"]):
+                filename = doc.get("display_name", doc.get("original_filename", doc["id"]))
+                zipf.write(doc["storage_path"], f"documents/{filename}")
     
     await log_action(user_id, "export_data", "user", user_id)
     
-    return export_data
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename=f"casedesk_export_{user_id[:8]}.zip"
+    )
 
 
 @api_router.get("/export/case/{case_id}")
@@ -1957,7 +2032,8 @@ async def generate_case_response(
         recipient=recipient,
         subject=subject,
         instructions=instructions,
-        include_document_ids=doc_ids
+        include_document_ids=doc_ids,
+        output_format=output_format if output_format in ("pdf", "docx") else "pdf"
     )
     
     if result.get("success"):

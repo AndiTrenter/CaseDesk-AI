@@ -77,7 +77,7 @@ export default function CaseDetail() {
     subject: '',
     instructions: '',
     document_ids: [],
-    output_format: 'txt'
+    output_format: 'pdf'
   });
   const [sendForm, setSendForm] = useState({
     mail_account_id: '',

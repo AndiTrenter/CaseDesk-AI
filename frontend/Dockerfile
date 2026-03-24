@@ -1,22 +1,22 @@
-FROM node:20-alpine
+FROM node:20-alpine AS build
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json yarn.lock* ./
+ARG REACT_APP_BACKEND_URL=""
 
-# Install dependencies
+COPY package.json yarn.lock* ./
 RUN yarn install --frozen-lockfile
 
-# Copy application code
 COPY . .
 
-# Build the application
+ENV REACT_APP_BACKEND_URL=${REACT_APP_BACKEND_URL}
 RUN yarn build
 
-# Install serve for production
-RUN yarn global add serve
+# Production: serve with nginx
+FROM nginx:alpine
 
-EXPOSE 3000
+COPY --from=build /app/build /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-CMD ["serve", "-s", "build", "-l", "3000"]
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

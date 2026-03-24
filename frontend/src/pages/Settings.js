@@ -233,12 +233,11 @@ export default function Settings() {
       toast.info('Daten werden exportiert...');
       const response = await exportAPI.all();
       
-      // Download as JSON file
-      const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
+      const blob = new Blob([response.data], { type: 'application/zip' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `casedesk-export-${new Date().toISOString().split('T')[0]}.json`;
+      a.download = `casedesk-export-${new Date().toISOString().split('T')[0]}.zip`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -750,7 +749,7 @@ export default function Settings() {
               
               <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
                 <p className="text-amber-300 text-sm">
-                  Hinweis: Der Export enthält keine Dateien (PDFs, Bilder). Diese müssen separat gesichert werden.
+                  Hinweis: Der Export enthält alle Daten und Dokumente als ZIP-Archiv.
                 </p>
               </div>
             </motion.div>

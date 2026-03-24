@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
-import { Bot, Send, User, Sparkles, AlertCircle } from 'lucide-react';
+import { Bot, Send, User, Sparkles, AlertCircle, Download, FileText } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Textarea } from '../components/ui/textarea';
 import { aiAPI, settingsAPI } from '../lib/api';
@@ -52,7 +52,11 @@ export default function AIChat() {
       const response = await aiAPI.chat(userMessage, sessionId, null);
       
       if (response.data.success) {
-        setMessages(prev => [...prev, { role: 'assistant', content: response.data.response }]);
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: response.data.response,
+          referencedDocuments: response.data.referenced_documents || []
+        }]);
       } else {
         setMessages(prev => [...prev, { 
           role: 'assistant', 
@@ -152,6 +156,29 @@ export default function AIChat() {
                         : 'bg-white/5 text-gray-200'}
                   `}>
                     <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    {/* Referenced Documents - Download Links */}
+                    {message.referencedDocuments && message.referencedDocuments.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-white/10">
+                        <p className="text-xs text-gray-400 mb-2 flex items-center gap-1">
+                          <FileText className="w-3 h-3" /> Referenzierte Dokumente:
+                        </p>
+                        <div className="space-y-1">
+                          {message.referencedDocuments.map((doc) => (
+                            <a
+                              key={doc.id}
+                              href={`${process.env.REACT_APP_BACKEND_URL}${doc.download_url}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300 transition-colors py-1 px-2 rounded bg-blue-500/10 hover:bg-blue-500/20"
+                              data-testid={`doc-download-${doc.id}`}
+                            >
+                              <Download className="w-3 h-3 flex-shrink-0" />
+                              <span className="truncate">{doc.name}</span>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   {message.role === 'user' && (

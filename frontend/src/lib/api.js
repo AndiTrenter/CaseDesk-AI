@@ -256,8 +256,8 @@ export const dashboardAPI = {
 
 // Export
 export const exportAPI = {
-  all: () => api.get('/export/all'),
-  case: (caseId) => api.get(`/export/case/${caseId}`),
+  all: () => api.get('/export/all', { responseType: 'blob' }),
+  case: (caseId) => api.get(`/export/case/${caseId}`, { responseType: 'blob' }),
 };
 
 // Correspondence

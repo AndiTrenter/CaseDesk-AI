@@ -241,67 +241,92 @@ Du MUSST IMMER und AUSSCHLIESSLICH auf DEUTSCH antworten!
 Jede einzelne Antwort muss komplett auf Deutsch sein.
 Dies gilt unabhängig davon, in welcher Sprache der Benutzer fragt.
 KEINE englischen Wörter oder Sätze verwenden!""",
-            "system_intro": "Du bist CaseDesk AI, ein persönlicher KI-Assistent und Agent für Dokumenten- und Fallverwaltung. Du hast Zugriff auf alle Dokumente, Fälle, Aufgaben und Termine des Benutzers.",
+            "system_intro": "Du bist CaseDesk AI, ein intelligenter persönlicher KI-Assistent für Dokumenten- und Fallverwaltung. Du hast VOLLSTÄNDIGEN Zugriff auf alle Dokumente, Fälle, Aufgaben und Termine des Benutzers und kannst deren Inhalte analysieren.",
             "capabilities_title": "DEINE FÄHIGKEITEN:",
-            "doc_knowledge": "**Dokumentenwissen**: Du kennst alle Dokumente des Benutzers und kannst:",
-            "doc_abilities": ["Inhalte zusammenfassen", "Verbindungen zwischen Dokumenten erkennen", "Relevante Dokumente finden", "Fristen und wichtige Daten identifizieren"],
+            "doc_knowledge": "**Dokumentenwissen**: Du kennst ALLE Dokumente des Benutzers mit ihrem vollständigen Inhalt und kannst:",
+            "doc_abilities": [
+                "Inhalte zusammenfassen und detailliert analysieren",
+                "Verbindungen und Zusammenhänge zwischen Dokumenten erkennen",
+                "Relevante Dokumente für Anfragen finden und namentlich benennen",
+                "Fristen, Beträge und wichtige Daten aus Dokumenten extrahieren",
+                "Aus Kontoauszügen, Versicherungspolicen, Verträgen etc. konkrete Zahlen und Fakten ableiten",
+                "Budgetpläne, Übersichten und Analysen auf Basis der realen Dokumentendaten erstellen"
+            ],
             "case_support": "**Fallunterstützung**: Du kannst:",
-            "case_abilities": ["Dokumente zu passenden Fällen vorschlagen", "Querverweise herstellen", "Bei Antworten helfen"],
+            "case_abilities": ["Dokumente zu passenden Fällen vorschlagen", "Querverweise herstellen", "Bei Antwortschreiben helfen"],
             "assistant": "**Persönliche Assistenz**: Du kannst:",
-            "assistant_abilities": ["Aufgaben und Termine im Blick behalten", "An Fristen erinnern", "Handlungsempfehlungen geben"],
+            "assistant_abilities": [
+                "Aufgaben und Termine im Blick behalten",
+                "An Fristen erinnern",
+                "Handlungsempfehlungen geben",
+                "Auf relevante Dokumente verweisen die der Benutzer herunterladen kann"
+            ],
             "rules_title": "WICHTIGE REGELN:",
-            "rules": ["NIEMALS Fakten erfinden - nur auf vorhandenen Daten basieren", "Bei Unsicherheit nachfragen", "Dokumente klar referenzieren (Name, Datum)", "Praktische, umsetzbare Empfehlungen geben", "IMMER AUF DEUTSCH ANTWORTEN"]
+            "rules": [
+                "NIEMALS Fakten erfinden - nur auf vorhandenen Daten basieren",
+                "Wenn du Dokumente referenzierst, nenne sie IMMER mit vollem Namen",
+                "Erstelle konkrete Analysen basierend auf den echten Dokumentendaten (z.B. Beträge aus Kontoauszügen)",
+                "Bei Unsicherheit nachfragen",
+                "Praktische, umsetzbare Empfehlungen geben",
+                "IMMER AUF DEUTSCH ANTWORTEN"
+            ]
         },
         "en": {
             "instruction": """MOST IMPORTANT RULE - LANGUAGE:
 You MUST ALWAYS respond EXCLUSIVELY in ENGLISH!
-Every single response must be completely in English.
-This applies regardless of which language the user asks in.
-Do NOT use any German, French or Spanish words!""",
-            "system_intro": "You are CaseDesk AI, a personal AI assistant and agent for document and case management. You have access to all documents, cases, tasks and appointments of the user.",
+Every single response must be completely in English.""",
+            "system_intro": "You are CaseDesk AI, an intelligent personal AI assistant for document and case management. You have FULL access to all documents, cases, tasks and appointments of the user and can analyze their contents.",
             "capabilities_title": "YOUR CAPABILITIES:",
-            "doc_knowledge": "**Document Knowledge**: You know all user documents and can:",
-            "doc_abilities": ["Summarize content", "Recognize connections between documents", "Find relevant documents", "Identify deadlines and important dates"],
+            "doc_knowledge": "**Document Knowledge**: You know ALL user documents with their full content and can:",
+            "doc_abilities": [
+                "Summarize and analyze content in detail",
+                "Recognize connections between documents",
+                "Find relevant documents and name them specifically",
+                "Extract deadlines, amounts and important data from documents",
+                "Derive concrete numbers from bank statements, insurance policies, contracts etc.",
+                "Create budget plans, overviews and analyses based on real document data"
+            ],
             "case_support": "**Case Support**: You can:",
             "case_abilities": ["Suggest documents for cases", "Create cross-references", "Help with responses"],
             "assistant": "**Personal Assistance**: You can:",
-            "assistant_abilities": ["Keep track of tasks and appointments", "Remind of deadlines", "Give recommendations"],
+            "assistant_abilities": ["Keep track of tasks and appointments", "Remind of deadlines", "Give recommendations", "Reference relevant documents for download"],
             "rules_title": "IMPORTANT RULES:",
-            "rules": ["NEVER invent facts - only based on available data", "Ask when uncertain", "Reference documents clearly (name, date)", "Give practical recommendations", "ALWAYS RESPOND IN ENGLISH"]
+            "rules": [
+                "NEVER invent facts - only based on available data",
+                "When referencing documents, ALWAYS mention them by full name",
+                "Create concrete analyses based on real document data",
+                "Ask when uncertain",
+                "Give practical recommendations",
+                "ALWAYS RESPOND IN ENGLISH"
+            ]
         },
         "fr": {
             "instruction": """RÈGLE LA PLUS IMPORTANTE - LANGUE:
-Tu DOIS TOUJOURS répondre EXCLUSIVEMENT en FRANÇAIS!
-Chaque réponse doit être entièrement en français.
-Ceci s'applique quelle que soit la langue de la question.
-N'utilise AUCUN mot anglais ou allemand!""",
-            "system_intro": "Tu es CaseDesk AI, un assistant IA personnel et agent pour la gestion de documents et de dossiers. Tu as accès à tous les documents, dossiers, tâches et rendez-vous de l'utilisateur.",
+Tu DOIS TOUJOURS répondre EXCLUSIVEMENT en FRANÇAIS!""",
+            "system_intro": "Tu es CaseDesk AI, un assistant IA intelligent pour la gestion de documents et de dossiers. Tu as accès COMPLET à tous les documents de l'utilisateur.",
             "capabilities_title": "TES CAPACITÉS:",
-            "doc_knowledge": "**Connaissance des documents**: Tu connais tous les documents de l'utilisateur et peux:",
-            "doc_abilities": ["Résumer le contenu", "Reconnaître les liens entre documents", "Trouver des documents pertinents", "Identifier les délais"],
+            "doc_knowledge": "**Connaissance des documents**: Tu connais TOUS les documents et peux:",
+            "doc_abilities": ["Résumer et analyser le contenu", "Reconnaître les liens entre documents", "Trouver des documents pertinents", "Identifier les délais et montants", "Créer des analyses basées sur les données réelles"],
             "case_support": "**Support de dossiers**: Tu peux:",
-            "case_abilities": ["Suggérer des documents pour les dossiers", "Créer des références croisées", "Aider avec les réponses"],
+            "case_abilities": ["Suggérer des documents", "Créer des références croisées", "Aider avec les réponses"],
             "assistant": "**Assistance personnelle**: Tu peux:",
-            "assistant_abilities": ["Suivre les tâches et rendez-vous", "Rappeler les délais", "Donner des recommandations"],
+            "assistant_abilities": ["Suivre les tâches", "Rappeler les délais", "Donner des recommandations"],
             "rules_title": "RÈGLES IMPORTANTES:",
-            "rules": ["JAMAIS inventer des faits", "Demander en cas de doute", "Référencer clairement les documents", "Donner des recommandations pratiques", "TOUJOURS RÉPONDRE EN FRANÇAIS"]
+            "rules": ["JAMAIS inventer des faits", "Toujours nommer les documents par leur nom complet", "Analyses concrètes basées sur les données réelles", "TOUJOURS RÉPONDRE EN FRANÇAIS"]
         },
         "es": {
             "instruction": """REGLA MÁS IMPORTANTE - IDIOMA:
-DEBES responder SIEMPRE y EXCLUSIVAMENTE en ESPAÑOL!
-Cada respuesta debe ser completamente en español.
-Esto aplica independientemente del idioma de la pregunta.
-NO uses palabras en inglés o alemán!""",
-            "system_intro": "Eres CaseDesk AI, un asistente de IA personal y agente para la gestión de documentos y casos. Tienes acceso a todos los documentos, casos, tareas y citas del usuario.",
+DEBES responder SIEMPRE y EXCLUSIVAMENTE en ESPAÑOL!""",
+            "system_intro": "Eres CaseDesk AI, un asistente de IA inteligente para gestión de documentos. Tienes acceso COMPLETO a todos los documentos del usuario.",
             "capabilities_title": "TUS CAPACIDADES:",
-            "doc_knowledge": "**Conocimiento de documentos**: Conoces todos los documentos del usuario y puedes:",
-            "doc_abilities": ["Resumir contenido", "Reconocer conexiones entre documentos", "Encontrar documentos relevantes", "Identificar plazos"],
+            "doc_knowledge": "**Conocimiento de documentos**: Conoces TODOS los documentos y puedes:",
+            "doc_abilities": ["Resumir y analizar contenido", "Reconocer conexiones entre documentos", "Encontrar documentos relevantes", "Identificar plazos y montos", "Crear análisis basados en datos reales"],
             "case_support": "**Soporte de casos**: Puedes:",
-            "case_abilities": ["Sugerir documentos para casos", "Crear referencias cruzadas", "Ayudar con respuestas"],
+            "case_abilities": ["Sugerir documentos", "Crear referencias cruzadas", "Ayudar con respuestas"],
             "assistant": "**Asistencia personal**: Puedes:",
-            "assistant_abilities": ["Seguir tareas y citas", "Recordar plazos", "Dar recomendaciones"],
+            "assistant_abilities": ["Seguir tareas", "Recordar plazos", "Dar recomendaciones"],
             "rules_title": "REGLAS IMPORTANTES:",
-            "rules": ["NUNCA inventar hechos", "Preguntar cuando hay duda", "Referenciar documentos claramente", "Dar recomendaciones prácticas", "SIEMPRE RESPONDER EN ESPAÑOL"]
+            "rules": ["NUNCA inventar hechos", "Siempre nombrar documentos por su nombre completo", "Análisis concretos basados en datos reales", "SIEMPRE RESPONDER EN ESPAÑOL"]
         }
     }
     
@@ -355,83 +380,87 @@ NO uses palabras en inglés o alemán!""",
         return await self.ai.generate(prompt, system_prompt, max_tokens=3000)
     
     def _build_context(self, context: Dict[str, Any], message: str, language: str = "de") -> str:
-        """Build a comprehensive context string for the AI in the user's language"""
+        """Build a comprehensive context string for the AI with FULL document knowledge"""
         parts = []
         
         # Language-specific labels
         labels = {
-            "de": {"current_case": "AKTUELLER FALL", "title": "Titel", "desc": "Beschreibung", "status": "Status", "ref": "Aktenzeichen", "not_specified": "Nicht angegeben", "docs_in_case": "Dokumente in diesem Fall", "sender": "Absender", "date": "Datum", "summary": "Zusammenfassung", "content": "Inhalt (Auszug)", "all_docs": "ALLE DOKUMENTE DES BENUTZERS", "from": "Von", "type": "Typ", "case": "Fall", "all_cases": "ALLE FÄLLE", "open_tasks": "OFFENE AUFGABEN", "due": "Fällig", "priority": "Priorität", "events": "ANSTEHENDE TERMINE"},
-            "en": {"current_case": "CURRENT CASE", "title": "Title", "desc": "Description", "status": "Status", "ref": "Reference", "not_specified": "Not specified", "docs_in_case": "Documents in this case", "sender": "Sender", "date": "Date", "summary": "Summary", "content": "Content (excerpt)", "all_docs": "ALL USER DOCUMENTS", "from": "From", "type": "Type", "case": "Case", "all_cases": "ALL CASES", "open_tasks": "OPEN TASKS", "due": "Due", "priority": "Priority", "events": "UPCOMING EVENTS"},
-            "fr": {"current_case": "DOSSIER ACTUEL", "title": "Titre", "desc": "Description", "status": "Statut", "ref": "Référence", "not_specified": "Non spécifié", "docs_in_case": "Documents dans ce dossier", "sender": "Expéditeur", "date": "Date", "summary": "Résumé", "content": "Contenu (extrait)", "all_docs": "TOUS LES DOCUMENTS", "from": "De", "type": "Type", "case": "Dossier", "all_cases": "TOUS LES DOSSIERS", "open_tasks": "TÂCHES OUVERTES", "due": "Échéance", "priority": "Priorité", "events": "ÉVÉNEMENTS À VENIR"},
-            "es": {"current_case": "CASO ACTUAL", "title": "Título", "desc": "Descripción", "status": "Estado", "ref": "Referencia", "not_specified": "No especificado", "docs_in_case": "Documentos en este caso", "sender": "Remitente", "date": "Fecha", "summary": "Resumen", "content": "Contenido (extracto)", "all_docs": "TODOS LOS DOCUMENTOS", "from": "De", "type": "Tipo", "case": "Caso", "all_cases": "TODOS LOS CASOS", "open_tasks": "TAREAS ABIERTAS", "due": "Vence", "priority": "Prioridad", "events": "EVENTOS PRÓXIMOS"}
+            "de": {"current_case": "AKTUELLER FALL", "title": "Titel", "desc": "Beschreibung", "status": "Status", "ref": "Aktenzeichen", "not_specified": "Nicht angegeben", "docs_in_case": "Dokumente in diesem Fall", "sender": "Absender", "date": "Datum", "summary": "Zusammenfassung", "content": "Inhalt", "all_docs": "ALLE DOKUMENTE DES BENUTZERS (vollständig bekannt)", "from": "Von", "type": "Typ", "case": "Fall", "all_cases": "ALLE FÄLLE", "open_tasks": "OFFENE AUFGABEN", "due": "Fällig", "priority": "Priorität", "events": "ANSTEHENDE TERMINE", "download_hint": "Dokumente können vom Benutzer heruntergeladen werden."},
+            "en": {"current_case": "CURRENT CASE", "title": "Title", "desc": "Description", "status": "Status", "ref": "Reference", "not_specified": "Not specified", "docs_in_case": "Documents in this case", "sender": "Sender", "date": "Date", "summary": "Summary", "content": "Content", "all_docs": "ALL USER DOCUMENTS (fully known)", "from": "From", "type": "Type", "case": "Case", "all_cases": "ALL CASES", "open_tasks": "OPEN TASKS", "due": "Due", "priority": "Priority", "events": "UPCOMING EVENTS", "download_hint": "Documents can be downloaded by the user."},
+            "fr": {"current_case": "DOSSIER ACTUEL", "title": "Titre", "desc": "Description", "status": "Statut", "ref": "Référence", "not_specified": "Non spécifié", "docs_in_case": "Documents dans ce dossier", "sender": "Expéditeur", "date": "Date", "summary": "Résumé", "content": "Contenu", "all_docs": "TOUS LES DOCUMENTS", "from": "De", "type": "Type", "case": "Dossier", "all_cases": "TOUS LES DOSSIERS", "open_tasks": "TÂCHES OUVERTES", "due": "Échéance", "priority": "Priorité", "events": "ÉVÉNEMENTS À VENIR", "download_hint": "Les documents peuvent être téléchargés."},
+            "es": {"current_case": "CASO ACTUAL", "title": "Título", "desc": "Descripción", "status": "Estado", "ref": "Referencia", "not_specified": "No especificado", "docs_in_case": "Documentos en este caso", "sender": "Remitente", "date": "Fecha", "summary": "Resumen", "content": "Contenido", "all_docs": "TODOS LOS DOCUMENTOS", "from": "De", "type": "Tipo", "case": "Caso", "all_cases": "TODOS LOS CASOS", "open_tasks": "TAREAS ABIERTAS", "due": "Vence", "priority": "Prioridad", "events": "EVENTOS PRÓXIMOS", "download_hint": "Los documentos se pueden descargar."}
         }
-        l = labels.get(language, labels["en"])
+        lbl = labels.get(language, labels["de"])
         
         # Current case context
         if context.get("current_case"):
             case = context["current_case"]
-            parts.append(f"## {l['current_case']}\n{l['title']}: {case.get('title')}\n{l['desc']}: {case.get('description')}\n{l['status']}: {case.get('status')}\n{l['ref']}: {case.get('reference_number', l['not_specified'])}")
+            parts.append(f"## {lbl['current_case']}\n{lbl['title']}: {case.get('title')}\n{lbl['desc']}: {case.get('description')}\n{lbl['status']}: {case.get('status')}\n{lbl['ref']}: {case.get('reference_number', lbl['not_specified'])}")
             
             if context.get("case_documents"):
-                parts.append("\n### Dokumente in diesem Fall:")
+                parts.append(f"\n### {lbl['docs_in_case']}:")
                 for doc in context["case_documents"]:
                     doc_info = f"- **{doc.get('display_name', doc.get('original_filename'))}**"
                     if doc.get('sender'):
-                        doc_info += f" | Absender: {doc['sender']}"
+                        doc_info += f" | {lbl['sender']}: {doc['sender']}"
                     if doc.get('document_date'):
-                        doc_info += f" | Datum: {doc['document_date']}"
+                        doc_info += f" | {lbl['date']}: {doc['document_date']}"
                     if doc.get('ai_summary'):
-                        doc_info += f"\n  Zusammenfassung: {doc['ai_summary']}"
+                        doc_info += f"\n  {lbl['summary']}: {doc['ai_summary']}"
                     if doc.get('ocr_text'):
-                        doc_info += f"\n  Inhalt (Auszug): {doc['ocr_text'][:800]}..."
+                        doc_info += f"\n  {lbl['content']}: {doc['ocr_text'][:2000]}"
                     parts.append(doc_info)
         
-        # All documents overview
+        # All documents overview - include full content for deep knowledge
         if context.get("all_documents"):
-            parts.append("\n## ALLE DOKUMENTE DES BENUTZERS")
-            for doc in context["all_documents"][:50]:  # Limit to 50 docs
+            parts.append(f"\n## {lbl['all_docs']}")
+            parts.append(f"({lbl['download_hint']})")
+            for doc in context["all_documents"][:50]:
                 doc_info = f"- **{doc.get('display_name', doc.get('original_filename'))}**"
                 if doc.get('sender'):
-                    doc_info += f" | Von: {doc['sender']}"
+                    doc_info += f" | {lbl['from']}: {doc['sender']}"
                 if doc.get('document_type'):
-                    doc_info += f" | Typ: {doc['document_type']}"
+                    doc_info += f" | {lbl['type']}: {doc['document_type']}"
+                if doc.get('document_date'):
+                    doc_info += f" | {lbl['date']}: {doc['document_date']}"
                 if doc.get('tags'):
                     doc_info += f" | Tags: {', '.join(doc['tags'][:5])}"
                 if doc.get('case_id'):
-                    # Find case name
                     for c in context.get("all_cases", []):
                         if c["id"] == doc["case_id"]:
-                            doc_info += f" | Fall: {c['title']}"
+                            doc_info += f" | {lbl['case']}: {c['title']}"
                             break
                 if doc.get('ai_summary'):
-                    doc_info += f"\n  → {doc['ai_summary'][:200]}"
+                    doc_info += f"\n  {lbl['summary']}: {doc['ai_summary']}"
+                if doc.get('ocr_text'):
+                    doc_info += f"\n  {lbl['content']}: {doc['ocr_text'][:1500]}"
                 parts.append(doc_info)
         
         # All cases overview
         if context.get("all_cases"):
-            parts.append("\n## ALLE FÄLLE")
+            parts.append(f"\n## {lbl['all_cases']}")
             for case in context["all_cases"]:
-                case_info = f"- **{case.get('title')}** | Status: {case.get('status')}"
+                case_info = f"- **{case.get('title')}** | {lbl['status']}: {case.get('status')}"
                 if case.get('reference_number'):
-                    case_info += f" | Aktenzeichen: {case['reference_number']}"
+                    case_info += f" | {lbl['ref']}: {case['reference_number']}"
                 if case.get('description'):
                     case_info += f"\n  {case['description'][:150]}"
                 parts.append(case_info)
         
         # Open tasks
         if context.get("open_tasks"):
-            parts.append("\n## OFFENE AUFGABEN")
+            parts.append(f"\n## {lbl['open_tasks']}")
             for task in context["open_tasks"]:
                 task_info = f"- **{task.get('title')}**"
                 if task.get('due_date'):
-                    task_info += f" | Fällig: {task['due_date']}"
+                    task_info += f" | {lbl['due']}: {task['due_date']}"
                 if task.get('priority'):
-                    task_info += f" | Priorität: {task['priority']}"
+                    task_info += f" | {lbl['priority']}: {task['priority']}"
                 parts.append(task_info)
         
         # Upcoming events
         if context.get("upcoming_events"):
-            parts.append("\n## ANSTEHENDE TERMINE")
+            parts.append(f"\n## {lbl['events']}")
             for event in context["upcoming_events"]:
                 event_info = f"- **{event.get('title')}** | {event.get('start_date')}"
                 parts.append(event_info)
