@@ -175,7 +175,7 @@ class DocumentBase(BaseDocument):
     original_filename: str
     mime_type: str
     size: int
-    document_type: DocumentType = DocumentType.OTHER
+    document_type: str = "other"
 
 
 class DocumentCreate(DocumentBase):
@@ -186,14 +186,20 @@ class Document(DocumentBase):
     id: str = Field(default_factory=generate_uuid)
     user_id: str
     case_id: Optional[str] = None
+    display_name: Optional[str] = None
     storage_path: str
     ocr_text: Optional[str] = None
     ocr_processed: bool = False
+    ai_analyzed: bool = False
+    ai_summary: Optional[str] = None
+    tags: List[str] = []
     metadata: dict = {}
     sender: Optional[str] = None
     recipient: Optional[str] = None
-    document_date: Optional[datetime] = None
-    deadline: Optional[datetime] = None
+    document_date: Optional[str] = None
+    deadline: Optional[str] = None
+    deadlines: List = []
+    importance: Optional[str] = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 

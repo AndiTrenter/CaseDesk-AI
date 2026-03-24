@@ -10,12 +10,77 @@ import json
 import httpx
 import aiofiles
 import logging
+import io
 
 from deps import db, require_auth, log_action, UPLOAD_DIR, OCR_SERVICE_URL
 from models import Document
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def extract_text_from_pdf(content: bytes) -> str:
+    """Fallback: Extract text directly from PDF, with OCR for scanned pages"""
+    text_parts = []
+
+    # First try: Extract embedded text with PyPDF2
+    try:
+        from PyPDF2 import PdfReader
+        reader = PdfReader(io.BytesIO(content))
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text and page_text.strip():
+                text_parts.append(page_text)
+    except Exception as e:
+        logger.warning(f"PyPDF2 extraction failed: {e}")
+
+    # If we got text from embedded text, return it
+    if text_parts and sum(len(t) for t in text_parts) > 50:
+        return "\n".join(text_parts)
+
+    # Second try: OCR scanned pages with tesseract
+    try:
+        from pdf2image import convert_from_bytes
+        import pytesseract
+
+        images = convert_from_bytes(content, dpi=300)
+        ocr_parts = []
+        for i, img in enumerate(images):
+            page_text = pytesseract.image_to_string(img, lang='deu+eng')
+            if page_text and page_text.strip():
+                ocr_parts.append(page_text)
+        if ocr_parts:
+            return "\n".join(ocr_parts)
+    except Exception as e:
+        logger.warning(f"Tesseract OCR fallback failed: {e}")
+
+    return "\n".join(text_parts)
+
+
+async def try_ocr_or_fallback(filename: str, content: bytes, mime_type: str) -> str:
+    """Try OCR service first, fall back to direct PDF text extraction"""
+    ocr_text = ""
+
+    # Try OCR service
+    if mime_type in ["application/pdf", "image/png", "image/jpeg", "image/tiff"]:
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                ocr_response = await client.post(
+                    f"{OCR_SERVICE_URL}/ocr",
+                    files={"file": (filename, content, mime_type)}
+                )
+                if ocr_response.status_code == 200:
+                    ocr_data = ocr_response.json()
+                    ocr_text = ocr_data.get("text", "")
+        except Exception as e:
+            logger.warning(f"OCR service unavailable: {e}")
+
+    # Fallback: direct PDF text extraction
+    if not ocr_text and mime_type == "application/pdf":
+        logger.info("Using fallback PDF text extraction")
+        ocr_text = extract_text_from_pdf(content)
+
+    return ocr_text
 
 
 @router.get("/documents")
@@ -110,19 +175,7 @@ async def upload_document(
     
     # Background AI processing
     try:
-        ocr_text = None
-        if file.content_type in ["application/pdf", "image/png", "image/jpeg", "image/tiff"]:
-            try:
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    ocr_response = await client.post(
-                        f"{OCR_SERVICE_URL}/ocr",
-                        files={"file": (file.filename, content, file.content_type)}
-                    )
-                    if ocr_response.status_code == 200:
-                        ocr_data = ocr_response.json()
-                        ocr_text = ocr_data.get("text", "")
-            except Exception as e:
-                logger.warning(f"OCR service unavailable: {e}")
+        ocr_text = await try_ocr_or_fallback(file.filename, content, file.content_type)
         
         if ocr_text:
             from ai_service import get_ai_service, DocumentAnalyzer
@@ -213,14 +266,9 @@ async def reprocess_document(document_id: str, user: dict = Depends(require_auth
             async with aiofiles.open(document["storage_path"], 'rb') as f:
                 content = await f.read()
             
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                ocr_response = await client.post(
-                    f"{OCR_SERVICE_URL}/ocr",
-                    files={"file": (document["original_filename"], content, document["mime_type"])}
-                )
-                if ocr_response.status_code == 200:
-                    ocr_data = ocr_response.json()
-                    ocr_text = ocr_data.get("text", "")
+            ocr_text = await try_ocr_or_fallback(
+                document["original_filename"], content, document["mime_type"]
+            )
         except Exception as e:
             logger.warning(f"OCR reprocess error: {e}")
     
@@ -279,23 +327,18 @@ async def process_document_ocr(document_id: str, user: dict = Depends(require_au
         async with aiofiles.open(document["storage_path"], 'rb') as f:
             content = await f.read()
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            ocr_response = await client.post(
-                f"{OCR_SERVICE_URL}/ocr",
-                files={"file": (document["original_filename"], content, document["mime_type"])}
+        ocr_text = await try_ocr_or_fallback(
+            document["original_filename"], content, document["mime_type"]
+        )
+        
+        if ocr_text:
+            await db.documents.update_one(
+                {"id": document_id},
+                {"$set": {"ocr_text": ocr_text, "ocr_processed": True, "updated_at": datetime.now(timezone.utc).isoformat()}}
             )
-            if ocr_response.status_code == 200:
-                ocr_data = ocr_response.json()
-                ocr_text = ocr_data.get("text", "")
-                
-                await db.documents.update_one(
-                    {"id": document_id},
-                    {"$set": {"ocr_text": ocr_text, "ocr_processed": True, "updated_at": datetime.now(timezone.utc).isoformat()}}
-                )
-                
-                return {"success": True, "ocr_text": ocr_text[:500]}
-            else:
-                return {"success": False, "error": "OCR service error"}
+            return {"success": True, "ocr_text": ocr_text[:500]}
+        else:
+            return {"success": False, "error": "No text could be extracted"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -417,6 +460,72 @@ async def update_document(
     
     updated = await db.documents.find_one({"id": document_id}, {"_id": 0})
     return {"success": True, "document": updated}
+
+
+@router.post("/documents/batch-reprocess")
+async def batch_reprocess_documents(user: dict = Depends(require_auth)):
+    """Reprocess all unprocessed documents using fallback text extraction + AI analysis"""
+    unprocessed = await db.documents.find(
+        {"user_id": user["id"], "ocr_processed": {"$ne": True}},
+        {"_id": 0}
+    ).to_list(100)
+
+    processed = 0
+    errors = 0
+
+    for doc in unprocessed:
+        try:
+            storage_path = doc.get("storage_path", "")
+            if not storage_path or not os.path.exists(storage_path):
+                continue
+
+            async with aiofiles.open(storage_path, 'rb') as f:
+                content = await f.read()
+
+            ocr_text = await try_ocr_or_fallback(
+                doc["original_filename"], content, doc["mime_type"]
+            )
+
+            if ocr_text:
+                from ai_service import get_ai_service, DocumentAnalyzer
+                ai_service = await get_ai_service(db)
+                analyzer = DocumentAnalyzer(ai_service)
+                analysis = await analyzer.analyze_document(ocr_text, doc["original_filename"])
+
+                now = datetime.now(timezone.utc).isoformat()
+                if analysis.get("success"):
+                    metadata = analysis.get("metadata", {})
+                    update_data = {
+                        "ocr_text": ocr_text,
+                        "ocr_processed": True,
+                        "ai_analyzed": True,
+                        "display_name": analysis.get("new_filename", doc["display_name"]),
+                        "document_type": metadata.get("dokumenttyp", doc.get("document_type", "other")).lower(),
+                        "tags": metadata.get("tags", []),
+                        "ai_summary": metadata.get("zusammenfassung"),
+                        "sender": metadata.get("absender"),
+                        "importance": metadata.get("wichtigkeit", "mittel"),
+                        "deadlines": metadata.get("fristen", []),
+                        "metadata": metadata,
+                        "updated_at": now
+                    }
+                    if metadata.get("datum") and metadata["datum"] != "null":
+                        update_data["document_date"] = metadata["datum"]
+                    await db.documents.update_one({"id": doc["id"]}, {"$set": update_data})
+                else:
+                    await db.documents.update_one(
+                        {"id": doc["id"]},
+                        {"$set": {"ocr_text": ocr_text, "ocr_processed": True, "updated_at": now}}
+                    )
+                processed += 1
+            else:
+                errors += 1
+        except Exception as e:
+            logger.error(f"Batch reprocess error for {doc['id']}: {e}")
+            errors += 1
+
+    return {"success": True, "processed": processed, "errors": errors, "total": len(unprocessed)}
+
 
 
 @router.post("/documents/assign-case")
