@@ -70,8 +70,8 @@ const AppRoutes = () => {
     );
   }
 
-  // Show setup wizard if not completed
-  if (!setupStatus?.setup_completed) {
+  // Show setup wizard if not configured (has_admin or is_configured)
+  if (!setupStatus?.is_configured && !setupStatus?.has_admin) {
     return <SetupWizard onComplete={() => checkSetup()} />;
   }
 
