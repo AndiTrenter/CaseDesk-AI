@@ -208,6 +208,34 @@ export const aiAPI = {
       timeout: 120000
     });
   },
+  // AI Action endpoints
+  parseAction: (message) => {
+    const formData = new FormData();
+    formData.append('message', message);
+    return api.post('/ai/parse-action', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000
+    });
+  },
+  executeAction: (actionType, actionData, confirmed = true) => {
+    const formData = new FormData();
+    formData.append('action_type', actionType);
+    formData.append('action_data', JSON.stringify(actionData));
+    formData.append('confirmed', confirmed);
+    return api.post('/ai/execute-action', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000
+    });
+  },
+  searchCorrespondence: (query) => api.get('/ai/correspondence-search', { params: { query }, timeout: 60000 }),
+  sendCorrespondence: (correspondenceId, mailAccountId, recipientEmail) => {
+    const formData = new FormData();
+    formData.append('mail_account_id', mailAccountId);
+    formData.append('recipient_email', recipientEmail);
+    return api.post(`/ai/send-correspondence/${correspondenceId}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
 };
 
 // Proactive AI

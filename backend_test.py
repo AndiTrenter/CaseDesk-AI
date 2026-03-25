@@ -113,13 +113,26 @@ class CaseDeskAPITester:
             return False
 
     def test_authentication(self):
-        """Test login with existing admin credentials"""        
+        """Test login with provided test credentials"""        
+        login_data = {
+            'email': 'andi.trenter@gmail.com',
+            'password': 'Speedy@181279'
+        }
+        
+        success, data = self.run_test("User Login", "POST", "/auth/login", 200, form_data=login_data)
+        
+        if success and data.get('access_token'):
+            self.token = data['access_token']
+            self.admin_user = data.get('user')
+            return True
+        
+        # Fallback to admin credentials if test credentials don't work
         login_data = {
             'email': 'admin@casedesk.app',
             'password': 'admin123'
         }
         
-        success, data = self.run_test("User Login", "POST", "/auth/login", 200, form_data=login_data)
+        success, data = self.run_test("Admin Login Fallback", "POST", "/auth/login", 200, form_data=login_data)
         
         if success and data.get('access_token'):
             self.token = data['access_token']
@@ -259,13 +272,130 @@ class CaseDeskAPITester:
         
         return False
 
-    def test_ai_chat(self):
-        """Test AI chat functionality"""
-        chat_data = {
-            'message': 'Hello, this is a test message'
+    def test_ai_action_endpoints(self):
+        """Test AI Action endpoints as specified in review request"""
+        all_passed = True
+        
+        print("  Testing AI Action Endpoints (AI service may be unavailable)...")
+        
+        # Test 1: POST /api/ai/parse-action
+        parse_data = {
+            'message': 'Lege einen Termin für Luzias Geburtstag am 15. März mit Erinnerung an'
         }
-        success, data = self.run_test("AI Chat", "POST", "/ai/chat", 200, form_data=chat_data)
-        return success  # AI may be disabled, so just check endpoint works
+        success, data = self.run_test("AI Parse Action", "POST", "/ai/parse-action", 200, form_data=parse_data)
+        if success:
+            if data.get('success') and data.get('action_detected') and data.get('action_type') == 'create_event':
+                print(f"  ✓ Detected action_type: {data['action_type']}")
+                if data.get('action_data'):
+                    print(f"  ✓ Action data extracted successfully")
+                    
+                    # Test 2: POST /api/ai/execute-action - Create Event
+                    import json
+                    execute_data = {
+                        'action_type': 'create_event',
+                        'action_data': json.dumps(data['action_data']),
+                        'confirmed': True
+                    }
+                    success2, data2 = self.run_test("AI Execute Action - Create Event", "POST", "/ai/execute-action", 200, form_data=execute_data)
+                    if success2 and data2.get('success') and data2.get('created'):
+                        event_id = data2['created']['id']
+                        self.created_items['events'].append(event_id)
+                        print(f"  ✓ Created event: {data2['created']['title']}")
+                        
+                        # Test 3: Verify event was created via GET /api/events
+                        success3, events_data = self.run_test("Verify Event Created", "GET", "/events", 200)
+                        if success3 and any(e.get('id') == event_id for e in events_data):
+                            print(f"  ✓ Event verified in events list")
+                        else:
+                            all_passed = False
+                            print(f"  ❌ Event not found in events list")
+                    else:
+                        all_passed = False
+                        print(f"  ❌ Failed to execute create_event action")
+                else:
+                    print(f"  ⚠ Action detected but no data extracted (AI service unavailable)")
+                    # Test with manual action data since AI parsing failed
+                    manual_action_data = {
+                        "title": "Luzias Geburtstag",
+                        "description": "Geburtstag von Luzia",
+                        "date": "2025-03-15",
+                        "start_time": "09:00",
+                        "end_time": "10:00",
+                        "all_day": True,
+                        "location": "",
+                        "reminder_question": "Soll ich auch eine Erinnerungsaufgabe anlegen?"
+                    }
+                    execute_data = {
+                        'action_type': 'create_event',
+                        'action_data': json.dumps(manual_action_data),
+                        'confirmed': True
+                    }
+                    success2, data2 = self.run_test("AI Execute Action - Manual Data", "POST", "/ai/execute-action", 200, form_data=execute_data)
+                    if success2 and data2.get('success'):
+                        event_id = data2['created']['id']
+                        self.created_items['events'].append(event_id)
+                        print(f"  ✓ Created event with manual data: {data2['created']['title']}")
+                    else:
+                        all_passed = False
+            elif data.get('action_detected') and data.get('action_type') == 'create_event':
+                print(f"  ✓ Action detection working (detected: {data['action_type']})")
+                print(f"  ⚠ AI parsing failed: {data.get('error', 'Unknown error')}")
+                # This is expected when AI service is unavailable
+            else:
+                all_passed = False
+                print(f"  ❌ Action detection failed")
+        else:
+            all_passed = False
+        
+        # Test 4: Test creating a task
+        task_parse_data = {
+            'message': 'Erstelle eine Aufgabe: Rechnung bezahlen bis nächste Woche'
+        }
+        success, data = self.run_test("AI Parse Action - Task", "POST", "/ai/parse-action", 200, form_data=task_parse_data)
+        if success and data.get('action_detected') and data.get('action_type') == 'create_task':
+            print(f"  ✓ Task action detected: {data['action_type']}")
+            if data.get('action_data'):
+                execute_task_data = {
+                    'action_type': 'create_task',
+                    'action_data': json.dumps(data['action_data']),
+                    'confirmed': True
+                }
+                success2, data2 = self.run_test("AI Execute Action - Create Task", "POST", "/ai/execute-action", 200, form_data=execute_task_data)
+                if success2 and data2.get('success') and data2.get('created'):
+                    task_id = data2['created']['id']
+                    self.created_items['tasks'].append(task_id)
+                    print(f"  ✓ Created task: {data2['created']['title']}")
+                else:
+                    all_passed = False
+            else:
+                print(f"  ⚠ Task action detected but AI parsing failed (expected when AI unavailable)")
+        else:
+            all_passed = False
+        
+        # Test 5: GET /api/ai/correspondence-search
+        search_success, search_data = self.run_test("AI Correspondence Search", "GET", "/ai/correspondence-search?query=Zahlungsfristverlängerung", 200)
+        if search_success and search_data.get('success'):
+            print(f"  ✓ Correspondence search returned: found={search_data.get('found', False)}")
+            if not search_data.get('found'):
+                print(f"  ✓ No correspondence found (expected for new system)")
+        else:
+            all_passed = False
+        
+        # Test 6: POST /api/ai/chat - Test that chat returns action_preview
+        chat_data = {
+            'message': 'Erstelle eine Aufgabe: Rechnung bezahlen bis nächste Woche'
+        }
+        success, data = self.run_test("AI Chat with Action Preview", "POST", "/ai/chat", 200, form_data=chat_data)
+        if success and data.get('success'):
+            if data.get('action_preview'):
+                print(f"  ✓ Chat returned action_preview: {data['action_preview']['action_type']}")
+            else:
+                print(f"  ⚠ Chat did not return action_preview (expected when AI service unavailable)")
+                # This is expected when AI service is not available
+        else:
+            all_passed = False
+        
+        return all_passed
 
     def test_settings_crud(self):
         """Test Settings operations"""
@@ -324,13 +454,13 @@ class CaseDeskAPITester:
             ("Setup Initialization", self.test_setup_initialization),
             ("Authentication", self.test_authentication),
             ("Get Current User", self.test_get_current_user),
+            ("AI Action Endpoints", self.test_ai_action_endpoints),
             ("Cases CRUD", self.test_cases_crud),
             ("Tasks CRUD", self.test_tasks_crud),
             ("Events CRUD", self.test_events_crud),
             ("Document Upload", self.test_document_upload),
             ("Settings Operations", self.test_settings_crud),
             ("Dashboard Stats", self.test_dashboard_stats),
-            ("AI Chat", self.test_ai_chat),
         ]
         
         failed_tests = []

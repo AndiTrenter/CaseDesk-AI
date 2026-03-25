@@ -1,14 +1,141 @@
-"""AI Chat & Proactive Router"""
+"""AI Chat & Proactive Router with Action Recognition"""
 from fastapi import APIRouter, HTTPException, Depends, Form
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, timezone, timedelta
+from typing import Optional, List
 import uuid
 import logging
+import json
+import re
 
 from deps import db, require_auth, log_action, get_user_language
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+# Action detection patterns for German language
+ACTION_PATTERNS = {
+    "create_event": [
+        r"(?:lege|erstelle|mach|plane).*(?:termin|ereignis|eintrag).*(?:an|für)",
+        r"(?:termin|kalendereintrag).*(?:anlegen|erstellen|eintragen)",
+        r"(?:trag|notier).*(?:in den kalender|termin)"
+    ],
+    "create_task": [
+        r"(?:lege|erstelle|mach).*(?:aufgabe|task|todo|to-do).*(?:an|für)",
+        r"(?:aufgabe|task).*(?:anlegen|erstellen)",
+        r"erinnere mich.*(?:an|dass)"
+    ],
+    "create_case": [
+        r"(?:lege|erstelle|eröffne).*(?:fall|akte|vorgang).*(?:an|für)",
+        r"(?:fall|akte|vorgang).*(?:anlegen|erstellen|eröffnen)"
+    ],
+    "send_email": [
+        r"(?:erstelle|schreibe|verfasse).*(?:e-?mail|nachricht|schreiben).*(?:an|für)",
+        r"(?:e-?mail|nachricht).*(?:senden|schicken|schreiben).*(?:an|für)",
+        r"schreib.*(?:an|der|dem).*(?:krankenkasse|versicherung|bank|amt|behörde|arbeitgeber)"
+    ]
+}
+
+
+def detect_action_intent(message: str) -> Optional[str]:
+    """Detect if the user message contains an action intent"""
+    message_lower = message.lower()
+    for action_type, patterns in ACTION_PATTERNS.items():
+        for pattern in patterns:
+            if re.search(pattern, message_lower):
+                return action_type
+    return None
+
+
+async def parse_action_data(message: str, user: dict, action_type: str) -> dict:
+    """Parse action data from message using AI"""
+    from ai_service import get_ai_service
+    
+    ai_service = await get_ai_service(db)
+    
+    # Get user profile for context
+    user_data = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
+    onboarding = await db.user_onboarding.find_one({"user_id": user["id"]}, {"_id": 0})
+    
+    user_name = onboarding.get("full_name") if onboarding else user_data.get("full_name", user_data.get("username", ""))
+    user_address = onboarding.get("address", "") if onboarding else ""
+    
+    now = datetime.now(timezone.utc)
+    current_date = now.strftime("%Y-%m-%d")
+    current_year = now.year
+    
+    if action_type == "create_event":
+        system_prompt = f"""Du bist ein Assistent der Kalendereinträge aus natürlicher Sprache extrahiert.
+Heute ist der {current_date}.
+
+Extrahiere folgende Informationen und antworte NUR mit validem JSON:
+{{
+    "title": "Titel des Termins",
+    "description": "Beschreibung (optional)",
+    "date": "YYYY-MM-DD",
+    "start_time": "HH:MM",
+    "end_time": "HH:MM",
+    "all_day": true/false,
+    "location": "Ort wenn angegeben",
+    "ask_reminder": true
+}}
+
+Wenn kein Jahr angegeben, verwende {current_year} oder {current_year + 1}."""
+
+    elif action_type == "create_task":
+        system_prompt = f"""Du bist ein Assistent der Aufgaben aus natürlicher Sprache extrahiert.
+Heute ist der {current_date}.
+
+Extrahiere folgende Informationen und antworte NUR mit validem JSON:
+{{
+    "title": "Titel der Aufgabe",
+    "description": "Beschreibung",
+    "due_date": "YYYY-MM-DD oder null",
+    "priority": "low/medium/high/urgent"
+}}"""
+
+    elif action_type == "create_case":
+        system_prompt = """Du bist ein Assistent der Fallakten aus natürlicher Sprache extrahiert.
+
+Extrahiere und antworte NUR mit validem JSON:
+{
+    "title": "Titel des Falls",
+    "description": "Beschreibung",
+    "reference_number": "Aktenzeichen oder null"
+}"""
+
+    elif action_type == "send_email":
+        system_prompt = f"""Du bist ein Assistent der E-Mail-Anfragen extrahiert.
+
+BENUTZERDATEN:
+Name: {user_name}
+Adresse: {user_address}
+E-Mail: {user_data.get('email', '')}
+
+Extrahiere und antworte NUR mit validem JSON:
+{{
+    "recipient": "Empfänger",
+    "recipient_email": "E-Mail wenn bekannt oder null",
+    "subject": "Betreff",
+    "purpose": "Zweck/Anliegen",
+    "draft_content": "Professioneller E-Mail-Entwurf",
+    "suggested_documents": ["Dokumenttypen als Anlage"],
+    "context": "Kurze Beschreibung für Nachverfolgung"
+}}"""
+    else:
+        return {"success": False, "error": "Unbekannter Aktionstyp"}
+
+    try:
+        result = await ai_service.generate(message, system_prompt, max_tokens=1500)
+        
+        json_match = re.search(r'\{[\s\S]*\}', result)
+        if json_match:
+            action_data = json.loads(json_match.group())
+            return {"success": True, "action_data": action_data}
+    except Exception as e:
+        logger.error(f"Parse action error: {e}")
+    
+    return {"success": False, "error": "Parsing fehlgeschlagen"}
 
 
 @router.post("/ai/chat")
@@ -146,11 +273,29 @@ async def ai_chat(
     }
     await db.chat_messages.insert_one(ai_msg)
     
+    # Detect if message contains an action intent
+    detected_action = detect_action_intent(message)
+    action_preview = None
+    
+    if detected_action:
+        try:
+            # Parse action data for preview
+            action_result = await parse_action_data(message, user, detected_action)
+            if action_result.get("success"):
+                action_preview = {
+                    "action_type": detected_action,
+                    "action_data": action_result.get("action_data"),
+                    "needs_confirmation": True
+                }
+        except Exception as e:
+            logger.error(f"Action detection error: {e}")
+    
     return {
         "success": True,
         "response": ai_response,
         "session_id": session_id,
-        "referenced_documents": referenced_docs
+        "referenced_documents": referenced_docs,
+        "action_preview": action_preview
     }
 
 
@@ -448,3 +593,460 @@ Regeln:
         logger.error(f"Suggestion error: {e}")
 
     return {"success": True, "suggested_tags": doc.get("tags", []), "suggested_cases": []}
+
+
+
+# ==================== AI Action Endpoints ====================
+
+@router.post("/ai/parse-action")
+async def parse_action_from_message(
+    message: str = Form(...),
+    user: dict = Depends(require_auth)
+):
+    """
+    Parse user message to extract structured action data using AI.
+    Returns action type and structured data for preview/confirmation.
+    """
+    from ai_service import get_ai_service
+    
+    # First, detect action type using patterns
+    action_type = detect_action_intent(message)
+    
+    if not action_type:
+        return {"success": False, "action_detected": False, "message": "Keine Aktion erkannt"}
+    
+    ai_service = await get_ai_service(db)
+    
+    # Get user profile for context (for email sender info etc.)
+    user_data = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
+    onboarding = await db.user_onboarding.find_one({"user_id": user["id"]}, {"_id": 0})
+    
+    user_name = onboarding.get("full_name") if onboarding else user_data.get("full_name", user_data.get("username", ""))
+    user_address = onboarding.get("address", "") if onboarding else ""
+    
+    # Get correspondence history for email tracking context
+    correspondence_history = await db.correspondence.find(
+        {"user_id": user["id"]},
+        {"_id": 0, "id": 1, "subject": 1, "recipient": 1, "type": 1, "status": 1, "sent_at": 1, "created_at": 1, "context": 1}
+    ).sort("created_at", -1).to_list(50)
+    
+    now = datetime.now(timezone.utc)
+    current_date = now.strftime("%Y-%m-%d")
+    current_year = now.year
+    
+    if action_type == "create_event":
+        system_prompt = f"""Du bist ein Assistent der Kalendereinträge aus natürlicher Sprache extrahiert.
+Heute ist der {current_date}.
+
+Extrahiere folgende Informationen aus der Benutzeranfrage und antworte NUR mit validem JSON:
+{{
+    "title": "Titel des Termins",
+    "description": "Beschreibung (optional)",
+    "date": "YYYY-MM-DD (das erkannte Datum)",
+    "start_time": "HH:MM (wenn angegeben, sonst '09:00')",
+    "end_time": "HH:MM (wenn angegeben, sonst '10:00')",
+    "all_day": true/false,
+    "location": "Ort wenn angegeben",
+    "reminder_question": "Soll ich auch eine Erinnerungsaufgabe anlegen? Falls ja, wie viele Tage vorher?"
+}}
+
+Regeln:
+- Wenn nur "Geburtstag" erwähnt wird, setze all_day auf true
+- Wenn kein Jahr angegeben, verwende {current_year} oder {current_year + 1} (je nachdem ob das Datum bereits vorbei ist)
+- Bei "nächsten Montag" etc. berechne das korrekte Datum
+- Stelle IMMER die reminder_question"""
+
+    elif action_type == "create_task":
+        system_prompt = f"""Du bist ein Assistent der Aufgaben aus natürlicher Sprache extrahiert.
+Heute ist der {current_date}.
+
+Extrahiere folgende Informationen und antworte NUR mit validem JSON:
+{{
+    "title": "Titel der Aufgabe",
+    "description": "Beschreibung (optional)",
+    "due_date": "YYYY-MM-DD (wenn Frist erkennbar)",
+    "priority": "low/medium/high/urgent (basierend auf Kontext)"
+}}"""
+
+    elif action_type == "create_case":
+        system_prompt = """Du bist ein Assistent der Fallakten aus natürlicher Sprache extrahiert.
+
+Extrahiere folgende Informationen und antworte NUR mit validem JSON:
+{
+    "title": "Titel des Falls",
+    "description": "Beschreibung des Falls",
+    "reference_number": "Aktenzeichen wenn angegeben (sonst null)"
+}"""
+
+    elif action_type == "send_email":
+        # Include correspondence history for tracking
+        history_text = ""
+        if correspondence_history:
+            history_text = "\n\nBISHERIGE KORRESPONDENZ:\n"
+            for h in correspondence_history[:20]:
+                status_text = "gesendet" if h.get("status") == "sent" else "Entwurf"
+                sent_info = f" am {h.get('sent_at', '')[:10]}" if h.get("sent_at") else ""
+                history_text += f"- {h.get('subject', 'Ohne Betreff')} an {h.get('recipient', 'Unbekannt')} ({status_text}{sent_info})\n"
+                if h.get("context"):
+                    history_text += f"  Kontext: {h.get('context')}\n"
+        
+        system_prompt = f"""Du bist ein Assistent der E-Mail-Anfragen aus natürlicher Sprache extrahiert.
+
+BENUTZERDATEN:
+Name: {user_name}
+Adresse: {user_address}
+E-Mail: {user_data.get('email', '')}
+{history_text}
+
+Extrahiere folgende Informationen und antworte NUR mit validem JSON:
+{{
+    "recipient": "Empfänger (z.B. 'Krankenkasse', 'AOK', 'Finanzamt')",
+    "recipient_email": "E-Mail-Adresse wenn bekannt (sonst null)",
+    "subject": "Betreff der E-Mail",
+    "purpose": "Zweck/Anliegen der E-Mail (z.B. 'Zahlungsfristverlängerung', 'Kündigung')",
+    "draft_content": "Entwurf des E-Mail-Textes (formal, höflich, professionell)",
+    "suggested_documents": ["Liste von Dokumenttypen die als Anlage nützlich wären"],
+    "context": "Kurze Beschreibung des Anliegens für die Nachverfolgung"
+}}
+
+Regeln:
+- Erstelle einen vollständigen, professionellen E-Mail-Entwurf
+- Verwende die Benutzerdaten für den Absender
+- Der Entwurf soll formal und höflich sein
+- Bei Behörden verwende "Sehr geehrte Damen und Herren"
+- Speichere den Kontext für spätere Nachverfolgung"""
+
+    try:
+        result = await ai_service.generate(message, system_prompt, max_tokens=1500)
+        
+        json_match = re.search(r'\{[\s\S]*\}', result)
+        if json_match:
+            action_data = json.loads(json_match.group())
+            
+            return {
+                "success": True,
+                "action_detected": True,
+                "action_type": action_type,
+                "action_data": action_data,
+                "original_message": message
+            }
+        else:
+            return {"success": False, "action_detected": True, "action_type": action_type, "error": "Konnte Daten nicht extrahieren"}
+            
+    except Exception as e:
+        logger.error(f"Action parse error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/ai/execute-action")
+async def execute_action(
+    action_type: str = Form(...),
+    action_data: str = Form(...),  # JSON string
+    confirmed: bool = Form(True),
+    user: dict = Depends(require_auth)
+):
+    """
+    Execute a confirmed action (create event, task, case, or email draft).
+    """
+    if not confirmed:
+        return {"success": False, "error": "Aktion wurde nicht bestätigt"}
+    
+    try:
+        data = json.loads(action_data)
+    except json.JSONDecodeError:
+        return {"success": False, "error": "Ungültige Aktionsdaten"}
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    if action_type == "create_event":
+        event_id = str(uuid.uuid4())
+        
+        # Parse date and time
+        event_date = data.get("date", now[:10])
+        start_time = data.get("start_time", "09:00")
+        end_time = data.get("end_time", "10:00")
+        
+        start_datetime = f"{event_date}T{start_time}:00"
+        end_datetime = f"{event_date}T{end_time}:00"
+        
+        event = {
+            "id": event_id,
+            "user_id": user["id"],
+            "title": data.get("title", "Neuer Termin"),
+            "description": data.get("description", ""),
+            "start_time": start_datetime,
+            "end_time": end_datetime,
+            "all_day": data.get("all_day", False),
+            "location": data.get("location"),
+            "case_id": data.get("case_id"),
+            "source": "ai_chat",
+            "created_at": now,
+            "updated_at": now
+        }
+        
+        await db.events.insert_one(event)
+        await log_action(user["id"], "create_event_via_ai", "event", event_id)
+        
+        # Create reminder task if requested
+        reminder_task = None
+        if data.get("create_reminder") and data.get("reminder_days"):
+            try:
+                reminder_days = int(data.get("reminder_days", 1))
+                event_dt = datetime.fromisoformat(event_date)
+                reminder_date = (event_dt - timedelta(days=reminder_days)).strftime("%Y-%m-%d")
+                
+                task_id = str(uuid.uuid4())
+                reminder_task = {
+                    "id": task_id,
+                    "user_id": user["id"],
+                    "title": f"Erinnerung: {data.get('title', 'Termin')}",
+                    "description": f"Termin am {event_date}: {data.get('title', '')}",
+                    "priority": "medium",
+                    "status": "todo",
+                    "due_date": reminder_date,
+                    "event_id": event_id,
+                    "source": "ai_reminder",
+                    "created_at": now,
+                    "updated_at": now
+                }
+                await db.tasks.insert_one(reminder_task)
+            except Exception as e:
+                logger.error(f"Reminder creation error: {e}")
+        
+        return {
+            "success": True,
+            "action_type": "create_event",
+            "created": event,
+            "reminder_task": reminder_task,
+            "message": f"Termin '{data.get('title')}' am {event_date} wurde erstellt."
+        }
+    
+    elif action_type == "create_task":
+        task_id = str(uuid.uuid4())
+        
+        task = {
+            "id": task_id,
+            "user_id": user["id"],
+            "title": data.get("title", "Neue Aufgabe"),
+            "description": data.get("description", ""),
+            "priority": data.get("priority", "medium"),
+            "status": "todo",
+            "due_date": data.get("due_date"),
+            "case_id": data.get("case_id"),
+            "source": "ai_chat",
+            "created_at": now,
+            "updated_at": now
+        }
+        
+        await db.tasks.insert_one(task)
+        await log_action(user["id"], "create_task_via_ai", "task", task_id)
+        
+        return {
+            "success": True,
+            "action_type": "create_task",
+            "created": task,
+            "message": f"Aufgabe '{data.get('title')}' wurde erstellt."
+        }
+    
+    elif action_type == "create_case":
+        case_id = str(uuid.uuid4())
+        
+        case = {
+            "id": case_id,
+            "user_id": user["id"],
+            "title": data.get("title", "Neuer Fall"),
+            "description": data.get("description", ""),
+            "reference_number": data.get("reference_number"),
+            "status": "open",
+            "tags": [],
+            "document_ids": [],
+            "email_ids": [],
+            "created_at": now,
+            "updated_at": now
+        }
+        
+        await db.cases.insert_one(case)
+        await log_action(user["id"], "create_case_via_ai", "case", case_id)
+        
+        return {
+            "success": True,
+            "action_type": "create_case",
+            "created": case,
+            "message": f"Fall '{data.get('title')}' wurde erstellt."
+        }
+    
+    elif action_type == "send_email":
+        # Create email draft/correspondence for review
+        correspondence_id = str(uuid.uuid4())
+        
+        correspondence = {
+            "id": correspondence_id,
+            "user_id": user["id"],
+            "type": "email",
+            "subject": data.get("subject", ""),
+            "recipient": data.get("recipient", ""),
+            "recipient_email": data.get("recipient_email"),
+            "content": data.get("draft_content", ""),
+            "purpose": data.get("purpose", ""),
+            "context": data.get("context", ""),  # For tracking/search
+            "suggested_documents": data.get("suggested_documents", []),
+            "document_ids": [],
+            "status": "draft",
+            "source": "ai_chat",
+            "created_at": now,
+            "updated_at": now,
+            "sent_at": None
+        }
+        
+        await db.correspondence.insert_one(correspondence)
+        await log_action(user["id"], "create_email_draft_via_ai", "correspondence", correspondence_id)
+        
+        return {
+            "success": True,
+            "action_type": "send_email",
+            "created": correspondence,
+            "message": f"E-Mail-Entwurf an '{data.get('recipient')}' wurde erstellt. Bitte überprüfen und bestätigen Sie den Versand."
+        }
+    
+    else:
+        return {"success": False, "error": f"Unbekannter Aktionstyp: {action_type}"}
+
+
+@router.get("/ai/correspondence-search")
+async def search_correspondence(
+    query: str,
+    user: dict = Depends(require_auth)
+):
+    """
+    Search correspondence history for tracking purposes.
+    Used when user asks "Was I already contacted about X?" type questions.
+    """
+    from ai_service import get_ai_service
+    
+    # Get all correspondence
+    all_correspondence = await db.correspondence.find(
+        {"user_id": user["id"]},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    if not all_correspondence:
+        return {
+            "success": True,
+            "found": False,
+            "message": "Keine Korrespondenz gefunden.",
+            "results": []
+        }
+    
+    # Use AI to find relevant correspondence
+    ai_service = await get_ai_service(db)
+    
+    correspondence_list = ""
+    for c in all_correspondence:
+        status_text = "gesendet" if c.get("status") == "sent" else "Entwurf"
+        sent_info = f" am {c.get('sent_at', '')[:10]}" if c.get("sent_at") else f" erstellt am {c.get('created_at', '')[:10]}"
+        correspondence_list += f"\n- ID: {c['id']}"
+        correspondence_list += f"\n  Betreff: {c.get('subject', 'Ohne Betreff')}"
+        correspondence_list += f"\n  Empfänger: {c.get('recipient', 'Unbekannt')}"
+        correspondence_list += f"\n  Zweck: {c.get('purpose', c.get('type', ''))}"
+        correspondence_list += f"\n  Kontext: {c.get('context', '')}"
+        correspondence_list += f"\n  Status: {status_text}{sent_info}"
+        correspondence_list += f"\n  Inhalt (Auszug): {c.get('content', '')[:200]}..."
+        correspondence_list += "\n"
+    
+    system_prompt = """Du bist ein Assistent der Korrespondenz durchsucht.
+
+Analysiere die Anfrage des Benutzers und finde passende Korrespondenz aus der Liste.
+Antworte NUR mit validem JSON:
+{
+    "found": true/false,
+    "matching_ids": ["id1", "id2"],
+    "summary": "Zusammenfassung was gefunden wurde und wann",
+    "details": "Detaillierte Antwort auf die Benutzeranfrage"
+}"""
+
+    prompt = f"""BENUTZERANFRAGE: {query}
+
+VORHANDENE KORRESPONDENZ:
+{correspondence_list}
+
+Finde relevante Korrespondenz und gib eine hilfreiche Antwort."""
+
+    try:
+        result = await ai_service.generate(prompt, system_prompt, max_tokens=1000)
+        
+        json_match = re.search(r'\{[\s\S]*\}', result)
+        if json_match:
+            search_result = json.loads(json_match.group())
+            
+            # Get full correspondence for matching IDs
+            matching_ids = search_result.get("matching_ids", [])
+            matching_correspondence = [c for c in all_correspondence if c["id"] in matching_ids]
+            
+            return {
+                "success": True,
+                "found": search_result.get("found", False),
+                "summary": search_result.get("summary", ""),
+                "details": search_result.get("details", ""),
+                "results": matching_correspondence
+            }
+    except Exception as e:
+        logger.error(f"Correspondence search error: {e}")
+    
+    return {
+        "success": True,
+        "found": False,
+        "message": "Suche konnte nicht durchgeführt werden.",
+        "results": []
+    }
+
+
+@router.post("/ai/send-correspondence/{correspondence_id}")
+async def send_correspondence_via_ai(
+    correspondence_id: str,
+    mail_account_id: str = Form(...),
+    recipient_email: str = Form(...),
+    user: dict = Depends(require_auth)
+):
+    """
+    Send a correspondence/email draft via SMTP.
+    """
+    from response_service import ResponseGeneratorService
+    from ai_service import get_ai_service
+    
+    # Check if mail account has SMTP configured
+    mail_account = await db.mail_accounts.find_one(
+        {"id": mail_account_id, "user_id": user["id"]},
+        {"_id": 0}
+    )
+    
+    if not mail_account:
+        return {"success": False, "error": "E-Mail-Konto nicht gefunden"}
+    
+    if not mail_account.get("smtp_server"):
+        return {
+            "success": False,
+            "error": "SMTP ist für dieses E-Mail-Konto nicht konfiguriert. Bitte konfigurieren Sie SMTP in den E-Mail-Kontoeinstellungen."
+        }
+    
+    ai_service = await get_ai_service(db)
+    response_service = ResponseGeneratorService(db, ai_service)
+    
+    result = await response_service.send_via_email(
+        correspondence_id, user["id"], mail_account_id, recipient_email
+    )
+    
+    if result.get("success"):
+        # Update correspondence with tracking info
+        now = datetime.now(timezone.utc).isoformat()
+        await db.correspondence.update_one(
+            {"id": correspondence_id},
+            {"$set": {
+                "status": "sent",
+                "sent_at": now,
+                "sent_to": recipient_email,
+                "sent_via": "smtp"
+            }}
+        )
+        await log_action(user["id"], "send_email_via_ai", "correspondence", correspondence_id, {"recipient": recipient_email})
+    
+    return result

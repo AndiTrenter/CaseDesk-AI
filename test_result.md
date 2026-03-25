@@ -101,3 +101,90 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: |
+  Der KI Assistent soll aus dem Chat heraus wenn er aufgefordert wird Aufgaben, Fälle und 
+  Kalendereinträge anlegen können nach Anweisung des Benutzers.
+  - Lege einen Termin für Luzias Geburtstag mit Erinnerung an
+  - Das gleiche für Email: Erstelle eine Email an Krankenkasse mit Anliegen "Zahlungsfristverlängerung"
+  - Email Versand soll nachverfolgbar sein
+
+backend:
+  - task: "AI Action Detection - Parse natural language commands"
+    implemented: true
+    working: "NA"
+    file: "routers/ai.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented action detection patterns for create_event, create_task, create_case, send_email"
+
+  - task: "AI Execute Action Endpoint"
+    implemented: true
+    working: "NA"
+    file: "routers/ai.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Endpoint /api/ai/execute-action to create events, tasks, cases, email drafts"
+
+  - task: "Correspondence Search for Email Tracking"
+    implemented: true
+    working: "NA"
+    file: "routers/ai.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Endpoint /api/ai/correspondence-search to find past correspondence"
+
+  - task: "Email Send via AI Endpoint"
+    implemented: true
+    working: "NA"
+    file: "routers/ai.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Endpoint /api/ai/send-correspondence/{id} for sending emails via SMTP"
+
+frontend:
+  - task: "AI Chat with Action Preview Cards"
+    implemented: true
+    working: "NA"
+    file: "pages/AIChat.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Extended AIChat with ActionPreviewCard, ReminderDialog, EmailSendDialog components"
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "AI Action Detection - Parse natural language commands"
+    - "AI Execute Action Endpoint"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: "Implemented AI action detection and execution system. Backend endpoints: /api/ai/parse-action, /api/ai/execute-action, /api/ai/correspondence-search, /api/ai/send-correspondence/{id}. Frontend: Extended AIChat.js with action preview cards, reminder dialog for events, and email send dialog."
