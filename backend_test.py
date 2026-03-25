@@ -425,6 +425,116 @@ class CaseDeskAPITester:
         success, data = self.run_test("Get Dashboard Stats", "GET", "/dashboard/stats", 200)
         return success and 'cases' in data and 'documents' in data and 'tasks' in data
 
+    def test_storage_settings(self):
+        """Test Storage Settings endpoints as specified in review request"""
+        all_passed = True
+        
+        print("  Testing Storage Settings Endpoints (admin only)...")
+        
+        # Test 1: GET /api/settings/storage - Get storage settings
+        success, data = self.run_test("Get Storage Settings", "GET", "/settings/storage", 200)
+        if success:
+            # Verify response structure
+            if 'limits' in data and 'disk' in data and 'user_storage' in data:
+                print(f"  ✓ Storage settings structure correct")
+                
+                # Verify default limits are present
+                limits = data['limits']
+                expected_limits = ['max_single_file_mb', 'max_email_attachment_mb', 'max_total_storage_gb', 'max_user_storage_gb']
+                missing_limits = [limit for limit in expected_limits if limit not in limits]
+                
+                if not missing_limits:
+                    print(f"  ✓ All expected default limits present: {list(limits.keys())}")
+                    
+                    # Store original limits for restoration
+                    original_limits = limits.copy()
+                    
+                    # Test 2: PUT /api/settings/storage - Update storage settings
+                    update_data = {
+                        'max_single_file_mb': 150,
+                        'max_user_storage_gb': 20
+                    }
+                    success2, data2 = self.run_test("Update Storage Settings", "PUT", "/settings/storage", 200, form_data=update_data)
+                    
+                    if success2 and data2.get('success'):
+                        print(f"  ✓ Storage settings updated successfully")
+                        
+                        # Verify the limits were updated
+                        updated_limits = data2.get('limits', {})
+                        if (updated_limits.get('max_single_file_mb') == 150 and 
+                            updated_limits.get('max_user_storage_gb') == 20):
+                            print(f"  ✓ Updated limits verified: max_single_file_mb=150, max_user_storage_gb=20")
+                            
+                            # Test 3: GET /api/settings/storage - Verify changes persisted
+                            success3, data3 = self.run_test("Verify Storage Settings Updated", "GET", "/settings/storage", 200)
+                            if success3 and data3.get('limits'):
+                                persisted_limits = data3['limits']
+                                if (persisted_limits.get('max_single_file_mb') == 150 and 
+                                    persisted_limits.get('max_user_storage_gb') == 20):
+                                    print(f"  ✓ Storage settings changes persisted correctly")
+                                else:
+                                    all_passed = False
+                                    print(f"  ❌ Storage settings changes not persisted")
+                            else:
+                                all_passed = False
+                                print(f"  ❌ Failed to verify storage settings persistence")
+                            
+                            # Test 4: GET /api/settings/storage/user/{user_id} - Get user storage limit
+                            if self.admin_user and self.admin_user.get('id'):
+                                user_id = self.admin_user['id']
+                                success4, data4 = self.run_test("Get User Storage Limit", "GET", f"/settings/storage/user/{user_id}", 200)
+                                
+                                if success4:
+                                    # Verify response structure
+                                    expected_fields = ['user_id', 'effective_limit_gb', 'storage_used_mb']
+                                    missing_fields = [field for field in expected_fields if field not in data4]
+                                    
+                                    if not missing_fields:
+                                        print(f"  ✓ User storage response structure correct")
+                                        print(f"  ✓ User {user_id}: effective_limit_gb={data4.get('effective_limit_gb')}, storage_used_mb={data4.get('storage_used_mb')}")
+                                    else:
+                                        all_passed = False
+                                        print(f"  ❌ User storage response missing fields: {missing_fields}")
+                                else:
+                                    all_passed = False
+                                    print(f"  ❌ Failed to get user storage limit")
+                            else:
+                                all_passed = False
+                                print(f"  ❌ No admin user ID available for user storage test")
+                            
+                            # Restore original limits
+                            restore_data = {
+                                'max_single_file_mb': original_limits.get('max_single_file_mb'),
+                                'max_email_attachment_mb': original_limits.get('max_email_attachment_mb'),
+                                'max_total_storage_gb': original_limits.get('max_total_storage_gb'),
+                                'max_user_storage_gb': original_limits.get('max_user_storage_gb'),
+                                'max_database_gb': original_limits.get('max_database_gb'),
+                                'max_ollama_models_gb': original_limits.get('max_ollama_models_gb')
+                            }
+                            success_restore, _ = self.run_test("Restore Original Storage Settings", "PUT", "/settings/storage", 200, form_data=restore_data)
+                            if success_restore:
+                                print(f"  ✓ Original storage settings restored")
+                            else:
+                                print(f"  ⚠ Failed to restore original storage settings")
+                                
+                        else:
+                            all_passed = False
+                            print(f"  ❌ Updated limits not reflected in response")
+                    else:
+                        all_passed = False
+                        print(f"  ❌ Failed to update storage settings")
+                else:
+                    all_passed = False
+                    print(f"  ❌ Missing expected default limits: {missing_limits}")
+            else:
+                all_passed = False
+                print(f"  ❌ Storage settings response structure incorrect")
+        else:
+            all_passed = False
+            print(f"  ❌ Failed to get storage settings")
+        
+        return all_passed
+
     def cleanup_test_data(self):
         """Clean up created test data"""
         print(f"\n🧹 Cleaning up test data...")
@@ -460,6 +570,7 @@ class CaseDeskAPITester:
             ("Events CRUD", self.test_events_crud),
             ("Document Upload", self.test_document_upload),
             ("Settings Operations", self.test_settings_crud),
+            ("Storage Settings", self.test_storage_settings),
             ("Dashboard Stats", self.test_dashboard_stats),
         ]
         

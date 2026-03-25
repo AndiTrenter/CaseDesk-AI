@@ -1,57 +1,47 @@
-# ============================================
-# CaseDesk AI - Entwickler-Compose (lokaler Build)
-# ============================================
-# Nur fuer lokale Entwicklung.
-# Fuer Produktion/Unraid: docker-compose.unraid.yml
-# ============================================
+# ============================================================
+# CaseDesk AI - Docker Compose (Development)
+# ============================================================
+# No artificial resource limits - uses available system resources
+# ============================================================
 
 services:
   mongodb:
     image: mongo:7
     container_name: casedesk-mongodb
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-casedesk}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-casedesk_secret}
+    restart: unless-stopped
     volumes:
       - mongodb_data:/data/db
-    ports:
-      - "${MONGO_PORT:-27017}:27017"
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: casedesk
+    networks:
+      - default
+    # No memory limits - MongoDB will use available system memory
+    # For production tuning, set wiredTigerCacheSizeGB in mongod.conf
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: casedesk-backend
+    restart: unless-stopped
+    depends_on:
+      - mongodb
     environment:
-      MONGO_URL: mongodb://${MONGO_USER:-casedesk}:${MONGO_PASSWORD:-casedesk_secret}@mongodb:27017
-      DB_NAME: ${DB_NAME:-casedesk}
-      SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
-      AI_PROVIDER: ${AI_PROVIDER:-openai}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
-      UPLOAD_DIR: /app/uploads
-      OCR_SERVICE_URL: http://ocr:8002
-      CORS_ORIGINS: "*"
+      - MONGO_URL=mongodb://mongodb:27017/casedesk
+      - UPLOAD_DIR=/app/uploads
+      - AI_PROVIDER=${AI_PROVIDER:-disabled}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
+      - OCR_SERVICE_URL=${OCR_SERVICE_URL:-http://ocr:8002}
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
     volumes:
       - uploads_data:/app/uploads
     ports:
-      - "${BACKEND_PORT:-8001}:8001"
-    depends_on:
-      mongodb:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-    restart: unless-stopped
+      - "8001:8001"
+    networks:
+      - default
+    # No memory/CPU limits - uses available resources
 
   frontend:
     build:
@@ -60,45 +50,59 @@ services:
       args:
         REACT_APP_BACKEND_URL: ""
     container_name: casedesk-frontend
-    ports:
-      - "${FRONTEND_PORT:-9090}:80"
-    depends_on:
-      backend:
-        condition: service_healthy
     restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks:
+      - default
 
   ocr:
     build:
       context: ./ocr
       dockerfile: Dockerfile
     container_name: casedesk-ocr
-    volumes:
-      - uploads_data:/app/uploads:ro
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
     restart: unless-stopped
+    environment:
+      - TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
+    networks:
+      - default
+    # OCR can be memory-intensive for large documents
+    # No limits set - uses available resources
 
+  # Ollama - Optional AI Service (start with --profile ollama)
   ollama:
     image: ollama/ollama:latest
     container_name: casedesk-ollama
     profiles:
       - ollama
+    restart: unless-stopped
     volumes:
       - ollama_data:/root/.ollama
     ports:
       - "11434:11434"
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-    restart: unless-stopped
-    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull ${OLLAMA_MODEL:-llama3.2} && wait"]
+    networks:
+      - default
+    # GPU support (uncomment if NVIDIA GPU available)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
 
 volumes:
   mongodb_data:
+    driver: local
+    # No size limits - uses available disk space
   uploads_data:
+    driver: local
+    # No size limits - managed by application settings
   ollama_data:
+    driver: local
+    # No size limits - models can be large (7B = ~4GB, 70B = ~40GB)
 
 networks:
   default:

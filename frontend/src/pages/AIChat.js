@@ -5,11 +5,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Bot, Send, User, Sparkles, AlertCircle, Download, FileText, X, Brain, 
   Trash2, ChevronDown, ChevronUp, Calendar, CheckSquare, Folder, Mail,
-  Clock, MapPin, AlertTriangle, Check, Edit, Loader2
+  Clock, MapPin, AlertTriangle, Check, Edit, Loader2, Mic
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Textarea } from '../components/ui/textarea';
 import { Input } from '../components/ui/input';
+import { VoiceInput } from '../components/ui/voice-input';
 import { aiAPI, settingsAPI, documentsAPI, casesAPI, mailAPI } from '../lib/api';
 import { toast } from 'sonner';
 
@@ -927,6 +928,14 @@ export default function AIChat() {
                 disabled={!aiEnabled || isLoading}
                 rows={1}
                 data-testid="ai-chat-input"
+              />
+              <VoiceInput
+                onTranscript={(text) => {
+                  setInput(prev => prev ? `${prev} ${text}` : text);
+                }}
+                disabled={!aiEnabled || isLoading}
+                language="de-DE"
+                className="self-end"
               />
               <Button
                 type="submit"

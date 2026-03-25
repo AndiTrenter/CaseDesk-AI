@@ -24,10 +24,11 @@ import {
   DialogTitle,
 } from '../components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { settingsAPI, mailAPI, exportAPI, usersAPI } from '../lib/api';
+import { settingsAPI, mailAPI, exportAPI, usersAPI, storageAPI } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { toast } from 'sonner';
+import { HardDrive } from 'lucide-react';
 
 export default function Settings() {
   const { t, i18n } = useTranslation();
@@ -69,12 +70,19 @@ export default function Settings() {
   const [inviteRole, setInviteRole] = useState('user');
   const [inviteResult, setInviteResult] = useState(null);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  
+  // Storage settings state
+  const [storageSettings, setStorageSettings] = useState(null);
+  const [storageLoading, setStorageLoading] = useState(false);
+  const [editingUserStorage, setEditingUserStorage] = useState(null);
+  const [userStorageLimit, setUserStorageLimit] = useState('');
 
   useEffect(() => {
     loadSettings();
     loadMailAccounts();
     if (user?.role === 'admin') {
       loadUsersAndInvitations();
+      loadStorageSettings();
     }
   }, [user]);
   
@@ -99,6 +107,52 @@ export default function Settings() {
       setMailAccounts(res.data);
     } catch (error) {
       console.error('Failed to load mail accounts:', error);
+    }
+  };
+  
+  const loadStorageSettings = async () => {
+    setStorageLoading(true);
+    try {
+      const res = await storageAPI.getSettings();
+      setStorageSettings(res.data);
+    } catch (error) {
+      console.error('Failed to load storage settings:', error);
+    }
+    setStorageLoading(false);
+  };
+  
+  const handleSaveStorageSettings = async () => {
+    setSaving(true);
+    try {
+      await storageAPI.updateSettings(storageSettings.limits);
+      toast.success('Speichereinstellungen gespeichert');
+      loadStorageSettings();
+    } catch (error) {
+      toast.error('Fehler beim Speichern');
+    }
+    setSaving(false);
+  };
+  
+  const handleSetUserStorageLimit = async (userId) => {
+    if (!userStorageLimit) return;
+    try {
+      await storageAPI.setUserLimit(userId, parseInt(userStorageLimit));
+      toast.success('Benutzerlimit gesetzt');
+      setEditingUserStorage(null);
+      setUserStorageLimit('');
+      loadStorageSettings();
+    } catch (error) {
+      toast.error('Fehler beim Setzen des Limits');
+    }
+  };
+  
+  const handleResetUserStorageLimit = async (userId) => {
+    try {
+      await storageAPI.resetUserLimit(userId);
+      toast.success('Benutzerlimit zurückgesetzt');
+      loadStorageSettings();
+    } catch (error) {
+      toast.error('Fehler beim Zurücksetzen');
     }
   };
 
@@ -282,6 +336,10 @@ export default function Settings() {
                   <Users className="w-4 h-4 mr-2" />
                   Benutzer
                 </TabsTrigger>
+                <TabsTrigger value="storage" className="data-[state=active]:bg-white/10">
+                  <HardDrive className="w-4 h-4 mr-2" />
+                  Speicher
+                </TabsTrigger>
                 <TabsTrigger value="ai" className="data-[state=active]:bg-white/10">
                   <Brain className="w-4 h-4 mr-2" />
                   {t('settings.ai')}
@@ -384,6 +442,232 @@ export default function Settings() {
               </div>
             </motion.div>
           </TabsContent>
+
+          {/* Storage Settings (Admin only) */}
+          {user?.role === 'admin' && (
+            <TabsContent value="storage">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-[#121212] border border-white/5 rounded-xl p-6 space-y-6"
+              >
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <HardDrive className="w-5 h-5 text-blue-400" />
+                    Speichereinstellungen
+                  </h3>
+                  <p className="text-gray-400 text-sm mb-6">
+                    Konfigurieren Sie globale Speicherlimits und individuelle Benutzerkontingente.
+                    Keine Docker-Limits - die Anwendung nutzt den verfügbaren Systemspeicher.
+                  </p>
+                  
+                  {storageLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin w-6 h-6 border-2 border-white/20 border-t-white rounded-full" />
+                    </div>
+                  ) : storageSettings ? (
+                    <div className="space-y-8">
+                      {/* Disk Usage */}
+                      <div className="bg-white/5 rounded-lg p-4">
+                        <h4 className="text-white font-medium mb-3">Festplatten-Auslastung</h4>
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Gesamt</span>
+                            <span className="text-white">{storageSettings.disk?.total_gb || 0} GB</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Belegt</span>
+                            <span className="text-white">{storageSettings.disk?.used_gb || 0} GB</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Frei</span>
+                            <span className="text-green-400">{storageSettings.disk?.free_gb || 0} GB</span>
+                          </div>
+                          <div className="w-full bg-gray-700 rounded-full h-2 mt-2">
+                            <div 
+                              className="bg-blue-500 h-2 rounded-full transition-all"
+                              style={{ width: `${storageSettings.disk?.usage_percent || 0}%` }}
+                            />
+                          </div>
+                          <p className="text-xs text-gray-500 text-right">{storageSettings.disk?.usage_percent || 0}% belegt</p>
+                        </div>
+                      </div>
+
+                      {/* Global Limits */}
+                      <div>
+                        <h4 className="text-white font-medium mb-4">Globale Speicherlimits</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <Label className="text-gray-300">Max. Einzeldatei (MB)</Label>
+                            <Input
+                              type="number"
+                              value={storageSettings.limits?.max_single_file_mb || 100}
+                              onChange={(e) => setStorageSettings({
+                                ...storageSettings,
+                                limits: { ...storageSettings.limits, max_single_file_mb: parseInt(e.target.value) }
+                              })}
+                              className="bg-black/30 border-white/10 text-white mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-gray-300">Max. E-Mail-Anhang (MB)</Label>
+                            <Input
+                              type="number"
+                              value={storageSettings.limits?.max_email_attachment_mb || 50}
+                              onChange={(e) => setStorageSettings({
+                                ...storageSettings,
+                                limits: { ...storageSettings.limits, max_email_attachment_mb: parseInt(e.target.value) }
+                              })}
+                              className="bg-black/30 border-white/10 text-white mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-gray-300">Max. Gesamtspeicher (GB)</Label>
+                            <Input
+                              type="number"
+                              value={storageSettings.limits?.max_total_storage_gb || 100}
+                              onChange={(e) => setStorageSettings({
+                                ...storageSettings,
+                                limits: { ...storageSettings.limits, max_total_storage_gb: parseInt(e.target.value) }
+                              })}
+                              className="bg-black/30 border-white/10 text-white mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-gray-300">Standard pro Benutzer (GB)</Label>
+                            <Input
+                              type="number"
+                              value={storageSettings.limits?.max_user_storage_gb || 10}
+                              onChange={(e) => setStorageSettings({
+                                ...storageSettings,
+                                limits: { ...storageSettings.limits, max_user_storage_gb: parseInt(e.target.value) }
+                              })}
+                              className="bg-black/30 border-white/10 text-white mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-gray-300">Max. Datenbank (GB)</Label>
+                            <Input
+                              type="number"
+                              value={storageSettings.limits?.max_database_gb || 50}
+                              onChange={(e) => setStorageSettings({
+                                ...storageSettings,
+                                limits: { ...storageSettings.limits, max_database_gb: parseInt(e.target.value) }
+                              })}
+                              className="bg-black/30 border-white/10 text-white mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-gray-300">Max. Ollama Modelle (GB)</Label>
+                            <Input
+                              type="number"
+                              value={storageSettings.limits?.max_ollama_models_gb || 50}
+                              onChange={(e) => setStorageSettings({
+                                ...storageSettings,
+                                limits: { ...storageSettings.limits, max_ollama_models_gb: parseInt(e.target.value) }
+                              })}
+                              className="bg-black/30 border-white/10 text-white mt-1"
+                            />
+                          </div>
+                        </div>
+                        <Button
+                          onClick={handleSaveStorageSettings}
+                          disabled={saving}
+                          className="mt-4 btn-primary"
+                        >
+                          {saving ? 'Speichern...' : 'Globale Limits speichern'}
+                        </Button>
+                      </div>
+
+                      {/* Per-User Storage */}
+                      <div>
+                        <h4 className="text-white font-medium mb-4">Benutzer-Speichernutzung</h4>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-left text-gray-400 border-b border-white/10">
+                                <th className="pb-2">Benutzer</th>
+                                <th className="pb-2">Dokumente</th>
+                                <th className="pb-2">Belegt</th>
+                                <th className="pb-2">Limit</th>
+                                <th className="pb-2">Aktion</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {storageSettings.user_storage?.map((u) => (
+                                <tr key={u.user_id} className="border-b border-white/5">
+                                  <td className="py-2 text-white">{u.email || u.username}</td>
+                                  <td className="py-2 text-gray-400">{u.document_count}</td>
+                                  <td className="py-2 text-gray-400">{u.storage_used_mb} MB</td>
+                                  <td className="py-2">
+                                    {editingUserStorage === u.user_id ? (
+                                      <div className="flex items-center gap-2">
+                                        <Input
+                                          type="number"
+                                          value={userStorageLimit}
+                                          onChange={(e) => setUserStorageLimit(e.target.value)}
+                                          className="w-20 h-8 bg-black/30 border-white/10 text-white text-sm"
+                                          placeholder="GB"
+                                        />
+                                        <Button
+                                          size="sm"
+                                          onClick={() => handleSetUserStorageLimit(u.user_id)}
+                                          className="h-8 px-2 bg-green-500/20 hover:bg-green-500/30 text-green-400"
+                                        >
+                                          <Check className="w-4 h-4" />
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => {
+                                            setEditingUserStorage(null);
+                                            setUserStorageLimit('');
+                                          }}
+                                          className="h-8 px-2 text-gray-400"
+                                        >
+                                          <X className="w-4 h-4" />
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <span className="text-blue-400">
+                                        {storageSettings.limits?.max_user_storage_gb || 10} GB
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="py-2">
+                                    {editingUserStorage !== u.user_id && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => {
+                                          setEditingUserStorage(u.user_id);
+                                          setUserStorageLimit('');
+                                        }}
+                                        className="text-gray-400 hover:text-white text-xs"
+                                      >
+                                        Anpassen
+                                      </Button>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 text-sm text-blue-300">
+                        <strong>Hinweis:</strong> Diese Limits sind Soft-Limits, die von der Anwendung durchgesetzt werden. 
+                        Docker-Container haben keine künstlichen Speicherlimits und nutzen den gesamten verfügbaren Host-Speicher.
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-gray-500">Keine Speichereinstellungen verfügbar</p>
+                  )}
+                </div>
+              </motion.div>
+            </TabsContent>
+          )}
 
           {/* AI Settings (Admin only) */}
           {user?.role === 'admin' && (

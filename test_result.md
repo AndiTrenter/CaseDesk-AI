@@ -170,6 +170,42 @@ backend:
         agent: "testing"
         comment: "✅ TESTED: Email send endpoint implemented and accessible. Creates email drafts via execute-action. SMTP sending requires mail account configuration (expected)."
 
+  - task: "Storage Settings - Get Storage Settings"
+    implemented: true
+    working: true
+    file: "routers/settings.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: GET /api/settings/storage endpoint working perfectly. Returns correct structure with limits, disk info, and user_storage array. All default limits present: max_single_file_mb, max_email_attachment_mb, max_total_storage_gb, max_user_storage_gb, max_database_gb, max_ollama_models_gb."
+
+  - task: "Storage Settings - Update Storage Settings"
+    implemented: true
+    working: true
+    file: "routers/settings.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: PUT /api/settings/storage endpoint working perfectly. Successfully updated max_single_file_mb=150 and max_user_storage_gb=20. Changes persisted correctly and verified through subsequent GET request."
+
+  - task: "Storage Settings - Get User Storage Limit"
+    implemented: true
+    working: true
+    file: "routers/settings.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: GET /api/settings/storage/user/{user_id} endpoint working perfectly. Returns correct structure with user_id, effective_limit_gb, storage_used_mb. Admin role requirement enforced correctly."
+
 frontend:
   - task: "AI Chat with Action Preview Cards"
     implemented: true
@@ -186,7 +222,7 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 2
+  test_sequence: 3
   run_ui: false
 
 test_plan:
@@ -201,5 +237,9 @@ agent_communication:
     message: "Implemented AI action detection and execution system. Backend endpoints: /api/ai/parse-action, /api/ai/execute-action, /api/ai/correspondence-search, /api/ai/send-correspondence/{id}. Frontend: Extended AIChat.js with action preview cards, reminder dialog for events, and email send dialog."
   - agent: "main"
     message: "Cleaned up all emergent references from code. Updated test files to use localhost. Verified Docker build works. craco.config.js cleaned. All services running."
+  - agent: "main"
+    message: "Implemented voice input (Web Speech API) in AI Chat. Added storage settings in admin panel (global limits + per-user limits). Updated docker-compose files to remove artificial limits. Storage endpoints: GET/PUT /api/settings/storage, GET/PUT/DELETE /api/settings/storage/user/{id}"
   - agent: "testing"
     message: "✅ BACKEND TESTING COMPLETE: All AI action endpoints tested and working. Fixed critical JSON serialization bug in execute-action endpoint. Authentication working with test credentials. Health check passing. All CRUD operations verified. AI service integration ready (requires Ollama/OpenAI configuration for full AI features). Core functionality fully operational."
+  - agent: "testing"
+    message: "✅ STORAGE SETTINGS TESTING COMPLETE: All 3 storage settings endpoints tested and working perfectly. GET /api/settings/storage returns correct structure with limits, disk info, and user_storage. PUT /api/settings/storage successfully updates limits and persists changes. GET /api/settings/storage/user/{user_id} returns proper user storage information. Admin role enforcement working correctly. Test credentials (andi.trenter@gmail.com) authenticated successfully."

@@ -153,6 +153,155 @@ async def update_system_settings(
     return {"success": True, "message": "Settings updated"}
 
 
+# ==================== Storage Limits Settings ====================
+
+# Default storage limits (in bytes)
+DEFAULT_STORAGE_LIMITS = {
+    "max_single_file_mb": 100,           # 100 MB per file
+    "max_email_attachment_mb": 50,       # 50 MB per email attachment
+    "max_total_storage_gb": 100,         # 100 GB total uploads
+    "max_user_storage_gb": 10,           # 10 GB per user (default)
+    "max_database_gb": 50,               # 50 GB database
+    "max_ollama_models_gb": 50,          # 50 GB for AI models
+}
+
+
+@router.get("/settings/storage")
+async def get_storage_settings(user: dict = Depends(require_admin)):
+    """Get global storage limit settings"""
+    settings = await db.system_settings.find_one({}, {"_id": 0})
+    storage_limits = settings.get("storage_limits", DEFAULT_STORAGE_LIMITS) if settings else DEFAULT_STORAGE_LIMITS
+    
+    # Get current usage
+    upload_dir = os.environ.get("UPLOAD_DIR", "./uploads")
+    try:
+        total, used, free = shutil.disk_usage(upload_dir)
+        disk_info = {
+            "total_gb": round(total / (1024**3), 2),
+            "used_gb": round(used / (1024**3), 2),
+            "free_gb": round(free / (1024**3), 2),
+            "usage_percent": round(used / total * 100, 1)
+        }
+    except:
+        disk_info = {"error": "Could not read disk info"}
+    
+    # Get per-user storage usage
+    users = await db.users.find({}, {"_id": 0, "id": 1, "email": 1, "username": 1}).to_list(1000)
+    user_storage = []
+    for u in users:
+        docs = await db.documents.find({"user_id": u["id"]}, {"_id": 0, "size": 1}).to_list(100000)
+        total_size = sum(d.get("size", 0) for d in docs)
+        user_storage.append({
+            "user_id": u["id"],
+            "email": u.get("email"),
+            "username": u.get("username"),
+            "storage_used_mb": round(total_size / (1024**2), 2),
+            "document_count": len(docs)
+        })
+    
+    return {
+        "limits": storage_limits,
+        "disk": disk_info,
+        "user_storage": user_storage
+    }
+
+
+@router.put("/settings/storage")
+async def update_storage_settings(
+    max_single_file_mb: int = Form(None),
+    max_email_attachment_mb: int = Form(None),
+    max_total_storage_gb: int = Form(None),
+    max_user_storage_gb: int = Form(None),
+    max_database_gb: int = Form(None),
+    max_ollama_models_gb: int = Form(None),
+    user: dict = Depends(require_admin)
+):
+    """Update global storage limit settings"""
+    settings = await db.system_settings.find_one({}, {"_id": 0})
+    current_limits = settings.get("storage_limits", DEFAULT_STORAGE_LIMITS) if settings else DEFAULT_STORAGE_LIMITS
+    
+    if max_single_file_mb is not None:
+        current_limits["max_single_file_mb"] = max_single_file_mb
+    if max_email_attachment_mb is not None:
+        current_limits["max_email_attachment_mb"] = max_email_attachment_mb
+    if max_total_storage_gb is not None:
+        current_limits["max_total_storage_gb"] = max_total_storage_gb
+    if max_user_storage_gb is not None:
+        current_limits["max_user_storage_gb"] = max_user_storage_gb
+    if max_database_gb is not None:
+        current_limits["max_database_gb"] = max_database_gb
+    if max_ollama_models_gb is not None:
+        current_limits["max_ollama_models_gb"] = max_ollama_models_gb
+    
+    await db.system_settings.update_one(
+        {}, 
+        {"$set": {"storage_limits": current_limits, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    await log_action(user["id"], "update_storage_settings", "system")
+    return {"success": True, "limits": current_limits}
+
+
+@router.get("/settings/storage/user/{user_id}")
+async def get_user_storage_limit(user_id: str, user: dict = Depends(require_admin)):
+    """Get storage limit for a specific user"""
+    target_user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    user_settings = await db.user_settings.find_one({"user_id": user_id}, {"_id": 0})
+    custom_limit = user_settings.get("storage_limit_gb") if user_settings else None
+    
+    # Get global default
+    settings = await db.system_settings.find_one({}, {"_id": 0})
+    global_limit = settings.get("storage_limits", DEFAULT_STORAGE_LIMITS).get("max_user_storage_gb", 10) if settings else 10
+    
+    # Calculate current usage
+    docs = await db.documents.find({"user_id": user_id}, {"_id": 0, "size": 1}).to_list(100000)
+    total_size = sum(d.get("size", 0) for d in docs)
+    
+    return {
+        "user_id": user_id,
+        "email": target_user.get("email"),
+        "global_limit_gb": global_limit,
+        "custom_limit_gb": custom_limit,
+        "effective_limit_gb": custom_limit if custom_limit else global_limit,
+        "storage_used_mb": round(total_size / (1024**2), 2),
+        "storage_used_gb": round(total_size / (1024**3), 4),
+        "document_count": len(docs)
+    }
+
+
+@router.put("/settings/storage/user/{user_id}")
+async def set_user_storage_limit(
+    user_id: str,
+    storage_limit_gb: int = Form(...),
+    user: dict = Depends(require_admin)
+):
+    """Set custom storage limit for a specific user"""
+    target_user = await db.users.find_one({"id": user_id})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    await db.user_settings.update_one(
+        {"user_id": user_id},
+        {"$set": {"storage_limit_gb": storage_limit_gb}},
+        upsert=True
+    )
+    await log_action(user["id"], "set_user_storage_limit", "user", user_id, {"limit_gb": storage_limit_gb})
+    return {"success": True, "user_id": user_id, "storage_limit_gb": storage_limit_gb}
+
+
+@router.delete("/settings/storage/user/{user_id}")
+async def reset_user_storage_limit(user_id: str, user: dict = Depends(require_admin)):
+    """Reset user storage limit to global default"""
+    await db.user_settings.update_one(
+        {"user_id": user_id},
+        {"$unset": {"storage_limit_gb": ""}}
+    )
+    await log_action(user["id"], "reset_user_storage_limit", "user", user_id)
+    return {"success": True, "message": "User storage limit reset to global default"}
+
+
 @router.get("/settings/user")
 async def get_user_settings(user: dict = Depends(require_auth)):
     settings = await db.user_settings.find_one({"user_id": user["id"]}, {"_id": 0})

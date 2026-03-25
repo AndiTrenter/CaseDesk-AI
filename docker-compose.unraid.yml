@@ -1,94 +1,96 @@
-# ============================================
-# CaseDesk AI - Unraid Production Deploy
-# ============================================
-# Verwendet ausschliesslich fertige GHCR-Images.
-# Kein lokaler Build noetig.
+# ============================================================
+# CaseDesk AI - Docker Compose for Unraid
+# ============================================================
+# Optimized for Unraid NAS with no artificial resource limits
+# Uses all available system resources
+# ============================================================
 #
-# Installation:
-#   cp .env.example .env
-#   nano .env
-#   docker compose -f docker-compose.unraid.yml pull
+# Quick Start:
 #   docker compose -f docker-compose.unraid.yml up -d
 #
-# Mit Ollama (lokale KI, optional):
+# With Ollama (local AI):
 #   docker compose -f docker-compose.unraid.yml --profile ollama up -d
-# ============================================
+#
+# ============================================================
 
 services:
   mongodb:
     image: mongo:7
     container_name: casedesk-mongodb
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-casedesk}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-casedesk_secret}
+    restart: unless-stopped
     volumes:
       - /mnt/user/appdata/casedesk/mongodb:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: casedesk
+    networks:
+      - default
+    # No memory limits - MongoDB manages its own cache
+    # Uses WiredTiger storage engine with adaptive caching
 
   backend:
     image: ghcr.io/anditrenter/casedesk-ai/backend:latest
     container_name: casedesk-backend
+    restart: unless-stopped
+    depends_on:
+      - mongodb
     environment:
-      MONGO_URL: mongodb://${MONGO_USER:-casedesk}:${MONGO_PASSWORD:-casedesk_secret}@mongodb:27017
-      DB_NAME: ${DB_NAME:-casedesk}
-      SECRET_KEY: ${SECRET_KEY:-change-this-in-production}
-      AI_PROVIDER: ${AI_PROVIDER:-openai}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
-      UPLOAD_DIR: /app/uploads
-      OCR_SERVICE_URL: http://ocr:8002
-      CORS_ORIGINS: "*"
+      - MONGO_URL=mongodb://mongodb:27017/casedesk
+      - UPLOAD_DIR=/app/uploads
+      - AI_PROVIDER=${AI_PROVIDER:-disabled}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
+      - OCR_SERVICE_URL=${OCR_SERVICE_URL:-http://ocr:8002}
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      # Storage limits are managed in Admin Settings UI
+      # No hard Docker limits - app enforces soft limits
     volumes:
       - /mnt/user/appdata/casedesk/uploads:/app/uploads
-    depends_on:
-      mongodb:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    networks:
+      - default
 
   frontend:
     image: ghcr.io/anditrenter/casedesk-ai/frontend:latest
     container_name: casedesk-frontend
-    ports:
-      - "${FRONTEND_PORT:-9090}:80"
-    depends_on:
-      backend:
-        condition: service_healthy
     restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+    networks:
+      - default
 
   ocr:
     image: ghcr.io/anditrenter/casedesk-ai/ocr:latest
     container_name: casedesk-ocr
-    volumes:
-      - /mnt/user/appdata/casedesk/uploads:/app/uploads:ro
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
     restart: unless-stopped
+    environment:
+      - TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
+    networks:
+      - default
+    # Tesseract OCR with German + English language support
+    # No limits - OCR processing can be memory intensive
 
+  # Ollama - Local AI (optional)
+  # Start with: --profile ollama
   ollama:
     image: ollama/ollama:latest
     container_name: casedesk-ollama
     profiles:
       - ollama
+    restart: unless-stopped
     volumes:
       - /mnt/user/appdata/casedesk/ollama:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-    restart: unless-stopped
-    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull ${OLLAMA_MODEL:-llama3.2} && wait"]
+    ports:
+      - "11434:11434"
+    networks:
+      - default
+    # Uncomment for NVIDIA GPU support on Unraid:
+    # runtime: nvidia
+    # environment:
+    #   - NVIDIA_VISIBLE_DEVICES=all
 
 networks:
   default:

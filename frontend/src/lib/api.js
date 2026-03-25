@@ -393,4 +393,29 @@ export const healthAPI = {
   adminHealth: () => api.get('/admin/health'),
 };
 
+// Storage Settings
+export const storageAPI = {
+  getSettings: () => api.get('/settings/storage'),
+  updateSettings: (data) => {
+    const formData = new FormData();
+    Object.keys(data).forEach(key => {
+      if (data[key] !== null && data[key] !== undefined) {
+        formData.append(key, data[key]);
+      }
+    });
+    return api.put('/settings/storage', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  getUserLimit: (userId) => api.get(`/settings/storage/user/${userId}`),
+  setUserLimit: (userId, limitGb) => {
+    const formData = new FormData();
+    formData.append('storage_limit_gb', limitGb);
+    return api.put(`/settings/storage/user/${userId}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  resetUserLimit: (userId) => api.delete(`/settings/storage/user/${userId}`),
+};
+
 export default api;
