@@ -1,7 +1,8 @@
 # ============================================================
-# CaseDesk AI - Docker Compose (Development)
+# CaseDesk AI - Docker Compose (Entwicklung)
 # ============================================================
-# No artificial resource limits - uses available system resources
+# Für lokale Entwicklung mit Build von Source
+# Produktion: Verwende docker-compose.unraid.yml
 # ============================================================
 
 services:
@@ -12,11 +13,9 @@ services:
     volumes:
       - mongodb_data:/data/db
     environment:
-      MONGO_INITDB_DATABASE: casedesk
+      - MONGO_INITDB_DATABASE=${DB_NAME:-casedesk}
     networks:
       - default
-    # No memory limits - MongoDB will use available system memory
-    # For production tuning, set wiredTigerCacheSizeGB in mongod.conf
 
   backend:
     build:
@@ -27,21 +26,18 @@ services:
     depends_on:
       - mongodb
     environment:
-      - MONGO_URL=mongodb://mongodb:27017/casedesk
+      - MONGO_URL=mongodb://mongodb:27017/${DB_NAME:-casedesk}
       - UPLOAD_DIR=/app/uploads
-      - AI_PROVIDER=${AI_PROVIDER:-disabled}
+      - AI_PROVIDER=${AI_PROVIDER:-openai}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
-      - OCR_SERVICE_URL=${OCR_SERVICE_URL:-http://ocr:8002}
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - OCR_SERVICE_URL=http://ocr:8002
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-change-in-production}
     volumes:
       - uploads_data:/app/uploads
-    ports:
-      - "8001:8001"
     networks:
       - default
-    # No memory/CPU limits - uses available resources
 
   frontend:
     build:
@@ -54,7 +50,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "80:80"
+      - "${FRONTEND_PORT:-9090}:80"
     networks:
       - default
 
@@ -68,10 +64,9 @@ services:
       - TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
     networks:
       - default
-    # OCR can be memory-intensive for large documents
-    # No limits set - uses available resources
 
-  # Ollama - Optional AI Service (start with --profile ollama)
+  # Ollama - Lokale KI (optional)
+  # Starten mit: --profile ollama
   ollama:
     image: ollama/ollama:latest
     container_name: casedesk-ollama
@@ -84,25 +79,14 @@ services:
       - "11434:11434"
     networks:
       - default
-    # GPU support (uncomment if NVIDIA GPU available)
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
 
 volumes:
   mongodb_data:
     driver: local
-    # No size limits - uses available disk space
   uploads_data:
     driver: local
-    # No size limits - managed by application settings
   ollama_data:
     driver: local
-    # No size limits - models can be large (7B = ~4GB, 70B = ~40GB)
 
 networks:
   default:

@@ -11,14 +11,15 @@ build/
 
 # Node
 node_modules/
-frontend/node_modules/
 
-# Environment
+# Environment (keep .env.example)
 .env
+.env.*
 !.env.example
 
-# Uploads (user data)
+# User data
 backend/uploads/
+uploads/
 
 # IDE
 .vscode/
@@ -30,68 +31,25 @@ backend/uploads/
 .DS_Store
 Thumbs.db
 
-# Docker volumes
+# Docker volumes (local)
 mongodb_data/
 ollama_data/
+uploads_data/
 
 # Logs
 *.log
+/var/log/
 
 # Test artifacts
 .pytest_cache/
 htmlcov/
 .coverage
+test_result.md
 
-# Build
+# Build artifacts
 frontend/build/
-frontend/node_modules/.cache/default-development/6.pack
-frontend/node_modules/.cache/default-development/13.pack
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
-frontend/node_modules/.cache/default-development/0.pack
--e 
-# Environment files
-*.env
-*.env.*
-frontend/node_modules/.cache/default-development/1.pack
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
-frontend/node_modules/.cache/default-development/2.pack
-frontend/node_modules/.cache/default-development/9.pack
-frontend/node_modules/.cache/default-development/7.pack
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
+frontend/node_modules/.cache/
+
+# Temporary
+*.tmp
+*.temp

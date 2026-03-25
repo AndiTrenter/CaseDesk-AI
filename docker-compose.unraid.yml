@@ -1,16 +1,19 @@
 # ============================================================
-# CaseDesk AI - Docker Compose for Unraid
+# CaseDesk AI - Docker Compose für Unraid
 # ============================================================
-# Optimized for Unraid NAS with no artificial resource limits
-# Uses all available system resources
+# Optimiert für Unraid NAS
+# Keine künstlichen Ressourcen-Limits
 # ============================================================
 #
-# Quick Start:
-#   docker compose -f docker-compose.unraid.yml up -d
+# Installation:
+#   1. cp .env.example .env
+#   2. nano .env  (Werte anpassen)
+#   3. docker compose -f docker-compose.unraid.yml up -d
 #
-# With Ollama (local AI):
+# Mit lokaler KI (Ollama):
 #   docker compose -f docker-compose.unraid.yml --profile ollama up -d
 #
+# Web-Oberfläche: http://[DEINE-IP]:9090
 # ============================================================
 
 services:
@@ -21,11 +24,10 @@ services:
     volumes:
       - /mnt/user/appdata/casedesk/mongodb:/data/db
     environment:
-      MONGO_INITDB_DATABASE: casedesk
+      - MONGO_INITDB_DATABASE=${DB_NAME:-casedesk}
     networks:
       - default
-    # No memory limits - MongoDB manages its own cache
-    # Uses WiredTiger storage engine with adaptive caching
+    # Keine Memory-Limits - MongoDB verwaltet Cache selbstständig
 
   backend:
     image: ghcr.io/anditrenter/casedesk-ai/backend:latest
@@ -34,22 +36,19 @@ services:
     depends_on:
       - mongodb
     environment:
-      - MONGO_URL=mongodb://mongodb:27017/casedesk
+      - MONGO_URL=mongodb://mongodb:27017/${DB_NAME:-casedesk}
       - UPLOAD_DIR=/app/uploads
-      - AI_PROVIDER=${AI_PROVIDER:-disabled}
+      - AI_PROVIDER=${AI_PROVIDER:-openai}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
-      - OCR_SERVICE_URL=${OCR_SERVICE_URL:-http://ocr:8002}
+      - OCR_SERVICE_URL=http://ocr:8002
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
-      # Storage limits are managed in Admin Settings UI
-      # No hard Docker limits - app enforces soft limits
     volumes:
       - /mnt/user/appdata/casedesk/uploads:/app/uploads
-    ports:
-      - "8001:8001"
     networks:
       - default
+    # Backend intern auf Port 8001 - nicht exponiert
 
   frontend:
     image: ghcr.io/anditrenter/casedesk-ai/frontend:latest
@@ -58,7 +57,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "8080:80"
+      - "${FRONTEND_PORT:-9090}:80"
     networks:
       - default
 
@@ -70,11 +69,10 @@ services:
       - TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
     networks:
       - default
-    # Tesseract OCR with German + English language support
-    # No limits - OCR processing can be memory intensive
+    # Tesseract OCR mit Deutsch + Englisch
 
-  # Ollama - Local AI (optional)
-  # Start with: --profile ollama
+  # Ollama - Lokale KI (optional)
+  # Starten mit: --profile ollama
   ollama:
     image: ollama/ollama:latest
     container_name: casedesk-ollama
@@ -87,7 +85,7 @@ services:
       - "11434:11434"
     networks:
       - default
-    # Uncomment for NVIDIA GPU support on Unraid:
+    # Für NVIDIA GPU auf Unraid:
     # runtime: nvidia
     # environment:
     #   - NVIDIA_VISIBLE_DEVICES=all
