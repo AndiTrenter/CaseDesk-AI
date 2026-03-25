@@ -23,7 +23,7 @@ class AIService:
         self.provider = provider
         self.api_key = api_key or OPENAI_API_KEY
         self.ollama_url = OLLAMA_URL
-        self.model = "llama3.2" if provider == "ollama" else "gpt-4"
+        self.model = "llama3.2" if provider == "ollama" else "gpt-4o"
     
     async def generate(self, prompt: str, system_prompt: str = None, max_tokens: int = 2000) -> str:
         """Generate text using configured AI provider"""
@@ -412,7 +412,7 @@ DEBES responder SIEMPRE y EXCLUSIVAMENTE en ESPAÑOL!""",
             if doc.get('ai_summary'):
                 parts.append(f"{lbl['summary']}: {doc['ai_summary']}")
             if doc.get('ocr_text'):
-                parts.append(f"\n{lbl['content']}:\n{doc['ocr_text'][:6000]}")
+                parts.append(f"\n{lbl['content']}:\n{doc['ocr_text'][:12000]}")
         
         # Current case context
         if context.get("current_case"):
