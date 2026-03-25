@@ -53,3 +53,7 @@ frontend/node_modules/.cache/
 # Temporary
 *.tmp
 *.temp
+-e 
+# Environment files
+*.env
+*.env.*
