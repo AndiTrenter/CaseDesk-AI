@@ -47,9 +47,11 @@ async def lifespan(app: FastAPI):
     await db.audit_logs.create_index("user_id")
     
     # Start background email sync
-    from background_sync import BackgroundEmailSync
+    from background_sync import BackgroundEmailSync, NightlyOptimizer
     bg_sync = BackgroundEmailSync(db)
     await bg_sync.start()
+    nightly = NightlyOptimizer(db)
+    await nightly.start()
     
     yield
     
@@ -57,6 +59,8 @@ async def lifespan(app: FastAPI):
     logger.info("CaseDesk AI shutting down...")
     if bg_sync:
         await bg_sync.stop()
+    if nightly:
+        await nightly.stop()
     client.close()
 
 

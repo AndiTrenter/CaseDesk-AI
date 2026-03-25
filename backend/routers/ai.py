@@ -230,11 +230,27 @@ async def delete_ai_profile_fact(fact_index: int, user: dict = Depends(require_a
     return {"success": True}
 
 
-@router.delete("/ai/profile")
-async def clear_ai_profile(user: dict = Depends(require_auth)):
-    """Clear the entire AI memory profile"""
+@router.post("/ai/profile/clear")
+async def clear_ai_profile(
+    password: str = Form(...),
+    user: dict = Depends(require_auth)
+):
+    """Clear the entire AI memory profile - requires password confirmation"""
+    from deps import verify_password
+    
+    # Verify password
+    db_user = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    if not db_user or not verify_password(password, db_user.get("password_hash", "")):
+        return {"success": False, "error": "Falsches Passwort"}
+    
+    # Get fact count for audit
+    profile = await db.ai_profiles.find_one({"user_id": user["id"]}, {"_id": 0})
+    fact_count = len(profile.get("facts", [])) if profile else 0
+    
     await db.ai_profiles.delete_one({"user_id": user["id"]})
-    return {"success": True}
+    await log_action(user["id"], "clear_ai_profile", "ai_profile", None)
+    
+    return {"success": True, "deleted_facts": fact_count}
 
 
 @router.get("/ai/knowledge")

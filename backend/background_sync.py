@@ -1,12 +1,101 @@
 """
-CaseDesk AI - Background Email Sync Service
-Periodically fetches emails for all active accounts with auto_sync enabled
+CaseDesk AI - Background Services
+1. Email Sync: Periodically fetches emails for all active accounts
+2. Nightly Optimization: Runs at 2 AM, removes duplicate AI facts and optimizes data
 """
 import asyncio
 import logging
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
+
+
+class NightlyOptimizer:
+    """Background service that runs at 2 AM daily to clean up duplicate data"""
+
+    def __init__(self, db):
+        self.db = db
+        self._running = False
+        self._task = None
+
+    async def start(self):
+        self._running = True
+        self._task = asyncio.create_task(self._schedule_loop())
+        logger.info("Nightly optimizer scheduled (runs at 02:00)")
+
+    async def stop(self):
+        self._running = False
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+
+    async def _schedule_loop(self):
+        """Check every 60s if it's time to run (02:00)"""
+        last_run_date = None
+        while self._running:
+            try:
+                now = datetime.now()
+                today = now.strftime("%Y-%m-%d")
+
+                if now.hour == 2 and now.minute < 2 and last_run_date != today:
+                    logger.info("Starting nightly optimization...")
+                    await self._run_optimization()
+                    last_run_date = today
+                    logger.info("Nightly optimization complete")
+            except Exception as e:
+                logger.error(f"Nightly optimization error: {e}")
+
+            await asyncio.sleep(60)
+
+    async def _run_optimization(self):
+        """Main optimization: deduplicate AI facts for all users"""
+        profiles = await self.db.ai_profiles.find({}, {"_id": 0}).to_list(1000)
+        total_removed = 0
+
+        for profile in profiles:
+            facts = profile.get("facts", [])
+            if len(facts) < 2:
+                continue
+
+            seen = set()
+            unique_facts = []
+            duplicates_removed = 0
+
+            for fact in facts:
+                # Normalize key+value for comparison
+                key = (fact.get("key", "").strip().lower(), fact.get("value", "").strip().lower())
+                if key not in seen:
+                    seen.add(key)
+                    unique_facts.append(fact)
+                else:
+                    duplicates_removed += 1
+
+            if duplicates_removed > 0:
+                await self.db.ai_profiles.update_one(
+                    {"user_id": profile["user_id"]},
+                    {"$set": {
+                        "facts": unique_facts,
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    }}
+                )
+                total_removed += duplicates_removed
+                logger.info(f"User {profile['user_id'][:8]}...: removed {duplicates_removed} duplicate facts")
+
+        if total_removed > 0:
+            logger.info(f"Nightly optimization: removed {total_removed} total duplicate facts")
+        else:
+            logger.info("Nightly optimization: no duplicates found")
+
+        # Log the optimization run
+        await self.db.system_logs.insert_one({
+            "type": "nightly_optimization",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "duplicates_removed": total_removed,
+            "profiles_checked": len(profiles)
+        })
 
 
 class BackgroundEmailSync:

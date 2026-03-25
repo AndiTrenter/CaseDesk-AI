@@ -83,15 +83,8 @@ export default function AIChat() {
     }
   };
 
-  const handleClearProfile = async () => {
-    if (!window.confirm('Gesamtes KI-Gedächtnis wirklich löschen?')) return;
-    try {
-      await aiAPI.clearProfile();
-      setProfile(null);
-      toast.success('KI-Gedächtnis gelöscht');
-    } catch (error) {
-      toast.error('Fehler beim Löschen');
-    }
+  const handleClearProfile = () => {
+    navigate('/ai-knowledge');
   };
 
   const scrollToBottom = () => {
@@ -206,10 +199,10 @@ export default function AIChat() {
                 variant="ghost"
                 size="sm"
                 onClick={handleClearProfile}
-                className="text-red-400 hover:bg-red-500/10 text-xs"
-                data-testid="clear-ai-memory-btn"
+                className="text-gray-400 hover:text-purple-300 text-xs"
+                data-testid="manage-ai-memory-btn"
               >
-                <Trash2 className="w-3 h-3 mr-1" /> Alles löschen
+                Verwalten
               </Button>
             </div>
             {profile.summary && (

@@ -2,11 +2,17 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Brain, FileText, Briefcase, Trash2, X, User, Save,
-  ChevronDown, ChevronUp, Loader2, AlertCircle, Edit
+  ChevronDown, ChevronUp, Loader2, AlertCircle, Edit, ShieldAlert, Lock
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
 import { aiAPI } from '../lib/api';
 import { toast } from 'sonner';
 
@@ -18,6 +24,9 @@ export default function AIKnowledge() {
   const [editMode, setEditMode] = useState(false);
   const [showDocs, setShowDocs] = useState(false);
   const [showCases, setShowCases] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => { loadAll(); }, []);
 
@@ -60,14 +69,27 @@ export default function AIKnowledge() {
   };
 
   const handleClearMemory = async () => {
-    if (!window.confirm('Gesamtes KI-Gedächtnis wirklich löschen? Basisprofil bleibt erhalten.')) return;
-    try {
-      await aiAPI.clearProfile();
-      toast.success('KI-Gedächtnis gelöscht');
-      loadAll();
-    } catch (error) {
-      toast.error('Fehler beim Löschen');
+    if (!deletePassword.trim()) {
+      toast.error('Bitte geben Sie Ihr Passwort ein');
+      return;
     }
+    setDeleting(true);
+    try {
+      const formData = new FormData();
+      formData.append('password', deletePassword);
+      const response = await aiAPI.clearProfile(deletePassword);
+      if (response.data.success) {
+        toast.success(`KI-Gedächtnis gelöscht (${response.data.deleted_facts} Fakten entfernt)`);
+        setDeleteDialogOpen(false);
+        setDeletePassword('');
+        loadAll();
+      } else {
+        toast.error(response.data.error || 'Löschen fehlgeschlagen');
+      }
+    } catch (error) {
+      toast.error('Falsches Passwort oder Fehler beim Löschen');
+    }
+    setDeleting(false);
   };
 
   const onboardingFields = [
@@ -195,7 +217,7 @@ export default function AIKnowledge() {
               <Brain className="w-5 h-5 text-purple-400" /> Gelernte Fakten
             </h2>
             {facts.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={handleClearMemory} className="text-red-400 hover:bg-red-500/10 text-xs" data-testid="clear-memory-btn">
+              <Button variant="ghost" size="sm" onClick={() => setDeleteDialogOpen(true)} className="text-red-400 hover:bg-red-500/10 text-xs" data-testid="clear-memory-btn">
                 <Trash2 className="w-3 h-3 mr-1" /> Alles löschen
               </Button>
             )}
@@ -304,6 +326,67 @@ export default function AIKnowledge() {
             </div>
           )}
         </div>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <DialogContent className="bg-[#1A1A1A] border-red-500/20 max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-red-400 flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5" />
+                KI-Gedächtnis endgültig löschen
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 space-y-2">
+                <p className="text-red-300 text-sm font-medium">
+                  Diese Aktion kann nicht rückgängig gemacht werden!
+                </p>
+                <p className="text-gray-400 text-sm">
+                  Folgende Daten werden unwiderruflich gelöscht:
+                </p>
+                <ul className="text-gray-400 text-sm list-disc pl-5 space-y-1">
+                  <li><span className="text-white">{facts.length} gelernte Fakten</span> aus Gesprächen und Dokumenten</li>
+                  <li>KI-Zusammenfassung Ihres Profils</li>
+                  <li>Alle aus Konversationen extrahierten Informationen</li>
+                </ul>
+                <p className="text-amber-400 text-xs mt-2">
+                  Ihr Basisprofil (Name, Adresse, etc.) bleibt erhalten und kann separat bearbeitet werden.
+                </p>
+              </div>
+
+              <div>
+                <Label className="text-gray-400 text-sm flex items-center gap-2">
+                  <Lock className="w-3 h-3" /> Bestätigen Sie mit Ihrem Passwort
+                </Label>
+                <Input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  placeholder="Ihr Passwort eingeben"
+                  className="mt-2 bg-black/30 border-white/10 text-white"
+                  data-testid="delete-confirm-password"
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleClearMemory(); }}
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <Button variant="ghost" onClick={() => { setDeleteDialogOpen(false); setDeletePassword(''); }} className="text-gray-400">
+                  Abbrechen
+                </Button>
+                <Button 
+                  onClick={handleClearMemory} 
+                  disabled={deleting || !deletePassword.trim()}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                  data-testid="confirm-delete-memory-btn"
+                >
+                  {deleting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                  Endgültig löschen
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

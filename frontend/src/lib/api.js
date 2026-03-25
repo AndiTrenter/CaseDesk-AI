@@ -180,7 +180,13 @@ export const aiAPI = {
   },
   getProfile: () => api.get('/ai/profile'),
   deleteProfileFact: (index) => api.delete(`/ai/profile/facts/${index}`),
-  clearProfile: () => api.delete('/ai/profile'),
+  clearProfile: (password) => {
+    const formData = new FormData();
+    formData.append('password', password);
+    return api.post('/ai/profile/clear', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
   getKnowledge: () => api.get('/ai/knowledge'),
   getOnboarding: () => api.get('/ai/onboarding'),
   saveOnboarding: (data) => {
