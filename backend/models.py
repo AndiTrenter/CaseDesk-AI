@@ -276,6 +276,7 @@ class EventBase(BaseDocument):
 
 class EventCreate(EventBase):
     case_id: Optional[str] = None
+    create_task: bool = False
 
 
 class Event(EventBase):

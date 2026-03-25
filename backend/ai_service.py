@@ -396,6 +396,25 @@ DEBES responder SIEMPRE y EXCLUSIVAMENTE en ESPAÑOL!""",
         if context.get("user_profile_context"):
             parts.append(context["user_profile_context"])
         
+        # Onboarding profile data
+        if context.get("onboarding_profile"):
+            ob = context["onboarding_profile"]
+            ob_parts = []
+            field_labels = {
+                "full_name": "Name", "address": "Adresse", "phone": "Telefon",
+                "birthdate": "Geburtsdatum", "marital_status": "Familienstand",
+                "partner_name": "Partner", "children": "Kinder",
+                "employer": "Arbeitgeber", "occupation": "Beruf",
+                "insurance_health": "Krankenversicherung", "notes": "Notizen"
+            }
+            for key, label in field_labels.items():
+                val = ob.get(key)
+                if val and val.strip():
+                    ob_parts.append(f"- {label}: {val}")
+            if ob_parts:
+                parts.append("\n## BASISPROFIL DES BENUTZERS:")
+                parts.extend(ob_parts)
+        
         # Focused document context (highest priority - full content)
         if context.get("focused_document"):
             doc = context["focused_document"]

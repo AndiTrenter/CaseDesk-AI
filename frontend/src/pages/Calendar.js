@@ -41,7 +41,8 @@ export default function Calendar() {
     start_time: '',
     end_time: '',
     all_day: false,
-    location: ''
+    location: '',
+    create_task: false
   });
 
   const locale = i18n.language === 'de' ? de : enUS;
@@ -70,7 +71,8 @@ export default function Calendar() {
         start_time: new Date(formData.start_time).toISOString(),
         end_time: new Date(formData.end_time).toISOString(),
         all_day: formData.all_day,
-        location: formData.location || null
+        location: formData.location || null,
+        create_task: formData.create_task
       };
       
       if (editingEvent) {
@@ -96,7 +98,8 @@ export default function Calendar() {
       start_time: '',
       end_time: '',
       all_day: false,
-      location: ''
+      location: '',
+      create_task: false
     });
   };
 
@@ -395,6 +398,20 @@ export default function Calendar() {
                 className="mt-1 bg-black/30 border-white/10 text-white"
                 placeholder="Optional"
               />
+            </div>
+            
+            <div className="flex items-center gap-3 py-2 px-3 bg-blue-500/5 border border-blue-500/10 rounded-lg">
+              <input
+                type="checkbox"
+                id="create_task"
+                checked={formData.create_task}
+                onChange={(e) => setFormData({ ...formData, create_task: e.target.checked })}
+                className="w-4 h-4 rounded border-white/20 bg-black/30 text-purple-500"
+                data-testid="create-task-checkbox"
+              />
+              <label htmlFor="create_task" className="text-gray-300 text-sm cursor-pointer">
+                Auch als Aufgabe anlegen (Frist = Terminbeginn)
+              </label>
             </div>
             
             <div className="flex justify-end gap-3 pt-4">

@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { 
   LayoutDashboard, FileText, Briefcase, Mail, Calendar, 
   CheckSquare, FileEdit, Bot, Settings, LogOut, Menu, X,
-  Shield, Globe, ChevronRight, Sun, Moon
+  Shield, Globe, ChevronRight, Sun, Moon, Brain, Activity
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { useAuth } from '../context/AuthContext';
@@ -19,6 +19,8 @@ const navItems = [
   { path: '/tasks', icon: CheckSquare, label: 'nav.tasks' },
   { path: '/calendar', icon: Calendar, label: 'nav.calendar' },
   { path: '/ai', icon: Bot, label: 'nav.aiChat' },
+  { path: '/ai-knowledge', icon: Brain, label: 'KI-Wissen' },
+  { path: '/health', icon: Activity, label: 'System-Status' },
   { path: '/settings', icon: Settings, label: 'nav.settings' },
 ];
 

@@ -42,6 +42,27 @@ async def create_event(event_data: EventCreate, user: dict = Depends(require_aut
     }
     await db.events.insert_one(new_event)
     await log_action(user["id"], "create_event", "event", event_id)
+
+    # Auto-create task if requested
+    create_task = getattr(event_data, 'create_task', False)
+    if create_task:
+        task_id = str(uuid.uuid4())
+        task = {
+            "id": task_id,
+            "user_id": user["id"],
+            "title": event_data.title,
+            "description": f"Termin: {event_data.description or event_data.title}",
+            "status": "todo",
+            "priority": "medium",
+            "due_date": event_data.start_time.isoformat() if event_data.start_time else None,
+            "case_id": event_data.case_id,
+            "event_id": event_id,
+            "created_at": now,
+            "updated_at": now
+        }
+        await db.tasks.insert_one(task)
+        new_event["task_id"] = task_id
+
     return new_event
 
 

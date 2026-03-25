@@ -1,4 +1,4 @@
-"""Settings, Dashboard & Export Router"""
+"""Settings, Dashboard, Export & Healthcheck Router"""
 from fastapi import APIRouter, HTTPException, Depends, Form
 from fastapi.responses import FileResponse
 from datetime import datetime, timezone
@@ -8,12 +8,114 @@ import json
 import zipfile
 import tempfile
 import logging
+import shutil
 
-from deps import db, require_auth, require_admin, log_action
+from deps import db, require_auth, require_admin, log_action, OCR_SERVICE_URL
 from models import CaseStatus, TaskStatus
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+# ==================== Healthcheck Dashboard ====================
+
+@router.get("/admin/health")
+async def admin_health_check(user: dict = Depends(require_admin)):
+    """Comprehensive health check for all services"""
+    import httpx
+
+    results = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "services": {}
+    }
+
+    # MongoDB
+    try:
+        info = await db.command("ping")
+        doc_count = await db.documents.count_documents({})
+        user_count = await db.users.count_documents({})
+        results["services"]["mongodb"] = {
+            "status": "connected",
+            "documents": doc_count,
+            "users": user_count
+        }
+    except Exception as e:
+        results["services"]["mongodb"] = {"status": "error", "error": str(e)}
+
+    # OCR Service
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{OCR_SERVICE_URL}/health")
+            results["services"]["ocr"] = {
+                "status": "connected" if resp.status_code == 200 else "error",
+                "url": OCR_SERVICE_URL
+            }
+    except Exception:
+        results["services"]["ocr"] = {
+            "status": "unavailable",
+            "url": OCR_SERVICE_URL,
+            "note": "Fallback-OCR (Tesseract) aktiv"
+        }
+
+    # AI Provider
+    settings = await db.system_settings.find_one({}, {"_id": 0})
+    ai_provider = os.environ.get("AI_PROVIDER") or (settings.get("ai_provider") if settings else "disabled")
+    api_key = os.environ.get("OPENAI_API_KEY") or (settings.get("openai_api_key") if settings else None)
+
+    if ai_provider == "openai":
+        results["services"]["openai"] = {
+            "status": "configured" if api_key else "no_api_key",
+            "provider": "openai"
+        }
+    elif ai_provider == "ollama":
+        ollama_url = os.environ.get("OLLAMA_URL", "http://ollama:11434")
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(f"{ollama_url}/api/tags")
+                models = [m["name"] for m in resp.json().get("models", [])] if resp.status_code == 200 else []
+                results["services"]["ollama"] = {
+                    "status": "connected",
+                    "url": ollama_url,
+                    "models": models
+                }
+        except Exception:
+            results["services"]["ollama"] = {"status": "unavailable", "url": ollama_url}
+    else:
+        results["services"]["ai"] = {"status": "disabled"}
+
+    # Email Sync
+    mail_accounts = await db.mail_accounts.count_documents({})
+    results["services"]["email_sync"] = {
+        "status": "active" if mail_accounts > 0 else "no_accounts",
+        "accounts": mail_accounts
+    }
+
+    # Storage
+    try:
+        upload_dir = os.environ.get("UPLOAD_DIR", "./uploads")
+        total, used, free = shutil.disk_usage(upload_dir)
+        results["services"]["storage"] = {
+            "status": "ok",
+            "total_gb": round(total / (1024**3), 1),
+            "used_gb": round(used / (1024**3), 1),
+            "free_gb": round(free / (1024**3), 1),
+            "usage_percent": round(used / total * 100, 1)
+        }
+    except Exception as e:
+        results["services"]["storage"] = {"status": "error", "error": str(e)}
+
+    # Tesseract OCR
+    try:
+        import subprocess
+        result = subprocess.run(["tesseract", "--version"], capture_output=True, text=True, timeout=5)
+        results["services"]["tesseract"] = {
+            "status": "installed",
+            "version": result.stdout.split("\n")[0] if result.returncode == 0 else "unknown"
+        }
+    except Exception:
+        results["services"]["tesseract"] = {"status": "not_installed"}
+
+    return results
 
 
 # ==================== Settings ====================

@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { Label } from '../components/ui/label';
-import { documentsAPI, casesAPI, documentUpdateAPI } from '../lib/api';
+import { documentsAPI, casesAPI, documentUpdateAPI, aiAPI } from '../lib/api';
 import { toast } from 'sonner';
 
 export default function Documents() {
@@ -52,6 +52,13 @@ export default function Documents() {
   const [selectedDocIds, setSelectedDocIds] = useState([]);
   const [assignCaseDialogOpen, setAssignCaseDialogOpen] = useState(false);
   const [assignCaseId, setAssignCaseId] = useState('');
+  
+  // Suggestion dialog state
+  const [suggestionDoc, setSuggestionDoc] = useState(null);
+  const [suggestions, setSuggestions] = useState(null);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [selectedTags, setSelectedTags] = useState([]);
+  const [selectedCaseIds, setSelectedCaseIds] = useState([]);
   
   // Edit form state
   const [editForm, setEditForm] = useState({
@@ -98,6 +105,7 @@ export default function Documents() {
     if (!files || files.length === 0) return;
 
     setUploading(true);
+    let lastUploadedDoc = null;
     
     for (const file of files) {
       try {
@@ -112,6 +120,7 @@ export default function Documents() {
         } else {
           toast.success(`${file.name} hochgeladen`, { id: `upload-${file.name}` });
         }
+        lastUploadedDoc = response.data.document;
       } catch (error) {
         console.error('Upload error:', error);
         toast.error(`Fehler beim Hochladen von ${file.name}`, { id: `upload-${file.name}` });
@@ -121,6 +130,43 @@ export default function Documents() {
     setUploading(false);
     loadDocuments();
     if (fileInputRef.current) fileInputRef.current.value = '';
+    
+    // Show suggestion dialog for the last uploaded document
+    if (lastUploadedDoc && lastUploadedDoc.id) {
+      setSuggestionDoc(lastUploadedDoc);
+      setLoadingSuggestions(true);
+      try {
+        const sugResp = await aiAPI.suggestMetadata(lastUploadedDoc.id);
+        if (sugResp.data.success) {
+          setSuggestions(sugResp.data);
+          setSelectedTags(sugResp.data.suggested_tags || []);
+          setSelectedCaseIds((sugResp.data.suggested_cases || []).map(c => c.id));
+        }
+      } catch (error) {
+        console.error('Suggestion error:', error);
+      }
+      setLoadingSuggestions(false);
+    }
+  };
+
+  const handleApplySuggestions = async () => {
+    if (!suggestionDoc) return;
+    try {
+      // Update tags
+      if (selectedTags.length > 0) {
+        await documentUpdateAPI.update(suggestionDoc.id, { tags: selectedTags });
+      }
+      // Assign to cases
+      for (const caseId of selectedCaseIds) {
+        await documentsAPI.assignCase([suggestionDoc.id], caseId);
+      }
+      toast.success('Vorschläge übernommen');
+      loadDocuments();
+    } catch (error) {
+      toast.error('Fehler beim Übernehmen');
+    }
+    setSuggestionDoc(null);
+    setSuggestions(null);
   };
 
   const handleReprocess = async (doc) => {
@@ -853,6 +899,97 @@ export default function Documents() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Suggestion Dialog after Upload */}
+      <Dialog open={!!suggestionDoc} onOpenChange={(open) => { if (!open) { setSuggestionDoc(null); setSuggestions(null); } }}>
+        <DialogContent className="bg-[#1A1A1A] border-white/10 max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Tag className="w-5 h-5 text-purple-400" />
+              KI-Vorschläge
+            </DialogTitle>
+          </DialogHeader>
+          
+          {loadingSuggestions ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 text-purple-400 animate-spin" />
+              <span className="text-gray-400 text-sm ml-3">KI analysiert Dokument...</span>
+            </div>
+          ) : suggestions ? (
+            <div className="space-y-4">
+              <p className="text-gray-400 text-sm">
+                Für: <span className="text-white font-medium">{suggestionDoc?.display_name || suggestionDoc?.original_filename}</span>
+              </p>
+              
+              {suggestions.reasoning && (
+                <p className="text-gray-500 text-xs bg-purple-500/5 border border-purple-500/10 rounded p-2">{suggestions.reasoning}</p>
+              )}
+
+              {/* Tags */}
+              <div>
+                <p className="text-gray-300 text-sm font-medium mb-2">Tags:</p>
+                <div className="flex flex-wrap gap-2">
+                  {(suggestions.suggested_tags || []).map((tag) => (
+                    <button
+                      key={tag}
+                      onClick={() => setSelectedTags(prev => 
+                        prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+                      )}
+                      className={`px-3 py-1 rounded-full text-sm transition-colors ${
+                        selectedTags.includes(tag)
+                          ? 'bg-purple-500/30 text-purple-200 border border-purple-500/50'
+                          : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+                      }`}
+                      data-testid={`suggest-tag-${tag}`}
+                    >
+                      {selectedTags.includes(tag) ? <CheckSquare className="w-3 h-3 inline mr-1" /> : null}
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cases */}
+              {suggestions.suggested_cases && suggestions.suggested_cases.length > 0 && (
+                <div>
+                  <p className="text-gray-300 text-sm font-medium mb-2">Passende Fälle:</p>
+                  <div className="space-y-2">
+                    {suggestions.suggested_cases.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => setSelectedCaseIds(prev =>
+                          prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id]
+                        )}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-2 ${
+                          selectedCaseIds.includes(c.id)
+                            ? 'bg-amber-500/20 text-amber-200 border border-amber-500/30'
+                            : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+                        }`}
+                        data-testid={`suggest-case-${c.id}`}
+                      >
+                        {selectedCaseIds.includes(c.id) && <CheckSquare className="w-4 h-4 flex-shrink-0" />}
+                        <Briefcase className="w-4 h-4 flex-shrink-0" />
+                        <span>{c.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-2">
+                <Button variant="ghost" onClick={() => { setSuggestionDoc(null); setSuggestions(null); }} className="text-gray-400">
+                  Überspringen
+                </Button>
+                <Button onClick={handleApplySuggestions} className="btn-primary" data-testid="apply-suggestions-btn">
+                  <CheckCircle className="w-4 h-4 mr-2" /> Übernehmen
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm text-center py-4">Keine Vorschläge verfügbar</p>
+          )}
         </DialogContent>
       </Dialog>
     </div>

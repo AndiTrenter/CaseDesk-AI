@@ -18,6 +18,9 @@ import Tasks from './pages/Tasks';
 import Calendar from './pages/Calendar';
 import Emails from './pages/Emails';
 import AIChat from './pages/AIChat';
+import AIKnowledge from './pages/AIKnowledge';
+import HealthDashboard from './pages/HealthDashboard';
+import OnboardingWizard from './pages/OnboardingWizard';
 import Settings from './pages/Settings';
 import Layout from './components/Layout';
 
@@ -81,6 +84,7 @@ const AppRoutes = () => {
         isAuthenticated ? <Navigate to="/" replace /> : <Login />
       } />
       <Route path="/register/:token" element={<Register />} />
+      <Route path="/onboarding" element={<OnboardingWizard />} />
       
       <Route path="/" element={
         <ProtectedRoute>
@@ -95,6 +99,8 @@ const AppRoutes = () => {
         <Route path="calendar" element={<Calendar />} />
         <Route path="emails" element={<Emails />} />
         <Route path="ai" element={<AIChat />} />
+        <Route path="ai-knowledge" element={<AIKnowledge />} />
+        <Route path="health" element={<HealthDashboard />} />
         <Route path="settings" element={<Settings />} />
       </Route>
       

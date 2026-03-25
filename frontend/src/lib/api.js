@@ -181,6 +181,27 @@ export const aiAPI = {
   getProfile: () => api.get('/ai/profile'),
   deleteProfileFact: (index) => api.delete(`/ai/profile/facts/${index}`),
   clearProfile: () => api.delete('/ai/profile'),
+  getKnowledge: () => api.get('/ai/knowledge'),
+  getOnboarding: () => api.get('/ai/onboarding'),
+  saveOnboarding: (data) => {
+    const formData = new FormData();
+    Object.keys(data).forEach(key => {
+      if (data[key] !== null && data[key] !== undefined) {
+        formData.append(key, data[key]);
+      }
+    });
+    return api.post('/ai/onboarding', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  suggestMetadata: (documentId) => {
+    const formData = new FormData();
+    formData.append('document_id', documentId);
+    return api.post('/documents/suggest-metadata', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000
+    });
+  },
 };
 
 // Proactive AI
@@ -335,6 +356,7 @@ export const documentUpdateAPI = {
 // Health
 export const healthAPI = {
   check: () => api.get('/health'),
+  adminHealth: () => api.get('/admin/health'),
 };
 
 export default api;

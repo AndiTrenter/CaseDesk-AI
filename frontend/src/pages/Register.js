@@ -65,8 +65,15 @@ export default function Register() {
       });
       
       if (response.data.success) {
-        toast.success('Konto erfolgreich erstellt! Sie können sich jetzt anmelden.');
-        navigate('/login');
+        toast.success('Konto erfolgreich erstellt!');
+        // Save token and redirect to onboarding
+        if (response.data.access_token) {
+          localStorage.setItem('casedesk_token', response.data.access_token);
+          localStorage.setItem('casedesk_user', JSON.stringify(response.data.user));
+          navigate('/onboarding');
+        } else {
+          navigate('/login');
+        }
       } else {
         toast.error(response.data.error || 'Registrierung fehlgeschlagen');
       }
