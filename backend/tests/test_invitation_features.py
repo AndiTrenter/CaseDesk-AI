@@ -7,9 +7,7 @@ import requests
 import os
 import uuid
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
-if not BASE_URL:
-    BASE_URL = "https://ai-task-assistant-5.preview.emergentagent.com"
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'http://localhost:8001').rstrip('/')
 
 # Test credentials
 ADMIN_EMAIL = "admin@casedesk.app"

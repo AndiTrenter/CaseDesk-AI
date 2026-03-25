@@ -43,7 +43,7 @@ Self-hosted, privacy-focused, modular web application for managing documents, em
 - Docker Compose (dev + Unraid production)
 - GitHub Actions → GHCR image publishing
 - Unraid XML template
-- **NO external/emergent dependencies** - clean requirements.txt
+- **NO external/emergent dependencies** - clean requirements.txt, all self-hosted
 
 ## Credentials
 - Email: andi.trenter@gmail.com

@@ -10,8 +10,8 @@ import tempfile
 import os
 
 class CaseDeskAPITester:
-    def __init__(self, base_url="https://ai-task-assistant-5.preview.emergentagent.com"):
-        self.base_url = base_url
+    def __init__(self, base_url=None):
+        self.base_url = base_url or os.environ.get('REACT_APP_BACKEND_URL', 'http://localhost:8001')
         self.token = None
         self.session_id = None
         self.tests_run = 0

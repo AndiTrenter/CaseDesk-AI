@@ -810,8 +810,15 @@ async def execute_action(
                     "updated_at": now
                 }
                 await db.tasks.insert_one(reminder_task)
+                # Remove _id from reminder_task for JSON serialization
+                if "_id" in reminder_task:
+                    del reminder_task["_id"]
             except Exception as e:
                 logger.error(f"Reminder creation error: {e}")
+        
+        # Remove _id from event for JSON serialization
+        if "_id" in event:
+            del event["_id"]
         
         return {
             "success": True,
@@ -841,6 +848,10 @@ async def execute_action(
         await db.tasks.insert_one(task)
         await log_action(user["id"], "create_task_via_ai", "task", task_id)
         
+        # Remove _id from task for JSON serialization
+        if "_id" in task:
+            del task["_id"]
+        
         return {
             "success": True,
             "action_type": "create_task",
@@ -867,6 +878,10 @@ async def execute_action(
         
         await db.cases.insert_one(case)
         await log_action(user["id"], "create_case_via_ai", "case", case_id)
+        
+        # Remove _id from case for JSON serialization
+        if "_id" in case:
+            del case["_id"]
         
         return {
             "success": True,
@@ -900,6 +915,10 @@ async def execute_action(
         
         await db.correspondence.insert_one(correspondence)
         await log_action(user["id"], "create_email_draft_via_ai", "correspondence", correspondence_id)
+        
+        # Remove _id from correspondence for JSON serialization
+        if "_id" in correspondence:
+            del correspondence["_id"]
         
         return {
             "success": True,
