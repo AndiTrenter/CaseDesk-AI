@@ -27,9 +27,28 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
   - Detaillierte Release Notes vor jedem Update
 - 📖 **Update-Dokumentation**
   - Neue README_UPDATE_SYSTEM.md mit detaillierter Anleitung
+- 📧 **Automatische Dokumenten-Verarbeitung**
+  - E-Mail-Anhänge werden automatisch als Dokumente importiert
+  - PDFs und Bilder werden automatisch OCR-verarbeitet (Tesseract)
+  - KI analysiert importierte Dokumente automatisch
+  - Erkannte Fristen werden als Aufgaben erstellt
+  - Dokument-Inhalte stehen der KI als Wissen zur Verfügung
+  - Perfekt für Scanner → E-Mail → CaseDesk Workflow
+- ✏️ **E-Mail-Konto bearbeiten**
+  - Bestehende E-Mail-Konten können jetzt bearbeitet werden
+  - Sync-Intervall einstellbar (1 Min bis stündlich)
+  - Passwort-Felder mit Sichtbarkeits-Toggle (Auge-Symbol)
+- 🔗 **E-Mail Verbindungstest**
+  - IMAP und SMTP Verbindung vor dem Speichern testen
+  - Hilfreiche Fehlermeldungen inkl. Gmail App-Passwort Hinweis
+- 🐘 **MongoDB 4.4 Kompatibilität**
+  - Standard-MongoDB-Version auf 4.4 geändert (für CPUs ohne AVX)
+  - Konfigurierbar via MONGO_VERSION in .env
 
 ### Technisch
 - Neuer Backend-Router `/api/system` für Update-Funktionen
+- Background-Sync mit vollständiger Dokumenten-Pipeline
+- Tesseract OCR im Docker-Image (deutsch + englisch)
 - GitHub Actions erweitert für semantische Versionierung
 - Docker Images werden mit Version-Tags gepusht (z.B. `v1.0.1`)
 
