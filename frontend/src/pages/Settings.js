@@ -1439,6 +1439,21 @@ export default function Settings() {
                 className="mt-1 bg-black/30 border-white/10 text-white"
                 placeholder="••••••••"
               />
+              {/* Gmail App-Password hint */}
+              {(newMailAccount.imap_server?.includes('gmail') || newMailAccount.email?.includes('gmail')) && (
+                <p className="text-xs text-amber-400 mt-2">
+                  💡 <strong>Gmail mit 2FA:</strong> Verwende ein{' '}
+                  <a 
+                    href="https://myaccount.google.com/apppasswords" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="underline hover:text-amber-300"
+                  >
+                    App-Passwort
+                  </a>
+                  {' '}statt deines normalen Passworts.
+                </p>
+              )}
             </div>
             
             {/* Connection Test Result */}
@@ -1448,36 +1463,36 @@ export default function Settings() {
                   ? 'bg-green-500/10 border-green-500/30' 
                   : 'bg-red-500/10 border-red-500/30'
               }`}>
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-start gap-2 mb-2">
                   {connectionTestResult.success ? (
-                    <CheckCircle className="w-4 h-4 text-green-500" />
+                    <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
                   ) : (
-                    <XCircle className="w-4 h-4 text-red-500" />
+                    <XCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
                   )}
                   <span className={connectionTestResult.success ? 'text-green-400' : 'text-red-400'}>
                     {connectionTestResult.message}
                   </span>
                 </div>
                 {connectionTestResult.results && (
-                  <div className="text-xs space-y-1">
-                    <div className="flex items-center gap-2">
+                  <div className="text-xs space-y-2 mt-3">
+                    <div className="flex items-start gap-2">
                       {connectionTestResult.results.imap?.success ? (
-                        <Check className="w-3 h-3 text-green-500" />
+                        <Check className="w-3 h-3 text-green-500 mt-0.5 flex-shrink-0" />
                       ) : (
-                        <X className="w-3 h-3 text-red-500" />
+                        <X className="w-3 h-3 text-red-500 mt-0.5 flex-shrink-0" />
                       )}
-                      <span className="text-gray-400">IMAP: {connectionTestResult.results.imap?.message}</span>
+                      <span className="text-gray-400 break-words">IMAP: {connectionTestResult.results.imap?.message}</span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-start gap-2">
                       {connectionTestResult.results.smtp?.success ? (
-                        <Check className="w-3 h-3 text-green-500" />
+                        <Check className="w-3 h-3 text-green-500 mt-0.5 flex-shrink-0" />
                       ) : (
-                        <X className="w-3 h-3 text-red-500" />
+                        <X className="w-3 h-3 text-red-500 mt-0.5 flex-shrink-0" />
                       )}
-                      <span className="text-gray-400">SMTP: {connectionTestResult.results.smtp?.message}</span>
+                      <span className="text-gray-400 break-words">SMTP: {connectionTestResult.results.smtp?.message}</span>
                     </div>
                   </div>
-                )}
+                )}}
               </div>
             )}
             
