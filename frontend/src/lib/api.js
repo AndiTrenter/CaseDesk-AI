@@ -285,6 +285,18 @@ export const mailAPI = {
     });
   },
   deleteAccount: (id) => api.delete(`/mail/accounts/${id}`),
+  testConnection: (data) => {
+    const formData = new FormData();
+    Object.keys(data).forEach(key => {
+      if (data[key] !== null && data[key] !== undefined && data[key] !== '') {
+        formData.append(key, data[key]);
+      }
+    });
+    return api.post('/mail/accounts/test-connection', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 30000  // 30 seconds for connection test
+    });
+  },
 };
 
 // Emails

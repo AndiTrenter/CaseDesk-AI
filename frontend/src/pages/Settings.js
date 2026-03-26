@@ -87,6 +87,10 @@ export default function Settings() {
   const [updateInProgress, setUpdateInProgress] = useState(false);
   const [showChangelogDialog, setShowChangelogDialog] = useState(false);
   const [showUpdateConfirm, setShowUpdateConfirm] = useState(false);
+  
+  // Mail connection test state
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionTestResult, setConnectionTestResult] = useState(null);
 
   useEffect(() => {
     loadSettings();
@@ -297,10 +301,37 @@ export default function Settings() {
       toast.success('E-Mail-Konto hinzugefügt');
       setMailDialogOpen(false);
       setNewMailAccount({ email: '', display_name: '', imap_server: '', imap_port: 993, password: '', smtp_server: '', smtp_port: 587 });
+      setConnectionTestResult(null);
       loadMailAccounts();
     } catch (error) {
-      toast.error('Fehler beim Hinzufügen des E-Mail-Kontos');
+      toast.error(error.response?.data?.detail || 'Fehler beim Hinzufügen des E-Mail-Kontos');
     }
+  };
+  
+  const handleTestMailConnection = async () => {
+    if (!newMailAccount.email || !newMailAccount.imap_server || !newMailAccount.password) {
+      toast.error('Bitte E-Mail, IMAP-Server und Passwort eingeben');
+      return;
+    }
+    
+    setTestingConnection(true);
+    setConnectionTestResult(null);
+    try {
+      const res = await mailAPI.testConnection(newMailAccount);
+      setConnectionTestResult(res.data);
+      if (res.data.success) {
+        toast.success('Verbindungstest erfolgreich!');
+      } else {
+        toast.error('Verbindungstest fehlgeschlagen');
+      }
+    } catch (error) {
+      setConnectionTestResult({
+        success: false,
+        message: error.response?.data?.detail || 'Verbindungstest fehlgeschlagen'
+      });
+      toast.error('Verbindungstest fehlgeschlagen');
+    }
+    setTestingConnection(false);
   };
   
   const handleDeleteMailAccount = async (id) => {
@@ -1410,9 +1441,67 @@ export default function Settings() {
               />
             </div>
             
+            {/* Connection Test Result */}
+            {connectionTestResult && (
+              <div className={`p-3 rounded-lg border ${
+                connectionTestResult.success 
+                  ? 'bg-green-500/10 border-green-500/30' 
+                  : 'bg-red-500/10 border-red-500/30'
+              }`}>
+                <div className="flex items-center gap-2 mb-2">
+                  {connectionTestResult.success ? (
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <XCircle className="w-4 h-4 text-red-500" />
+                  )}
+                  <span className={connectionTestResult.success ? 'text-green-400' : 'text-red-400'}>
+                    {connectionTestResult.message}
+                  </span>
+                </div>
+                {connectionTestResult.results && (
+                  <div className="text-xs space-y-1">
+                    <div className="flex items-center gap-2">
+                      {connectionTestResult.results.imap?.success ? (
+                        <Check className="w-3 h-3 text-green-500" />
+                      ) : (
+                        <X className="w-3 h-3 text-red-500" />
+                      )}
+                      <span className="text-gray-400">IMAP: {connectionTestResult.results.imap?.message}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {connectionTestResult.results.smtp?.success ? (
+                        <Check className="w-3 h-3 text-green-500" />
+                      ) : (
+                        <X className="w-3 h-3 text-red-500" />
+                      )}
+                      <span className="text-gray-400">SMTP: {connectionTestResult.results.smtp?.message}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            
             <div className="flex justify-end gap-3 pt-4">
-              <Button variant="ghost" onClick={() => setMailDialogOpen(false)} className="text-gray-400">
+              <Button variant="ghost" onClick={() => {
+                setMailDialogOpen(false);
+                setConnectionTestResult(null);
+              }} className="text-gray-400">
                 Abbrechen
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={handleTestMailConnection}
+                disabled={testingConnection}
+                className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+              >
+                {testingConnection ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Teste...
+                  </>
+                ) : (
+                  'Verbindung testen'
+                )}
               </Button>
               <Button onClick={handleAddMailAccount} className="btn-primary">
                 Hinzufügen

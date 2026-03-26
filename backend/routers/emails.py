@@ -4,6 +4,9 @@ from datetime import datetime, timezone
 from typing import Optional
 import uuid
 import logging
+import imaplib
+import smtplib
+import ssl
 
 from deps import db, require_auth, log_action
 
@@ -12,6 +15,68 @@ router = APIRouter()
 
 
 # ==================== Mail Accounts ====================
+
+@router.post("/mail/accounts/test-connection")
+async def test_mail_connection(
+    email: str = Form(...),
+    imap_server: str = Form(...),
+    imap_port: int = Form(993),
+    password: str = Form(...),
+    smtp_server: str = Form(None),
+    smtp_port: int = Form(587),
+    user: dict = Depends(require_auth)
+):
+    """Test IMAP and SMTP connection before saving"""
+    results = {
+        "imap": {"success": False, "message": ""},
+        "smtp": {"success": False, "message": ""}
+    }
+    
+    # Test IMAP connection
+    try:
+        context = ssl.create_default_context()
+        if imap_port == 993:
+            imap = imaplib.IMAP4_SSL(imap_server, imap_port, ssl_context=context)
+        else:
+            imap = imaplib.IMAP4(imap_server, imap_port)
+            imap.starttls(ssl_context=context)
+        
+        imap.login(email, password)
+        imap.select('INBOX')
+        imap.logout()
+        results["imap"] = {"success": True, "message": "IMAP-Verbindung erfolgreich"}
+    except imaplib.IMAP4.error as e:
+        results["imap"] = {"success": False, "message": f"IMAP-Authentifizierung fehlgeschlagen: {str(e)}"}
+    except Exception as e:
+        results["imap"] = {"success": False, "message": f"IMAP-Verbindungsfehler: {str(e)}"}
+    
+    # Test SMTP connection if server provided
+    if smtp_server:
+        try:
+            context = ssl.create_default_context()
+            if smtp_port == 465:
+                smtp = smtplib.SMTP_SSL(smtp_server, smtp_port, context=context)
+            else:
+                smtp = smtplib.SMTP(smtp_server, smtp_port)
+                smtp.starttls(context=context)
+            
+            smtp.login(email, password)
+            smtp.quit()
+            results["smtp"] = {"success": True, "message": "SMTP-Verbindung erfolgreich"}
+        except smtplib.SMTPAuthenticationError as e:
+            results["smtp"] = {"success": False, "message": f"SMTP-Authentifizierung fehlgeschlagen: {str(e)}"}
+        except Exception as e:
+            results["smtp"] = {"success": False, "message": f"SMTP-Verbindungsfehler: {str(e)}"}
+    else:
+        results["smtp"] = {"success": True, "message": "Kein SMTP-Server angegeben (nur Empfang)"}
+    
+    overall_success = results["imap"]["success"] and results["smtp"]["success"]
+    return {
+        "success": overall_success,
+        "results": results,
+        "message": "Verbindungstest erfolgreich" if overall_success else "Verbindungstest fehlgeschlagen"
+    }
+
 
 @router.get("/mail/accounts")
 async def list_mail_accounts(user: dict = Depends(require_auth)):
@@ -56,11 +121,17 @@ async def create_mail_account(
         "last_sync": None,
         "created_at": now
     }
-    await db.mail_accounts.insert_one(account)
-    await log_action(user["id"], "create_mail_account", "mail_account", account_id)
     
-    account.pop("password")
-    return {"success": True, "account": account}
+    try:
+        await db.mail_accounts.insert_one(account)
+        await log_action(user["id"], "create_mail_account", "mail_account", account_id)
+        
+        account.pop("password")
+        account.pop("_id", None)  # Remove MongoDB _id if present
+        return {"success": True, "account": account}
+    except Exception as e:
+        logger.error(f"Failed to create mail account: {e}")
+        raise HTTPException(status_code=500, detail=f"Fehler beim Speichern: {str(e)}")
 
 
 @router.put("/mail/accounts/{account_id}")
