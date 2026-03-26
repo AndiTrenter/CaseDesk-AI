@@ -47,6 +47,10 @@ export default function Documents() {
   const [editingDoc, setEditingDoc] = useState(null);
   const [processing, setProcessing] = useState({});
   
+  // Upload queue state
+  const [uploadQueue, setUploadQueue] = useState([]);
+  const [processingQueue, setProcessingQueue] = useState([]);
+  
   // Multi-select state
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedDocIds, setSelectedDocIds] = useState([]);
@@ -107,10 +111,37 @@ export default function Documents() {
     setUploading(true);
     let lastUploadedDoc = null;
     
-    for (const file of files) {
+    // Initialize upload queue
+    const queue = Array.from(files).map((file, index) => ({
+      id: index,
+      name: file.name,
+      status: 'waiting', // waiting, uploading, processing, done, error
+      progress: 0
+    }));
+    setUploadQueue(queue);
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      
+      // Update queue status to uploading
+      setUploadQueue(prev => prev.map((item, idx) => 
+        idx === i ? { ...item, status: 'uploading', progress: 30 } : item
+      ));
+      
       try {
-        toast.info(`${file.name} wird verarbeitet...`, { duration: 10000, id: `upload-${file.name}` });
+        toast.info(`${file.name} wird hochgeladen...`, { duration: 10000, id: `upload-${file.name}` });
+        
+        // Update to processing
+        setUploadQueue(prev => prev.map((item, idx) => 
+          idx === i ? { ...item, status: 'processing', progress: 60 } : item
+        ));
+        
         const response = await documentsAPI.upload(file, null, 'other');
+        
+        // Update to done
+        setUploadQueue(prev => prev.map((item, idx) => 
+          idx === i ? { ...item, status: 'done', progress: 100 } : item
+        ));
         
         if (response.data.document?.ai_analyzed) {
           toast.success(
@@ -123,11 +154,21 @@ export default function Documents() {
         lastUploadedDoc = response.data.document;
       } catch (error) {
         console.error('Upload error:', error);
+        
+        // Update to error
+        setUploadQueue(prev => prev.map((item, idx) => 
+          idx === i ? { ...item, status: 'error', progress: 0 } : item
+        ));
+        
         toast.error(`Fehler beim Hochladen von ${file.name}`, { id: `upload-${file.name}` });
       }
     }
     
     setUploading(false);
+    
+    // Clear queue after 3 seconds
+    setTimeout(() => setUploadQueue([]), 3000);
+    
     loadDocuments();
     if (fileInputRef.current) fileInputRef.current.value = '';
     
@@ -357,6 +398,42 @@ export default function Documents() {
           </Button>
         </div>
       </div>
+      
+      {/* Upload Queue Progress */}
+      {uploadQueue.length > 0 && (
+        <div className="bg-[#121212] border border-white/10 rounded-xl p-4 mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+            <span className="text-white font-medium">Verarbeitung läuft...</span>
+            <span className="text-gray-500 text-sm">
+              ({uploadQueue.filter(q => q.status === 'done').length}/{uploadQueue.length} fertig)
+            </span>
+          </div>
+          <div className="space-y-2 max-h-40 overflow-y-auto">
+            {uploadQueue.map((item) => (
+              <div key={item.id} className="flex items-center gap-3 text-sm">
+                <div className="flex-shrink-0">
+                  {item.status === 'waiting' && <div className="w-4 h-4 rounded-full bg-gray-600" />}
+                  {item.status === 'uploading' && <Loader2 className="w-4 h-4 animate-spin text-blue-400" />}
+                  {item.status === 'processing' && <Loader2 className="w-4 h-4 animate-spin text-purple-400" />}
+                  {item.status === 'done' && <CheckCircle className="w-4 h-4 text-green-400" />}
+                  {item.status === 'error' && <AlertCircle className="w-4 h-4 text-red-400" />}
+                </div>
+                <span className={`flex-1 truncate ${item.status === 'done' ? 'text-green-400' : item.status === 'error' ? 'text-red-400' : 'text-gray-300'}`}>
+                  {item.name}
+                </span>
+                <span className="text-xs text-gray-500 flex-shrink-0">
+                  {item.status === 'waiting' && 'Wartend'}
+                  {item.status === 'uploading' && 'Hochladen...'}
+                  {item.status === 'processing' && 'KI-Analyse...'}
+                  {item.status === 'done' && 'Fertig'}
+                  {item.status === 'error' && 'Fehler'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       
       {/* Selection Actions Bar */}
       {selectionMode && (

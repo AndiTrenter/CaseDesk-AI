@@ -335,3 +335,79 @@ async def delete_email(email_id: str, user: dict = Depends(require_auth)):
         raise HTTPException(status_code=404, detail="Email not found")
     await log_action(user["id"], "delete_email", "email", email_id)
     return {"success": True, "message": "Email deleted"}
+
+
+@router.post("/emails/send")
+async def send_email(
+    data: dict,
+    user: dict = Depends(require_auth)
+):
+    """Send an email via SMTP"""
+    account_id = data.get("account_id")
+    to = data.get("to")
+    subject = data.get("subject")
+    body = data.get("body")
+    
+    if not all([account_id, to, subject, body]):
+        raise HTTPException(status_code=400, detail="Alle Felder müssen ausgefüllt sein")
+    
+    # Get mail account
+    account = await db.mail_accounts.find_one({"id": account_id, "user_id": user["id"]})
+    if not account:
+        raise HTTPException(status_code=404, detail="E-Mail-Konto nicht gefunden")
+    
+    if not account.get("smtp_server"):
+        raise HTTPException(status_code=400, detail="Kein SMTP-Server konfiguriert")
+    
+    try:
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        
+        # Create message
+        msg = MIMEMultipart()
+        msg['From'] = account['email']
+        msg['To'] = to
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain', 'utf-8'))
+        
+        # Send via SMTP
+        context = ssl.create_default_context()
+        smtp_port = account.get('smtp_port', 587)
+        
+        if smtp_port == 465:
+            server = smtplib.SMTP_SSL(account['smtp_server'], smtp_port, context=context)
+        else:
+            server = smtplib.SMTP(account['smtp_server'], smtp_port)
+            server.starttls(context=context)
+        
+        server.login(account['email'], account['password'])
+        server.send_message(msg)
+        server.quit()
+        
+        # Save to sent emails
+        sent_email = {
+            "id": str(uuid.uuid4()),
+            "user_id": user["id"],
+            "account_id": account_id,
+            "message_id": f"<{uuid.uuid4()}@casedesk>",
+            "from_address": account['email'],
+            "from_name": account.get('display_name', ''),
+            "to_address": to,
+            "subject": subject,
+            "body_text": body,
+            "date": datetime.now(timezone.utc).isoformat(),
+            "is_read": True,
+            "is_sent": True,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.emails.insert_one(sent_email)
+        await log_action(user["id"], "send_email", "email", sent_email["id"])
+        
+        return {"success": True, "message": "E-Mail erfolgreich gesendet", "email_id": sent_email["id"]}
+        
+    except smtplib.SMTPAuthenticationError as e:
+        logger.error(f"SMTP auth error: {e}")
+        raise HTTPException(status_code=401, detail="SMTP-Authentifizierung fehlgeschlagen")
+    except Exception as e:
+        logger.error(f"SMTP send error: {e}")
+        raise HTTPException(status_code=500, detail=f"E-Mail konnte nicht gesendet werden: {str(e)}")

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   CheckSquare, Plus, MoreVertical, Trash2, 
-  Edit, Clock, AlertCircle, Check
+  Edit, Clock, AlertCircle, Check, ChevronDown, ChevronRight
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -50,6 +50,7 @@ export default function Tasks() {
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
+  const [doneCollapsed, setDoneCollapsed] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -180,18 +181,43 @@ export default function Tasks() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {Object.entries(groupedTasks).map(([status, statusTasks]) => {
             const StatusIcon = STATUS_ICONS[status];
+            const isDone = status === 'done';
+            const isCollapsed = isDone && doneCollapsed;
+            
             return (
               <div key={status} className="space-y-4">
-                <div className="flex items-center gap-2 px-2">
+                <div 
+                  className={`flex items-center gap-2 px-2 ${isDone ? 'cursor-pointer hover:bg-white/5 rounded-lg py-1 -my-1' : ''}`}
+                  onClick={isDone ? () => setDoneCollapsed(!doneCollapsed) : undefined}
+                >
+                  {isDone && (
+                    isCollapsed ? (
+                      <ChevronRight className="w-4 h-4 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                    )
+                  )}
                   <StatusIcon className="w-4 h-4 text-gray-400" />
                   <h3 className="text-sm font-medium text-gray-400 uppercase">
                     {t(`tasks.${status === 'in_progress' ? 'inProgress' : status}`)}
                   </h3>
                   <span className="text-xs text-gray-600">({statusTasks.length})</span>
+                  {isDone && statusTasks.length > 0 && (
+                    <span className="text-xs text-gray-600 ml-auto">
+                      {isCollapsed ? 'Aufklappen' : 'Einklappen'}
+                    </span>
+                  )}
                 </div>
                 
-                <div className="space-y-3">
-                  {statusTasks.map((task, index) => (
+                <AnimatePresence>
+                  {!isCollapsed && (
+                    <motion.div 
+                      className="space-y-3"
+                      initial={isDone ? { opacity: 0, height: 0 } : false}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                    >
+                      {statusTasks.map((task, index) => (
                     <motion.div
                       key={task.id}
                       initial={{ opacity: 0, y: 10 }}
@@ -263,7 +289,9 @@ export default function Tasks() {
                       </div>
                     </motion.div>
                   ))}
-                </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             );
           })}

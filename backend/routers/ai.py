@@ -1069,3 +1069,93 @@ async def send_correspondence_via_ai(
         await log_action(user["id"], "send_email_via_ai", "correspondence", correspondence_id, {"recipient": recipient_email})
     
     return result
+
+
+@router.post("/ai/generate-email")
+async def generate_email_with_ai(
+    data: dict,
+    user: dict = Depends(require_auth)
+):
+    """Generate email content using AI"""
+    prompt = data.get("prompt", "")
+    context = data.get("context", {})
+    
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Prompt erforderlich")
+    
+    try:
+        from ai_service import get_ai_service
+        ai_service = await get_ai_service(db)
+        
+        if not ai_service:
+            raise HTTPException(status_code=503, detail="KI-Service nicht verfügbar")
+        
+        # Build AI prompt for email generation
+        recipient = context.get("recipient", "")
+        existing_subject = context.get("subject", "")
+        
+        system_prompt = """Du bist ein professioneller E-Mail-Assistent für eine Rechtskanzlei/Dokumentenverwaltung.
+Deine Aufgabe ist es, professionelle, höfliche und gut strukturierte E-Mails auf Deutsch zu verfassen.
+
+Wichtige Regeln:
+- Verwende eine höfliche, förmliche Anrede (Sehr geehrte/r...)
+- Halte die E-Mail klar und präzise
+- Beende mit einer höflichen Grußformel (Mit freundlichen Grüßen)
+- Füge keine Platzhalter wie [Name] ein - verwende allgemeine Anreden wenn nötig
+- Die Antwort muss im folgenden JSON-Format sein:
+
+{
+  "subject": "Betreffzeile der E-Mail",
+  "body": "Der vollständige E-Mail-Text"
+}"""
+        
+        user_prompt = f"""Erstelle eine E-Mail basierend auf folgender Beschreibung:
+
+{prompt}
+
+{f"Empfänger: {recipient}" if recipient else ""}
+{f"Bisheriger Betreff: {existing_subject}" if existing_subject else ""}
+
+Antworte NUR mit dem JSON-Objekt."""
+        
+        response = await ai_service.chat(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.7
+        )
+        
+        content = response.get("content", "")
+        
+        # Try to parse JSON from response
+        try:
+            # Extract JSON from response (handle markdown code blocks)
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0]
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0]
+            
+            email_data = json.loads(content.strip())
+            
+            return {
+                "success": True,
+                "subject": email_data.get("subject", ""),
+                "body": email_data.get("body", "")
+            }
+        except json.JSONDecodeError:
+            # If JSON parsing fails, try to extract content manually
+            logger.warning(f"Could not parse AI response as JSON: {content[:200]}")
+            
+            # Fallback: use the content as body
+            return {
+                "success": True,
+                "subject": existing_subject or "Ihre Anfrage",
+                "body": content
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"AI email generation error: {e}")
+        raise HTTPException(status_code=500, detail=f"E-Mail-Generierung fehlgeschlagen: {str(e)}")

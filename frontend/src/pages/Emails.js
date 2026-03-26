@@ -4,10 +4,13 @@ import { motion } from 'framer-motion';
 import { 
   Mail, RefreshCw, Trash2, MoreVertical, Paperclip,
   Calendar, User, AlertCircle, Link, FileText, Download,
-  Loader2, CheckCircle, ExternalLink
+  Loader2, CheckCircle, ExternalLink, Plus, Send, Sparkles, X
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Textarea } from '../components/ui/textarea';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
-import { mailAPI, casesAPI } from '../lib/api';
+import { mailAPI, casesAPI, aiAPI } from '../lib/api';
 import { toast } from 'sonner';
 import api from '../lib/api';
 
@@ -43,6 +46,18 @@ export default function Emails() {
   const [emailToLink, setEmailToLink] = useState(null);
   const [selectedCaseId, setSelectedCaseId] = useState('');
   const [processing, setProcessing] = useState({});
+  
+  // Compose email state
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [composing, setComposing] = useState(false);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [composeData, setComposeData] = useState({
+    to: '',
+    subject: '',
+    body: '',
+    account_id: ''
+  });
+  const [aiPrompt, setAiPrompt] = useState('');
 
   useEffect(() => {
     loadData();
@@ -58,10 +73,95 @@ export default function Emails() {
       setEmails(emailsRes.data);
       setMailAccounts(accountsRes.data);
       setCases(casesRes.data);
+      
+      // Set default account for compose
+      if (accountsRes.data.length > 0 && !composeData.account_id) {
+        setComposeData(prev => ({ ...prev, account_id: accountsRes.data[0].id }));
+      }
     } catch (error) {
       console.error('Failed to load data:', error);
     }
     setLoading(false);
+  };
+
+  // Send composed email
+  const handleSendEmail = async () => {
+    if (!composeData.to || !composeData.subject || !composeData.body) {
+      toast.error('Bitte alle Felder ausfüllen');
+      return;
+    }
+    if (!composeData.account_id) {
+      toast.error('Bitte ein E-Mail-Konto auswählen');
+      return;
+    }
+    
+    setComposing(true);
+    try {
+      const response = await api.post('/emails/send', {
+        account_id: composeData.account_id,
+        to: composeData.to,
+        subject: composeData.subject,
+        body: composeData.body
+      });
+      
+      if (response.data.success) {
+        toast.success('E-Mail erfolgreich gesendet!');
+        setComposeOpen(false);
+        setComposeData({ to: '', subject: '', body: '', account_id: mailAccounts[0]?.id || '' });
+        loadData();
+      } else {
+        toast.error(response.data.error || 'Senden fehlgeschlagen');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'E-Mail konnte nicht gesendet werden');
+    }
+    setComposing(false);
+  };
+
+  // Generate email with AI
+  const handleAIGenerate = async () => {
+    if (!aiPrompt.trim()) {
+      toast.error('Bitte beschreiben Sie, was die E-Mail enthalten soll');
+      return;
+    }
+    
+    setAiGenerating(true);
+    try {
+      const response = await api.post('/ai/generate-email', {
+        prompt: aiPrompt,
+        context: {
+          recipient: composeData.to,
+          subject: composeData.subject
+        }
+      });
+      
+      if (response.data.success) {
+        setComposeData(prev => ({
+          ...prev,
+          subject: response.data.subject || prev.subject,
+          body: response.data.body || prev.body
+        }));
+        setAiPrompt('');
+        toast.success('E-Mail wurde generiert!');
+      } else {
+        toast.error('KI-Generierung fehlgeschlagen');
+      }
+    } catch (error) {
+      toast.error('KI-Generierung nicht verfügbar');
+    }
+    setAiGenerating(false);
+  };
+
+  // Reply to email
+  const handleReply = (email) => {
+    setComposeData({
+      to: email.from_address,
+      subject: email.subject.startsWith('Re:') ? email.subject : `Re: ${email.subject}`,
+      body: `\n\n---\nAm ${new Date(email.date).toLocaleString('de-DE')} schrieb ${email.from_name || email.from_address}:\n\n${email.body_text || ''}`,
+      account_id: email.account_id || mailAccounts[0]?.id || ''
+    });
+    setSelectedEmail(null);
+    setComposeOpen(true);
   };
 
   const handleFetchEmails = async (accountId) => {
@@ -169,34 +269,44 @@ export default function Emails() {
         
         <div className="flex items-center gap-3">
           {mailAccounts.length > 0 && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button 
-                  className="btn-primary flex items-center gap-2"
-                  disabled={fetching}
-                  data-testid="fetch-emails-btn"
-                >
-                  {fetching ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4" />
-                  )}
-                  E-Mails abrufen
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-[#1A1A1A] border-white/10">
-                {mailAccounts.map(account => (
-                  <DropdownMenuItem
-                    key={account.id}
-                    onClick={() => handleFetchEmails(account.id)}
-                    className="text-gray-300 focus:bg-white/10"
+            <>
+              <Button 
+                onClick={() => setComposeOpen(true)}
+                className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Neue E-Mail
+              </Button>
+              
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    className="btn-primary flex items-center gap-2"
+                    disabled={fetching}
+                    data-testid="fetch-emails-btn"
                   >
-                    <Mail className="w-4 h-4 mr-2" />
-                    {account.display_name}
+                    {fetching ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                    E-Mails abrufen
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="bg-[#1A1A1A] border-white/10">
+                  {mailAccounts.map(account => (
+                    <DropdownMenuItem
+                      key={account.id}
+                      onClick={() => handleFetchEmails(account.id)}
+                      className="text-gray-300 focus:bg-white/10"
+                    >
+                      <Mail className="w-4 h-4 mr-2" />
+                      {account.display_name}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+            </>
           )}
         </div>
       </div>
@@ -491,6 +601,137 @@ export default function Emails() {
                 className="btn-primary"
               >
                 Verknüpfen
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Compose Email Dialog */}
+      <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
+        <DialogContent className="bg-[#121212] border-white/10 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="w-5 h-5 text-green-400" />
+              Neue E-Mail verfassen
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Account Selection */}
+            <div>
+              <Label className="text-gray-300">Von</Label>
+              <Select
+                value={composeData.account_id}
+                onValueChange={(value) => setComposeData({ ...composeData, account_id: value })}
+              >
+                <SelectTrigger className="mt-1 bg-black/30 border-white/10 text-white">
+                  <SelectValue placeholder="E-Mail-Konto wählen" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#1a1a1a] border-white/10">
+                  {mailAccounts.map(account => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {account.display_name} ({account.email})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* To */}
+            <div>
+              <Label className="text-gray-300">An</Label>
+              <Input
+                type="email"
+                value={composeData.to}
+                onChange={(e) => setComposeData({ ...composeData, to: e.target.value })}
+                className="mt-1 bg-black/30 border-white/10 text-white"
+                placeholder="empfaenger@email.de"
+              />
+            </div>
+            
+            {/* Subject */}
+            <div>
+              <Label className="text-gray-300">Betreff</Label>
+              <Input
+                value={composeData.subject}
+                onChange={(e) => setComposeData({ ...composeData, subject: e.target.value })}
+                className="mt-1 bg-black/30 border-white/10 text-white"
+                placeholder="Betreff der E-Mail"
+              />
+            </div>
+            
+            {/* AI Generation */}
+            <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="w-4 h-4 text-purple-400" />
+                <span className="text-purple-400 font-medium text-sm">KI-Assistent</span>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  className="bg-black/30 border-white/10 text-white"
+                  placeholder="z.B. 'Schreibe eine höfliche Anfrage wegen Zahlungsaufschub'"
+                  onKeyDown={(e) => e.key === 'Enter' && handleAIGenerate()}
+                />
+                <Button 
+                  onClick={handleAIGenerate}
+                  disabled={aiGenerating || !aiPrompt.trim()}
+                  className="bg-purple-600 hover:bg-purple-700 text-white shrink-0"
+                >
+                  {aiGenerating ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Beschreiben Sie den Inhalt und die KI generiert die E-Mail für Sie
+              </p>
+            </div>
+            
+            {/* Body */}
+            <div>
+              <Label className="text-gray-300">Nachricht</Label>
+              <Textarea
+                value={composeData.body}
+                onChange={(e) => setComposeData({ ...composeData, body: e.target.value })}
+                className="mt-1 bg-black/30 border-white/10 text-white min-h-[200px]"
+                placeholder="Ihre Nachricht..."
+              />
+            </div>
+            
+            {/* Actions */}
+            <div className="flex justify-end gap-3 pt-4">
+              <Button 
+                variant="ghost" 
+                onClick={() => {
+                  setComposeOpen(false);
+                  setComposeData({ to: '', subject: '', body: '', account_id: mailAccounts[0]?.id || '' });
+                  setAiPrompt('');
+                }} 
+                className="text-gray-400"
+              >
+                Abbrechen
+              </Button>
+              <Button 
+                onClick={handleSendEmail}
+                disabled={composing || !composeData.to || !composeData.subject || !composeData.body}
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                {composing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Wird gesendet...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 mr-2" />
+                    Senden
+                  </>
+                )}
               </Button>
             </div>
           </div>
