@@ -5,7 +5,7 @@ import {
   Settings as SettingsIcon, Globe, Shield, Brain, 
   User, Moon, Sun, Check, AlertTriangle, Mail, Plus, Trash2, Download,
   Users, UserPlus, Link, Copy, Clock, X, RefreshCw, History, ArrowDownCircle, 
-  CheckCircle, XCircle, AlertCircle
+  CheckCircle, XCircle, AlertCircle, Eye, EyeOff
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -94,6 +94,7 @@ export default function Settings() {
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionTestResult, setConnectionTestResult] = useState(null);
   const [editingMailAccount, setEditingMailAccount] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -341,23 +342,21 @@ export default function Settings() {
       toast.error('Bitte E-Mail und IMAP-Server eingeben');
       return;
     }
-    // For editing, password is optional if not changed
-    if (!editingMailAccount && !newMailAccount.password) {
-      toast.error('Bitte Passwort eingeben');
+    
+    // Password is always required for connection test
+    if (!newMailAccount.password) {
+      if (editingMailAccount) {
+        toast.error('Bitte Passwort eingeben um die Verbindung zu testen');
+      } else {
+        toast.error('Bitte Passwort eingeben');
+      }
       return;
     }
     
     setTestingConnection(true);
     setConnectionTestResult(null);
     try {
-      // Use existing password placeholder for test if editing without new password
-      const testData = { ...newMailAccount };
-      if (editingMailAccount && !testData.password) {
-        toast.info('Bitte neues Passwort eingeben um Verbindung zu testen');
-        setTestingConnection(false);
-        return;
-      }
-      const res = await mailAPI.testConnection(testData);
+      const res = await mailAPI.testConnection(newMailAccount);
       setConnectionTestResult(res.data);
       if (res.data.success) {
         toast.success('Verbindungstest erfolgreich!');
@@ -1508,13 +1507,22 @@ export default function Settings() {
             
             <div>
               <Label className="text-gray-300">Passwort</Label>
-              <Input
-                type="password"
-                value={newMailAccount.password}
-                onChange={(e) => setNewMailAccount({ ...newMailAccount, password: e.target.value })}
-                className="mt-1 bg-black/30 border-white/10 text-white"
-                placeholder="••••••••"
-              />
+              <div className="relative mt-1">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  value={newMailAccount.password}
+                  onChange={(e) => setNewMailAccount({ ...newMailAccount, password: e.target.value })}
+                  className="bg-black/30 border-white/10 text-white pr-10"
+                  placeholder={editingMailAccount ? "Neues Passwort eingeben..." : "••••••••"}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
               {/* Gmail App-Password hint */}
               {(newMailAccount.imap_server?.includes('gmail') || newMailAccount.email?.includes('gmail')) && (
                 <p className="text-xs text-amber-400 mt-2">
@@ -1532,7 +1540,7 @@ export default function Settings() {
               )}
               {editingMailAccount && (
                 <p className="text-xs text-gray-500 mt-1">
-                  Leer lassen, um das vorhandene Passwort zu behalten
+                  Leer lassen, um das vorhandene Passwort zu behalten. Für Verbindungstest muss Passwort eingegeben werden.
                 </p>
               )}
             </div>
