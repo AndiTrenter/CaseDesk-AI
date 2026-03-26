@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Settings as SettingsIcon, Globe, Shield, Brain, 
   User, Moon, Sun, Check, AlertTriangle, Mail, Plus, Trash2, Download,
@@ -35,8 +36,18 @@ export default function Settings() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'user');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  
+  // Set active tab from URL parameter
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
   
   const [systemSettings, setSystemSettings] = useState({
     ai_provider: 'ollama',
@@ -136,21 +147,56 @@ export default function Settings() {
   const handlePerformUpdate = async () => {
     setUpdateInProgress(true);
     setShowUpdateConfirm(false);
+    
+    const toastId = toast.loading('Update wird gestartet...', { duration: Infinity });
+    
     try {
       const res = await systemAPI.performUpdate();
+      
       if (res.data?.success) {
-        toast.success(res.data.message || 'Update erfolgreich!');
         if (res.data.manual_required) {
-          toast.info('Bitte führen Sie die manuellen Befehle aus', { duration: 10000 });
+          // Manual commands needed
+          toast.info('Update vorbereitet! Führen Sie folgende Befehle aus:', {
+            id: toastId,
+            duration: 20000,
+            description: res.data.manual_commands?.join('\n')
+          });
+          toast.info(
+            <div className="space-y-2 text-sm">
+              <p className="font-medium">Manuelle Schritte erforderlich:</p>
+              {res.data.manual_commands?.map((cmd, i) => (
+                <code key={i} className="block bg-black/30 p-2 rounded">{cmd}</code>
+              ))}
+              <p className="text-xs text-gray-400 mt-2">
+                Nach Ausführung laden Sie die Seite neu.
+              </p>
+            </div>,
+            { duration: 30000 }
+          );
+        } else if (res.data.docker_executed) {
+          // Automatic update successful
+          toast.success('Update erfolgreich installiert!', { id: toastId });
+          toast.info('Seite wird in 3 Sekunden neu geladen...', { duration: 3000 });
+          
+          // Reload page after 3 seconds
+          setTimeout(() => {
+            window.location.reload();
+          }, 3000);
+        } else {
+          toast.success(res.data.message || 'Update erfolgreich!', { id: toastId });
+          setTimeout(() => loadUpdateInfo(), 2000);
         }
-        // Reload update info after a short delay
-        setTimeout(() => loadUpdateInfo(), 3000);
       } else {
-        toast.error(res.data?.message || 'Update fehlgeschlagen');
+        toast.error(res.data?.message || 'Update fehlgeschlagen', { id: toastId });
+        if (res.data?.error) {
+          toast.error(res.data.error, { duration: 10000 });
+        }
       }
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Update fehlgeschlagen');
+      toast.error(error.response?.data?.detail || 'Update fehlgeschlagen', { id: toastId });
+      console.error('Update error:', error);
     }
+    
     setUpdateInProgress(false);
   };
   
@@ -468,7 +514,7 @@ export default function Settings() {
           <p className="text-gray-400 text-sm">Manage your preferences and system configuration</p>
         </div>
 
-        <Tabs defaultValue="user" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="bg-white/5 border border-white/10 flex-wrap">
             <TabsTrigger value="user" className="data-[state=active]:bg-white/10">
               <User className="w-4 h-4 mr-2" />

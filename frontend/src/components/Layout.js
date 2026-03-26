@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
@@ -10,6 +10,7 @@ import {
 import { Button } from '../components/ui/button';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import api from '../lib/api';
 
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'nav.dashboard' },
@@ -30,6 +31,41 @@ export default function Layout() {
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [version, setVersion] = useState('...');
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState(null);
+
+  // Load version and check for updates
+  useEffect(() => {
+    const loadVersion = async () => {
+      try {
+        const response = await api.get('/system/version');
+        setVersion(response.data.version);
+      } catch (error) {
+        console.error('Failed to load version:', error);
+        setVersion('1.0.2');
+      }
+    };
+
+    const checkUpdates = async () => {
+      try {
+        const response = await api.get('/system/check-update');
+        if (response.data.update_available) {
+          setUpdateAvailable(true);
+          setUpdateInfo(response.data);
+        }
+      } catch (error) {
+        console.error('Failed to check updates:', error);
+      }
+    };
+
+    loadVersion();
+    checkUpdates();
+    
+    // Check for updates every 30 minutes
+    const interval = setInterval(checkUpdates, 30 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -86,7 +122,7 @@ export default function Layout() {
                 </Button>
               </div>
             </div>
-            <p className={`text-xs ${textMuted} mt-1`}>Self-Hosted v1.0.2</p>
+            <p className={`text-xs ${textMuted} mt-1`}>Self-Hosted v{version}</p>
           </div>
 
           {/* Navigation */}
@@ -145,6 +181,45 @@ export default function Layout() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-h-screen">
+        {/* Update Banner */}
+        {updateAvailable && updateInfo && (
+          <motion.div 
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 flex items-center justify-between shadow-lg z-30"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+              <div>
+                <p className="font-medium">
+                  🎉 Neue Version verfügbar: v{updateInfo.latest_version}
+                </p>
+                <p className="text-sm text-white/80">
+                  {updateInfo.release_notes}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/settings?tab=updates')}
+                className="bg-white/20 hover:bg-white/30 text-white border-white/30"
+              >
+                Jetzt aktualisieren
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setUpdateAvailable(false)}
+                className="text-white hover:bg-white/20"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          </motion.div>
+        )}
+        
         {/* Top Bar */}
         <header className={`sticky top-0 z-30 ${bgSecondary} border-b ${borderColor} px-4 py-3 lg:hidden`}>
           <div className="flex items-center justify-between">
