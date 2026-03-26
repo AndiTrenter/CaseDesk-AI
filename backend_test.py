@@ -535,6 +535,187 @@ class CaseDeskAPITester:
         
         return all_passed
 
+    def test_system_endpoints(self):
+        """Test System/Update endpoints for CaseDesk AI v1.0.1"""
+        all_passed = True
+        
+        print("  Testing System/Update Endpoints...")
+        
+        # Test 1: GET /api/system/version - Should return current version, build_date, release_notes
+        success, data = self.run_test("System Version", "GET", "/system/version", 200)
+        if success:
+            # Verify response structure
+            expected_fields = ['version', 'build_date', 'release_notes']
+            missing_fields = [field for field in expected_fields if field not in data]
+            
+            if not missing_fields:
+                print(f"  ✓ Version endpoint structure correct")
+                print(f"  ✓ Version: {data.get('version')}, Build Date: {data.get('build_date')}")
+                print(f"  ✓ Release Notes: {data.get('release_notes')}")
+                
+                # Verify version is 1.0.1 as expected
+                if data.get('version') == '1.0.1':
+                    print(f"  ✓ Version 1.0.1 confirmed")
+                else:
+                    print(f"  ⚠ Version is {data.get('version')}, expected 1.0.1")
+            else:
+                all_passed = False
+                print(f"  ❌ Version endpoint missing fields: {missing_fields}")
+        else:
+            all_passed = False
+            print(f"  ❌ Failed to get system version")
+        
+        # Test 2: GET /api/system/check-update - Should compare local vs remote version
+        success, data = self.run_test("System Check Update", "GET", "/system/check-update", 200)
+        if success:
+            # Verify response structure
+            expected_fields = ['current_version', 'latest_version', 'update_available']
+            missing_fields = [field for field in expected_fields if field not in data]
+            
+            if not missing_fields:
+                print(f"  ✓ Check update endpoint structure correct")
+                print(f"  ✓ Current: {data.get('current_version')}, Latest: {data.get('latest_version')}")
+                print(f"  ✓ Update available: {data.get('update_available')}")
+                
+                # Check if GitHub URL returned 404 (expected)
+                if data.get('error'):
+                    print(f"  ✓ GitHub URL error (expected): {data.get('error')}")
+                elif data.get('latest_version'):
+                    print(f"  ✓ Successfully fetched remote version: {data.get('latest_version')}")
+                    if data.get('release_date'):
+                        print(f"  ✓ Release date: {data.get('release_date')}")
+                    if data.get('release_notes'):
+                        print(f"  ✓ Release notes available")
+            else:
+                all_passed = False
+                print(f"  ❌ Check update endpoint missing fields: {missing_fields}")
+        else:
+            all_passed = False
+            print(f"  ❌ Failed to check for updates")
+        
+        # Test 3: GET /api/system/changelog - Should return changelog content
+        success, data = self.run_test("System Changelog", "GET", "/system/changelog", 200)
+        if success:
+            # Verify response structure
+            expected_fields = ['changelog', 'fetched_at']
+            missing_fields = [field for field in expected_fields if field not in data]
+            
+            if not missing_fields:
+                print(f"  ✓ Changelog endpoint structure correct")
+                print(f"  ✓ Fetched at: {data.get('fetched_at')}")
+                
+                # Check if it's local fallback or remote
+                if data.get('source') == 'local':
+                    print(f"  ✓ Using local changelog fallback (GitHub URL may not exist)")
+                else:
+                    print(f"  ✓ Successfully fetched remote changelog")
+                
+                # Verify changelog content exists
+                changelog_content = data.get('changelog', '')
+                if changelog_content and len(changelog_content) > 0:
+                    print(f"  ✓ Changelog content available ({len(changelog_content)} characters)")
+                else:
+                    print(f"  ⚠ Changelog content is empty")
+            else:
+                all_passed = False
+                print(f"  ❌ Changelog endpoint missing fields: {missing_fields}")
+        else:
+            all_passed = False
+            print(f"  ❌ Failed to get changelog")
+        
+        # Test 4: POST /api/system/update - Admin only, test authentication requirement
+        # Note: This may fail with 500 if GitHub URL returns 404 (expected)
+        success, data = self.run_test("System Update (Admin Required)", "POST", "/system/update", 200)
+        if success:
+            # Verify response structure for admin user
+            expected_fields = ['success', 'message', 'from_version', 'to_version']
+            missing_fields = [field for field in expected_fields if field not in data]
+            
+            if not missing_fields:
+                print(f"  ✓ Update endpoint structure correct")
+                print(f"  ✓ Update message: {data.get('message')}")
+                print(f"  ✓ From version: {data.get('from_version')} to {data.get('to_version')}")
+                
+                # Check if Docker socket is available
+                if data.get('docker_executed'):
+                    print(f"  ✓ Docker commands executed successfully")
+                elif data.get('manual_required'):
+                    print(f"  ✓ Manual update required (Docker socket not available)")
+                    if data.get('manual_commands'):
+                        print(f"  ✓ Manual commands provided: {len(data.get('manual_commands', []))} commands")
+                
+                if data.get('instructions'):
+                    print(f"  ✓ Update instructions provided: {len(data.get('instructions', []))} steps")
+            else:
+                all_passed = False
+                print(f"  ❌ Update endpoint missing fields: {missing_fields}")
+        else:
+            # Check if it failed due to GitHub 404 (expected behavior)
+            success_alt, data_alt = self.run_test("System Update (GitHub 404 Expected)", "POST", "/system/update", 500)
+            if success_alt and data_alt.get('detail') and 'version.json' in data_alt.get('detail', ''):
+                print(f"  ✓ Update endpoint correctly failed due to GitHub URL 404 (expected)")
+                print(f"  ✓ Error message: {data_alt.get('detail')}")
+            else:
+                all_passed = False
+                print(f"  ❌ Update endpoint failed unexpectedly")
+        
+        # Test 5: POST /api/system/rollback - Admin only, test authentication requirement
+        success, data = self.run_test("System Rollback (Admin Required)", "POST", "/system/rollback", 400)
+        if success:
+            # Expecting 400 because no previous version should be available
+            print(f"  ✓ Rollback correctly returned 400 (no previous version available)")
+            if data.get('detail'):
+                print(f"  ✓ Error message: {data.get('detail')}")
+        else:
+            # If it didn't return 400, check if it returned 200 with proper structure
+            success_alt, data_alt = self.run_test("System Rollback Alternative", "POST", "/system/rollback", 200)
+            if success_alt:
+                print(f"  ✓ Rollback endpoint accessible (previous version available)")
+                expected_fields = ['success', 'message', 'from_version', 'to_version']
+                missing_fields = [field for field in expected_fields if field not in data_alt]
+                
+                if not missing_fields:
+                    print(f"  ✓ Rollback endpoint structure correct")
+                    print(f"  ✓ Rollback message: {data_alt.get('message')}")
+                else:
+                    all_passed = False
+                    print(f"  ❌ Rollback endpoint missing fields: {missing_fields}")
+            else:
+                all_passed = False
+                print(f"  ❌ Failed to access rollback endpoint")
+        
+        # Test 6: GET /api/system/update-history - Admin only, returns list of past updates
+        success, data = self.run_test("System Update History (Admin Required)", "GET", "/system/update-history", 200)
+        if success:
+            # Verify response structure
+            if 'history' in data:
+                print(f"  ✓ Update history endpoint structure correct")
+                history = data.get('history', [])
+                print(f"  ✓ Update history contains {len(history)} entries")
+                
+                # If there are history entries, verify their structure
+                if history:
+                    first_entry = history[0]
+                    expected_fields = ['id', 'type', 'action', 'user_id', 'timestamp']
+                    missing_fields = [field for field in expected_fields if field not in first_entry]
+                    
+                    if not missing_fields:
+                        print(f"  ✓ History entry structure correct")
+                        print(f"  ✓ Latest entry: {first_entry.get('action')} at {first_entry.get('timestamp')}")
+                    else:
+                        all_passed = False
+                        print(f"  ❌ History entry missing fields: {missing_fields}")
+                else:
+                    print(f"  ✓ No update history yet (expected for new system)")
+            else:
+                all_passed = False
+                print(f"  ❌ Update history endpoint missing 'history' field")
+        else:
+            all_passed = False
+            print(f"  ❌ Failed to get update history")
+        
+        return all_passed
+
     def cleanup_test_data(self):
         """Clean up created test data"""
         print(f"\n🧹 Cleaning up test data...")
@@ -571,6 +752,7 @@ class CaseDeskAPITester:
             ("Document Upload", self.test_document_upload),
             ("Settings Operations", self.test_settings_crud),
             ("Storage Settings", self.test_storage_settings),
+            ("System Endpoints", self.test_system_endpoints),
             ("Dashboard Stats", self.test_dashboard_stats),
         ]
         

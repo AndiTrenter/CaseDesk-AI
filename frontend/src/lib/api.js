@@ -395,6 +395,16 @@ export const healthAPI = {
   adminHealth: () => api.get('/admin/health'),
 };
 
+// System / Updates
+export const systemAPI = {
+  getVersion: () => api.get('/system/version'),
+  checkUpdate: () => api.get('/system/check-update'),
+  getChangelog: () => api.get('/system/changelog'),
+  performUpdate: () => api.post('/system/update'),
+  performRollback: () => api.post('/system/rollback'),
+  getUpdateHistory: () => api.get('/system/update-history'),
+};
+
 // Storage Settings
 export const storageAPI = {
   getSettings: () => api.get('/settings/storage'),

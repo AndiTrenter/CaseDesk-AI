@@ -4,7 +4,8 @@ import { motion } from 'framer-motion';
 import { 
   Settings as SettingsIcon, Globe, Shield, Brain, 
   User, Moon, Sun, Check, AlertTriangle, Mail, Plus, Trash2, Download,
-  Users, UserPlus, Link, Copy, Clock, X
+  Users, UserPlus, Link, Copy, Clock, X, RefreshCw, History, ArrowDownCircle, 
+  CheckCircle, XCircle, AlertCircle
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -24,7 +25,7 @@ import {
   DialogTitle,
 } from '../components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { settingsAPI, mailAPI, exportAPI, usersAPI, storageAPI } from '../lib/api';
+import { settingsAPI, mailAPI, exportAPI, usersAPI, storageAPI, systemAPI } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { toast } from 'sonner';
@@ -76,6 +77,16 @@ export default function Settings() {
   const [storageLoading, setStorageLoading] = useState(false);
   const [editingUserStorage, setEditingUserStorage] = useState(null);
   const [userStorageLimit, setUserStorageLimit] = useState('');
+  
+  // Update system state
+  const [versionInfo, setVersionInfo] = useState(null);
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [changelog, setChangelog] = useState('');
+  const [updateHistory, setUpdateHistory] = useState([]);
+  const [updateLoading, setUpdateLoading] = useState(false);
+  const [updateInProgress, setUpdateInProgress] = useState(false);
+  const [showChangelogDialog, setShowChangelogDialog] = useState(false);
+  const [showUpdateConfirm, setShowUpdateConfirm] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -83,8 +94,75 @@ export default function Settings() {
     if (user?.role === 'admin') {
       loadUsersAndInvitations();
       loadStorageSettings();
+      loadUpdateInfo();
     }
   }, [user]);
+  
+  const loadUpdateInfo = async () => {
+    setUpdateLoading(true);
+    try {
+      const [versionRes, updateRes, historyRes] = await Promise.all([
+        systemAPI.getVersion(),
+        systemAPI.checkUpdate(),
+        systemAPI.getUpdateHistory()
+      ]);
+      setVersionInfo(versionRes.data);
+      setUpdateInfo(updateRes.data);
+      setUpdateHistory(historyRes.data?.history || []);
+    } catch (error) {
+      console.error('Failed to load update info:', error);
+    }
+    setUpdateLoading(false);
+  };
+  
+  const loadChangelog = async () => {
+    try {
+      const res = await systemAPI.getChangelog();
+      setChangelog(res.data?.changelog || '');
+      setShowChangelogDialog(true);
+    } catch (error) {
+      toast.error('Changelog konnte nicht geladen werden');
+    }
+  };
+  
+  const handlePerformUpdate = async () => {
+    setUpdateInProgress(true);
+    setShowUpdateConfirm(false);
+    try {
+      const res = await systemAPI.performUpdate();
+      if (res.data?.success) {
+        toast.success(res.data.message || 'Update erfolgreich!');
+        if (res.data.manual_required) {
+          toast.info('Bitte führen Sie die manuellen Befehle aus', { duration: 10000 });
+        }
+        // Reload update info after a short delay
+        setTimeout(() => loadUpdateInfo(), 3000);
+      } else {
+        toast.error(res.data?.message || 'Update fehlgeschlagen');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Update fehlgeschlagen');
+    }
+    setUpdateInProgress(false);
+  };
+  
+  const handlePerformRollback = async () => {
+    if (!window.confirm('Wirklich zur vorherigen Version zurückkehren?')) return;
+    
+    setUpdateInProgress(true);
+    try {
+      const res = await systemAPI.performRollback();
+      if (res.data?.success) {
+        toast.success(res.data.message || 'Rollback erfolgreich!');
+        setTimeout(() => loadUpdateInfo(), 3000);
+      } else {
+        toast.error(res.data?.message || 'Rollback fehlgeschlagen');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Rollback fehlgeschlagen');
+    }
+    setUpdateInProgress(false);
+  };
   
   const loadUsersAndInvitations = async () => {
     setLoadingUsers(true);
@@ -332,6 +410,13 @@ export default function Settings() {
             </TabsTrigger>
             {user?.role === 'admin' && (
               <>
+                <TabsTrigger value="updates" className="data-[state=active]:bg-white/10">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Updates
+                  {updateInfo?.update_available && (
+                    <span className="ml-2 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  )}
+                </TabsTrigger>
                 <TabsTrigger value="users" className="data-[state=active]:bg-white/10">
                   <Users className="w-4 h-4 mr-2" />
                   Benutzer
@@ -442,6 +527,204 @@ export default function Settings() {
               </div>
             </motion.div>
           </TabsContent>
+
+          {/* Updates Tab (Admin only) */}
+          {user?.role === 'admin' && (
+            <TabsContent value="updates">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-[#121212] border border-white/5 rounded-xl p-6 space-y-6"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                        <RefreshCw className="w-5 h-5 text-blue-400" />
+                        System-Updates
+                      </h3>
+                      <p className="text-gray-400 text-sm mt-1">
+                        Verwalten Sie Updates direkt im Portal
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={loadUpdateInfo}
+                      disabled={updateLoading}
+                      className="text-gray-400"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${updateLoading ? 'animate-spin' : ''}`} />
+                    </Button>
+                  </div>
+
+                  {updateLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin w-6 h-6 border-2 border-white/20 border-t-white rounded-full" />
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* Current Version */}
+                      <div className="bg-white/5 rounded-lg p-4">
+                        <h4 className="text-white font-medium mb-3">Aktuelle Version</h4>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-2xl font-bold text-white">
+                              v{versionInfo?.version || '1.0.1'}
+                            </span>
+                            <p className="text-gray-500 text-sm mt-1">
+                              Build: {versionInfo?.build_date || '2025-07-25'}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="w-5 h-5 text-green-500" />
+                            <span className="text-green-400 text-sm">Aktiv</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Update Available */}
+                      {updateInfo?.update_available ? (
+                        <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <ArrowDownCircle className="w-5 h-5 text-green-400" />
+                                <span className="text-green-400 font-medium">
+                                  Update verfügbar: v{updateInfo.latest_version}
+                                </span>
+                              </div>
+                              <p className="text-gray-300 text-sm mb-2">
+                                {updateInfo.release_notes || 'Neue Version verfügbar'}
+                              </p>
+                              <p className="text-gray-500 text-xs">
+                                Veröffentlicht: {updateInfo.release_date || 'Unbekannt'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex gap-3 mt-4">
+                            <Button
+                              onClick={loadChangelog}
+                              variant="outline"
+                              className="border-green-500/30 text-green-400 hover:bg-green-500/10"
+                            >
+                              <History className="w-4 h-4 mr-2" />
+                              Changelog anzeigen
+                            </Button>
+                            <Button
+                              onClick={() => setShowUpdateConfirm(true)}
+                              disabled={updateInProgress}
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                            >
+                              {updateInProgress ? (
+                                <>
+                                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                  Update läuft...
+                                </>
+                              ) : (
+                                <>
+                                  <ArrowDownCircle className="w-4 h-4 mr-2" />
+                                  Update installieren
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : updateInfo?.error ? (
+                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+                          <div className="flex items-center gap-2">
+                            <AlertCircle className="w-5 h-5 text-amber-400" />
+                            <span className="text-amber-400">{updateInfo.error}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-white/5 rounded-lg p-4">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="w-5 h-5 text-green-500" />
+                            <span className="text-gray-300">
+                              Sie nutzen die neueste Version (v{updateInfo?.current_version || versionInfo?.version})
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Changelog Button */}
+                      <div className="flex gap-3">
+                        <Button
+                          onClick={loadChangelog}
+                          variant="outline"
+                          className="border-white/10 text-gray-300 hover:bg-white/5"
+                        >
+                          <History className="w-4 h-4 mr-2" />
+                          Vollständigen Changelog anzeigen
+                        </Button>
+                        <Button
+                          onClick={handlePerformRollback}
+                          variant="outline"
+                          disabled={updateInProgress}
+                          className="border-white/10 text-gray-400 hover:bg-white/5"
+                        >
+                          Zur vorherigen Version
+                        </Button>
+                      </div>
+
+                      {/* Update History */}
+                      {updateHistory.length > 0 && (
+                        <div>
+                          <h4 className="text-white font-medium mb-3">Update-Verlauf</h4>
+                          <div className="space-y-2 max-h-48 overflow-y-auto">
+                            {updateHistory.slice(0, 10).map((item, index) => (
+                              <div
+                                key={item.id || index}
+                                className="flex items-center justify-between p-3 bg-white/5 rounded-lg text-sm"
+                              >
+                                <div className="flex items-center gap-3">
+                                  {item.action === 'update_completed' ? (
+                                    <CheckCircle className="w-4 h-4 text-green-500" />
+                                  ) : item.action === 'update_failed' ? (
+                                    <XCircle className="w-4 h-4 text-red-500" />
+                                  ) : item.action === 'rollback_started' ? (
+                                    <History className="w-4 h-4 text-amber-500" />
+                                  ) : (
+                                    <RefreshCw className="w-4 h-4 text-blue-500" />
+                                  )}
+                                  <div>
+                                    <span className="text-white">
+                                      {item.action === 'update_started' && 'Update gestartet'}
+                                      {item.action === 'update_completed' && 'Update erfolgreich'}
+                                      {item.action === 'update_failed' && 'Update fehlgeschlagen'}
+                                      {item.action === 'rollback_started' && 'Rollback gestartet'}
+                                    </span>
+                                    <span className="text-gray-500 ml-2">
+                                      {item.from_version} → {item.to_version}
+                                    </span>
+                                  </div>
+                                </div>
+                                <span className="text-gray-500 text-xs">
+                                  {new Date(item.timestamp).toLocaleString('de-DE')}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Info Box */}
+                      <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 text-sm">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+                          <div className="text-blue-300">
+                            <strong>Hinweis:</strong> Updates ersetzen nur die Docker-Container. 
+                            Ihre Daten (Datenbank, Uploads, Einstellungen) bleiben vollständig erhalten.
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            </TabsContent>
+          )}
 
           {/* Storage Settings (Admin only) */}
           {user?.role === 'admin' && (
@@ -1232,6 +1515,74 @@ export default function Settings() {
                 </div>
               </>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Changelog Dialog */}
+      <Dialog open={showChangelogDialog} onOpenChange={setShowChangelogDialog}>
+        <DialogContent className="bg-[#121212] border-white/10 text-white max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="w-5 h-5 text-blue-400" />
+              Changelog - Versionshistorie
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="overflow-y-auto max-h-[60vh] pr-2">
+            <div className="prose prose-invert prose-sm max-w-none">
+              <pre className="whitespace-pre-wrap text-gray-300 text-sm font-sans leading-relaxed bg-white/5 p-4 rounded-lg">
+                {changelog || 'Changelog wird geladen...'}
+              </pre>
+            </div>
+          </div>
+          
+          <div className="flex justify-end pt-4">
+            <Button onClick={() => setShowChangelogDialog(false)} className="btn-primary">
+              Schließen
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Update Confirmation Dialog */}
+      <Dialog open={showUpdateConfirm} onOpenChange={setShowUpdateConfirm}>
+        <DialogContent className="bg-[#121212] border-white/10 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowDownCircle className="w-5 h-5 text-green-400" />
+              Update installieren?
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <p className="text-gray-300">
+              Möchten Sie auf Version <strong className="text-green-400">v{updateInfo?.latest_version}</strong> aktualisieren?
+            </p>
+            
+            <div className="bg-white/5 rounded-lg p-4 text-sm">
+              <p className="text-gray-400 mb-2">Das Update beinhaltet:</p>
+              <p className="text-white">{updateInfo?.release_notes}</p>
+            </div>
+            
+            <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 text-sm">
+              <div className="flex items-start gap-2">
+                <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
+                <span className="text-green-300">
+                  Ihre Daten (Datenbank, Uploads, Einstellungen) bleiben vollständig erhalten.
+                </span>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="ghost" onClick={() => setShowUpdateConfirm(false)} className="text-gray-400">
+                Abbrechen
+              </Button>
+              <Button onClick={handlePerformUpdate} className="bg-green-600 hover:bg-green-700 text-white">
+                <ArrowDownCircle className="w-4 h-4 mr-2" />
+                Update starten
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
