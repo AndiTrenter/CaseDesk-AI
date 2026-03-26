@@ -359,7 +359,7 @@ class Token(BaseModel):
 
 
 class SetupStatus(BaseModel):
-    is_configured: bool = False
+    is_configured: bool
     setup_completed: bool = False
     has_admin: bool
     version: str = "1.0.0"

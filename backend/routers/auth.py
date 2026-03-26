@@ -22,12 +22,13 @@ async def health_check():
 
 @router.get("/setup/status", response_model=SetupStatus)
 async def get_setup_status():
-    admin_count = await db.users.count_documents({"role": UserRole.ADMIN})
+    admin_count = await db.users.count_documents({"role": "admin"})
+    logger.info(f"Setup status check: admin_count={admin_count}")
     settings = await db.system_settings.find_one({}, {"_id": 0})
     return SetupStatus(
         is_configured=admin_count > 0,
         has_admin=admin_count > 0,
-        version="1.0.0"
+        version="1.0.1"
     )
 
 
