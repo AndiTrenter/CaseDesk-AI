@@ -137,16 +137,35 @@ async def create_mail_account(
 @router.put("/mail/accounts/{account_id}")
 async def update_mail_account(
     account_id: str,
+    display_name: str = Form(None),
+    imap_server: str = Form(None),
+    imap_port: int = Form(None),
+    smtp_server: str = Form(None),
+    smtp_port: int = Form(None),
+    password: str = Form(None),
     auto_sync: bool = Form(None),
     sync_interval: int = Form(None),
     is_active: bool = Form(None),
     user: dict = Depends(require_auth)
 ):
+    """Update mail account settings"""
     account = await db.mail_accounts.find_one({"id": account_id, "user_id": user["id"]})
     if not account:
         raise HTTPException(status_code=404, detail="Mail account not found")
     
     update_data = {}
+    if display_name is not None:
+        update_data["display_name"] = display_name
+    if imap_server is not None:
+        update_data["imap_server"] = imap_server
+    if imap_port is not None:
+        update_data["imap_port"] = imap_port
+    if smtp_server is not None:
+        update_data["smtp_server"] = smtp_server
+    if smtp_port is not None:
+        update_data["smtp_port"] = smtp_port
+    if password is not None and password.strip():
+        update_data["password"] = password
     if auto_sync is not None:
         update_data["auto_sync"] = auto_sync
     if sync_interval is not None:
@@ -156,8 +175,11 @@ async def update_mail_account(
     
     if update_data:
         await db.mail_accounts.update_one({"id": account_id}, {"$set": update_data})
+        await log_action(user["id"], "update_mail_account", "mail_account", account_id)
     
-    return {"success": True}
+    # Return updated account (without password)
+    updated = await db.mail_accounts.find_one({"id": account_id}, {"_id": 0, "password": 0})
+    return {"success": True, "account": updated}
 
 
 @router.delete("/mail/accounts/{account_id}")

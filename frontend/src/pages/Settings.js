@@ -60,7 +60,9 @@ export default function Settings() {
     imap_port: 993,
     password: '',
     smtp_server: '',
-    smtp_port: 587
+    smtp_port: 587,
+    auto_sync: true,
+    sync_interval: 5
   });
   
   // User management state
@@ -91,6 +93,7 @@ export default function Settings() {
   // Mail connection test state
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionTestResult, setConnectionTestResult] = useState(null);
+  const [editingMailAccount, setEditingMailAccount] = useState(null);
 
   useEffect(() => {
     loadSettings();
@@ -297,27 +300,64 @@ export default function Settings() {
   
   const handleAddMailAccount = async () => {
     try {
-      await mailAPI.createAccount(newMailAccount);
-      toast.success('E-Mail-Konto hinzugefügt');
+      if (editingMailAccount) {
+        // Update existing account
+        await mailAPI.updateAccount(editingMailAccount.id, newMailAccount);
+        toast.success('E-Mail-Konto aktualisiert');
+      } else {
+        // Create new account
+        await mailAPI.createAccount(newMailAccount);
+        toast.success('E-Mail-Konto hinzugefügt');
+      }
       setMailDialogOpen(false);
-      setNewMailAccount({ email: '', display_name: '', imap_server: '', imap_port: 993, password: '', smtp_server: '', smtp_port: 587 });
+      setEditingMailAccount(null);
+      setNewMailAccount({ email: '', display_name: '', imap_server: '', imap_port: 993, password: '', smtp_server: '', smtp_port: 587, auto_sync: true, sync_interval: 5 });
       setConnectionTestResult(null);
       loadMailAccounts();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Fehler beim Hinzufügen des E-Mail-Kontos');
+      toast.error(error.response?.data?.detail || 'Fehler beim Speichern des E-Mail-Kontos');
     }
   };
   
+  const handleEditMailAccount = (account) => {
+    setEditingMailAccount(account);
+    setNewMailAccount({
+      email: account.email,
+      display_name: account.display_name || '',
+      imap_server: account.imap_server || '',
+      imap_port: account.imap_port || 993,
+      password: '', // Don't pre-fill password for security
+      smtp_server: account.smtp_server || '',
+      smtp_port: account.smtp_port || 587,
+      auto_sync: account.auto_sync !== false,
+      sync_interval: account.sync_interval || 5
+    });
+    setConnectionTestResult(null);
+    setMailDialogOpen(true);
+  };
+  
   const handleTestMailConnection = async () => {
-    if (!newMailAccount.email || !newMailAccount.imap_server || !newMailAccount.password) {
-      toast.error('Bitte E-Mail, IMAP-Server und Passwort eingeben');
+    if (!newMailAccount.email || !newMailAccount.imap_server) {
+      toast.error('Bitte E-Mail und IMAP-Server eingeben');
+      return;
+    }
+    // For editing, password is optional if not changed
+    if (!editingMailAccount && !newMailAccount.password) {
+      toast.error('Bitte Passwort eingeben');
       return;
     }
     
     setTestingConnection(true);
     setConnectionTestResult(null);
     try {
-      const res = await mailAPI.testConnection(newMailAccount);
+      // Use existing password placeholder for test if editing without new password
+      const testData = { ...newMailAccount };
+      if (editingMailAccount && !testData.password) {
+        toast.info('Bitte neues Passwort eingeben um Verbindung zu testen');
+        setTestingConnection(false);
+        return;
+      }
+      const res = await mailAPI.testConnection(testData);
       setConnectionTestResult(res.data);
       if (res.data.success) {
         toast.success('Verbindungstest erfolgreich!');
@@ -1301,16 +1341,41 @@ export default function Settings() {
                         <div>
                           <p className="text-white font-medium">{account.display_name}</p>
                           <p className="text-gray-500 text-sm">{account.email}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            {account.auto_sync ? (
+                              <span className="text-xs text-green-400 flex items-center gap-1">
+                                <RefreshCw className="w-3 h-3" />
+                                Sync alle {account.sync_interval || 5} Min
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-500">Sync deaktiviert</span>
+                            )}
+                            {account.last_sync && (
+                              <span className="text-xs text-gray-500">
+                                • Letzter Sync: {new Date(account.last_sync).toLocaleString('de-DE')}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteMailAccount(account.id)}
-                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditMailAccount(account)}
+                          className="text-gray-400 hover:text-white hover:bg-white/10"
+                        >
+                          <SettingsIcon className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteMailAccount(account.id)}
+                          className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1355,11 +1420,18 @@ export default function Settings() {
         </Tabs>
       </div>
       
-      {/* Add Mail Account Dialog */}
-      <Dialog open={mailDialogOpen} onOpenChange={setMailDialogOpen}>
+      {/* Add/Edit Mail Account Dialog */}
+      <Dialog open={mailDialogOpen} onOpenChange={(open) => {
+        setMailDialogOpen(open);
+        if (!open) {
+          setEditingMailAccount(null);
+          setNewMailAccount({ email: '', display_name: '', imap_server: '', imap_port: 993, password: '', smtp_server: '', smtp_port: 587, auto_sync: true, sync_interval: 5 });
+          setConnectionTestResult(null);
+        }
+      }}>
         <DialogContent className="bg-[#121212] border-white/10 text-white max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>E-Mail-Konto hinzufügen</DialogTitle>
+            <DialogTitle>{editingMailAccount ? 'E-Mail-Konto bearbeiten' : 'E-Mail-Konto hinzufügen'}</DialogTitle>
           </DialogHeader>
           
           <div className="space-y-4">
@@ -1371,7 +1443,11 @@ export default function Settings() {
                 onChange={(e) => setNewMailAccount({ ...newMailAccount, email: e.target.value })}
                 className="mt-1 bg-black/30 border-white/10 text-white"
                 placeholder="ihre@email.de"
+                disabled={!!editingMailAccount}
               />
+              {editingMailAccount && (
+                <p className="text-xs text-gray-500 mt-1">E-Mail-Adresse kann nicht geändert werden</p>
+              )}
             </div>
             
             <div>
@@ -1454,6 +1530,53 @@ export default function Settings() {
                   {' '}statt deines normalen Passworts.
                 </p>
               )}
+              {editingMailAccount && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Leer lassen, um das vorhandene Passwort zu behalten
+                </p>
+              )}
+            </div>
+            
+            {/* Sync Settings */}
+            <div className="pt-4 border-t border-white/10">
+              <h4 className="text-white font-medium mb-3">Synchronisation</h4>
+              
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <Label className="text-gray-300">Automatische Synchronisation</Label>
+                  <p className="text-xs text-gray-500">E-Mails automatisch abrufen</p>
+                </div>
+                <Switch
+                  checked={newMailAccount.auto_sync}
+                  onCheckedChange={(checked) => setNewMailAccount({ ...newMailAccount, auto_sync: checked })}
+                />
+              </div>
+              
+              {newMailAccount.auto_sync && (
+                <div>
+                  <Label className="text-gray-300">Sync-Intervall (Minuten)</Label>
+                  <Select
+                    value={String(newMailAccount.sync_interval || 5)}
+                    onValueChange={(value) => setNewMailAccount({ ...newMailAccount, sync_interval: parseInt(value) })}
+                  >
+                    <SelectTrigger className="mt-1 bg-black/30 border-white/10 text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#1a1a1a] border-white/10">
+                      <SelectItem value="1">Jede Minute</SelectItem>
+                      <SelectItem value="2">Alle 2 Minuten</SelectItem>
+                      <SelectItem value="5">Alle 5 Minuten</SelectItem>
+                      <SelectItem value="10">Alle 10 Minuten</SelectItem>
+                      <SelectItem value="15">Alle 15 Minuten</SelectItem>
+                      <SelectItem value="30">Alle 30 Minuten</SelectItem>
+                      <SelectItem value="60">Stündlich</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Kürzere Intervalle = schnellere Verarbeitung, aber mehr Ressourcen
+                  </p>
+                </div>
+              )}
             </div>
             
             {/* Connection Test Result */}
@@ -1492,13 +1615,14 @@ export default function Settings() {
                       <span className="text-gray-400 break-words">SMTP: {connectionTestResult.results.smtp?.message}</span>
                     </div>
                   </div>
-                )}}
+                )}
               </div>
             )}
             
             <div className="flex justify-end gap-3 pt-4">
               <Button variant="ghost" onClick={() => {
                 setMailDialogOpen(false);
+                setEditingMailAccount(null);
                 setConnectionTestResult(null);
               }} className="text-gray-400">
                 Abbrechen
@@ -1519,7 +1643,7 @@ export default function Settings() {
                 )}
               </Button>
               <Button onClick={handleAddMailAccount} className="btn-primary">
-                Hinzufügen
+                {editingMailAccount ? 'Speichern' : 'Hinzufügen'}
               </Button>
             </div>
           </div>

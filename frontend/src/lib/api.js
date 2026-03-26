@@ -279,8 +279,23 @@ export const mailAPI = {
   listAccounts: () => api.get('/mail/accounts'),
   createAccount: (data) => {
     const formData = new FormData();
-    Object.keys(data).forEach(key => formData.append(key, data[key]));
+    Object.keys(data).forEach(key => {
+      if (data[key] !== null && data[key] !== undefined && data[key] !== '') {
+        formData.append(key, data[key]);
+      }
+    });
     return api.post('/mail/accounts', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  updateAccount: (id, data) => {
+    const formData = new FormData();
+    Object.keys(data).forEach(key => {
+      if (data[key] !== null && data[key] !== undefined && data[key] !== '') {
+        formData.append(key, data[key]);
+      }
+    });
+    return api.put(`/mail/accounts/${id}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
