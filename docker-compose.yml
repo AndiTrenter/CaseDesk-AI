@@ -3,11 +3,14 @@
 # ============================================================
 # Für lokale Entwicklung mit Build von Source
 # Produktion: Verwende docker-compose.unraid.yml
+#
+# HINWEIS: MongoDB 5.0+ benötigt AVX-Support. Falls Ihre CPU
+# kein AVX unterstützt, nutzen Sie MONGO_VERSION=4.4 in .env
 # ============================================================
 
 services:
   mongodb:
-    image: mongo:7
+    image: mongo:${MONGO_VERSION:-4.4}
     container_name: casedesk-mongodb
     restart: unless-stopped
     volumes:

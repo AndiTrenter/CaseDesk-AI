@@ -17,7 +17,7 @@ router = APIRouter()
 
 @router.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "casedesk-backend", "version": "1.0.0"}
+    return {"status": "healthy", "service": "casedesk-backend", "version": "1.0.1"}
 
 
 @router.get("/setup/status", response_model=SetupStatus)

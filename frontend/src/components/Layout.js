@@ -86,7 +86,7 @@ export default function Layout() {
                 </Button>
               </div>
             </div>
-            <p className={`text-xs ${textMuted} mt-1`}>Self-Hosted v1.0.0</p>
+            <p className={`text-xs ${textMuted} mt-1`}>Self-Hosted v1.0.1</p>
           </div>
 
           {/* Navigation */}

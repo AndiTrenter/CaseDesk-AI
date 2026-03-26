@@ -1357,7 +1357,7 @@ export default function Settings() {
       
       {/* Add Mail Account Dialog */}
       <Dialog open={mailDialogOpen} onOpenChange={setMailDialogOpen}>
-        <DialogContent className="bg-[#121212] border-white/10 text-white">
+        <DialogContent className="bg-[#121212] border-white/10 text-white max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>E-Mail-Konto hinzufügen</DialogTitle>
           </DialogHeader>
@@ -1513,7 +1513,7 @@ export default function Settings() {
 
       {/* Invite User Dialog */}
       <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
-        <DialogContent className="bg-[#121212] border-white/10 text-white max-w-md">
+        <DialogContent className="bg-[#121212] border-white/10 text-white max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Benutzer einladen</DialogTitle>
           </DialogHeader>
@@ -1636,7 +1636,7 @@ export default function Settings() {
 
       {/* Update Confirmation Dialog */}
       <Dialog open={showUpdateConfirm} onOpenChange={setShowUpdateConfirm}>
-        <DialogContent className="bg-[#121212] border-white/10 text-white max-w-md">
+        <DialogContent className="bg-[#121212] border-white/10 text-white max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ArrowDownCircle className="w-5 h-5 text-green-400" />

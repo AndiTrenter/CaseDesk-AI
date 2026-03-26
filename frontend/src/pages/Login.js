@@ -123,7 +123,7 @@ export default function Login() {
           </div>
 
           <p className="text-center text-gray-600 text-sm mt-6">
-            CaseDesk AI v1.0.0 - Self-Hosted
+            CaseDesk AI v1.0.1 - Self-Hosted
           </p>
         </motion.div>
       </div>

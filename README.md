@@ -85,12 +85,15 @@ docker exec casedesk-ollama ollama pull llama3.2
 | Variable | Beschreibung | Standard |
 |----------|-------------|---------|
 | `DB_NAME` | Datenbankname | `casedesk` |
+| `MONGO_VERSION` | MongoDB Version (4.4 für ältere CPUs ohne AVX) | `4.4` |
 | `SECRET_KEY` | JWT-Signaturschlüssel | **ÄNDERN!** |
 | `FRONTEND_PORT` | Web-Oberfläche Port | `9090` |
 | `AI_PROVIDER` | `openai` oder `ollama` | `openai` |
 | `OPENAI_API_KEY` | OpenAI API-Key | - |
 | `OLLAMA_URL` | Ollama Server URL | `http://ollama:11434` |
 | `OLLAMA_MODEL` | Ollama Modell | `llama3.2` |
+
+> **Hinweis:** MongoDB 5.0+ benötigt AVX-Support in der CPU. Falls Ihr Server (z.B. Unraid auf älteren CPUs) kein AVX unterstützt, verwenden Sie `MONGO_VERSION=4.4`.
 
 ---
 
