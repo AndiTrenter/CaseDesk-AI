@@ -411,3 +411,35 @@ async def send_email(
     except Exception as e:
         logger.error(f"SMTP send error: {e}")
         raise HTTPException(status_code=500, detail=f"E-Mail konnte nicht gesendet werden: {str(e)}")
+
+
+@router.post("/emails/search")
+async def search_emails(
+    data: dict,
+    user: dict = Depends(require_auth)
+):
+    """Search emails with keyword matching"""
+    query = data.get("query", "").lower().strip()
+    
+    if not query:
+        return {"success": True, "results": []}
+    
+    # Build MongoDB search query
+    search_filter = {
+        "user_id": user["id"],
+        "$or": [
+            {"subject": {"$regex": query, "$options": "i"}},
+            {"from_address": {"$regex": query, "$options": "i"}},
+            {"from_name": {"$regex": query, "$options": "i"}},
+            {"body_text": {"$regex": query, "$options": "i"}},
+            {"ai_summary": {"$regex": query, "$options": "i"}},
+            {"to_address": {"$regex": query, "$options": "i"}}
+        ]
+    }
+    
+    emails = await db.emails.find(
+        search_filter,
+        {"_id": 0}
+    ).sort("date", -1).limit(50).to_list(50)
+    
+    return {"success": True, "results": emails, "count": len(emails)}

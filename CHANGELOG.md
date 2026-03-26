@@ -13,6 +13,33 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 
 ---
 
+## [1.0.2] - 2025-07-25
+
+### Hinzugefügt
+- 🔍 **E-Mail Suche**
+  - Suchfeld für Stichwort, Absender, Betreff
+  - Durchsucht auch KI-Zusammenfassungen
+  - Schnelle Filterung der E-Mail-Liste
+- 📅 **Kalender Verbesserungen**
+  - Einträge werden als farbige Banner angezeigt (wie Outlook)
+  - Mehrere Einträge am gleichen Tag haben unterschiedliche Farben
+  - Bis zu 3 Einträge sichtbar, "+X mehr" für weitere
+- 📄 **Dokumente Kachel-Ansicht**
+  - Neues Kachel-Layout wie bei Paperless
+  - Neueste Dokumente zuerst
+  - Quelle angezeigt (E-Mail oder Upload)
+  - Datum des Dokuments sichtbar
+  - Klick öffnet Vollansicht im Popup
+- ✅ **Aufgaben DONE einklappbar**
+  - Erledigte Aufgaben können eingeklappt werden
+  - Spart Platz, bessere Übersicht
+
+### Behoben
+- 🌐 Standard-Sprache ist jetzt Deutsch (nicht mehr Englisch)
+- 🔧 Tasks-Laden funktioniert wieder (AnimatePresence-Bug behoben)
+
+---
+
 ## [1.0.1] - 2025-07-25
 
 ### Hinzugefügt

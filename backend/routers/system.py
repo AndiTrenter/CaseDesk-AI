@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/system", tags=["System"])
 
 # Version info - wird beim Build gesetzt
-CURRENT_VERSION = "1.0.1"
+CURRENT_VERSION = "1.0.2"
 BUILD_DATE = "2025-07-25"
 
 # GitHub raw URLs

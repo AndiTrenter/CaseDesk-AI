@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { 
   Mail, RefreshCw, Trash2, MoreVertical, Paperclip,
   Calendar, User, AlertCircle, Link, FileText, Download,
-  Loader2, CheckCircle, ExternalLink, Plus, Send, Sparkles, X
+  Loader2, CheckCircle, ExternalLink, Plus, Send, Sparkles, X, Search,
+  Inbox, SendHorizontal, File, Reply
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -47,6 +48,14 @@ export default function Emails() {
   const [selectedCaseId, setSelectedCaseId] = useState('');
   const [processing, setProcessing] = useState({});
   
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState(null);
+  const [searching, setSearching] = useState(false);
+  
+  // Tab state (inbox vs sent)
+  const [activeTab, setActiveTab] = useState('inbox');
+  
   // Compose email state
   const [composeOpen, setComposeOpen] = useState(false);
   const [composing, setComposing] = useState(false);
@@ -55,9 +64,17 @@ export default function Emails() {
     to: '',
     subject: '',
     body: '',
-    account_id: ''
+    account_id: '',
+    attachments: [],
+    context_type: null, // 'email' or 'document'
+    context_id: null
   });
   const [aiPrompt, setAiPrompt] = useState('');
+  const [contextDocument, setContextDocument] = useState(null);
+  const [contextEmail, setContextEmail] = useState(null);
+  const [documents, setDocuments] = useState([]);
+  const [showContextPicker, setShowContextPicker] = useState(false);
+  const attachmentInputRef = useRef(null);
 
   useEffect(() => {
     loadData();
@@ -65,14 +82,16 @@ export default function Emails() {
 
   const loadData = async () => {
     try {
-      const [emailsRes, accountsRes, casesRes] = await Promise.all([
+      const [emailsRes, accountsRes, casesRes, docsRes] = await Promise.all([
         api.get('/emails'),
         mailAPI.listAccounts(),
-        casesAPI.list()
+        casesAPI.list(),
+        api.get('/documents')
       ]);
       setEmails(emailsRes.data);
       setMailAccounts(accountsRes.data);
       setCases(casesRes.data);
+      setDocuments(docsRes.data || []);
       
       // Set default account for compose
       if (accountsRes.data.length > 0 && !composeData.account_id) {
@@ -82,6 +101,16 @@ export default function Emails() {
       console.error('Failed to load data:', error);
     }
     setLoading(false);
+  };
+
+  // Filter emails by tab
+  const inboxEmails = emails.filter(e => !e.is_sent);
+  const sentEmails = emails.filter(e => e.is_sent);
+  
+  // Get emails for current tab
+  const getTabEmails = () => {
+    const base = activeTab === 'sent' ? sentEmails : inboxEmails;
+    return searchResults !== null ? searchResults : base;
   };
 
   // Send composed email
@@ -97,17 +126,28 @@ export default function Emails() {
     
     setComposing(true);
     try {
-      const response = await api.post('/emails/send', {
-        account_id: composeData.account_id,
-        to: composeData.to,
-        subject: composeData.subject,
-        body: composeData.body
+      // Create FormData for attachments
+      const formData = new FormData();
+      formData.append('account_id', composeData.account_id);
+      formData.append('to', composeData.to);
+      formData.append('subject', composeData.subject);
+      formData.append('body', composeData.body);
+      
+      // Add attachments
+      if (composeData.attachments && composeData.attachments.length > 0) {
+        composeData.attachments.forEach((file, index) => {
+          formData.append(`attachment_${index}`, file);
+        });
+      }
+      
+      const response = await api.post('/emails/send', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
       
       if (response.data.success) {
         toast.success('E-Mail erfolgreich gesendet!');
         setComposeOpen(false);
-        setComposeData({ to: '', subject: '', body: '', account_id: mailAccounts[0]?.id || '' });
+        resetComposeData();
         loadData();
       } else {
         toast.error(response.data.error || 'Senden fehlgeschlagen');
@@ -117,8 +157,77 @@ export default function Emails() {
     }
     setComposing(false);
   };
+  
+  // Reset compose data
+  const resetComposeData = () => {
+    setComposeData({ 
+      to: '', 
+      subject: '', 
+      body: '', 
+      account_id: mailAccounts[0]?.id || '',
+      attachments: [],
+      context_type: null,
+      context_id: null
+    });
+    setAiPrompt('');
+    setContextDocument(null);
+    setContextEmail(null);
+  };
+  
+  // Add attachment
+  const handleAddAttachment = (e) => {
+    const files = Array.from(e.target.files || []);
+    setComposeData(prev => ({
+      ...prev,
+      attachments: [...prev.attachments, ...files]
+    }));
+    if (attachmentInputRef.current) {
+      attachmentInputRef.current.value = '';
+    }
+  };
+  
+  // Remove attachment
+  const handleRemoveAttachment = (index) => {
+    setComposeData(prev => ({
+      ...prev,
+      attachments: prev.attachments.filter((_, i) => i !== index)
+    }));
+  };
+  
+  // Set context for AI generation
+  const setEmailContext = (email) => {
+    setContextEmail(email);
+    setContextDocument(null);
+    setComposeData(prev => ({
+      ...prev,
+      context_type: 'email',
+      context_id: email.id
+    }));
+    setShowContextPicker(false);
+  };
+  
+  const setDocumentContext = (doc) => {
+    setContextDocument(doc);
+    setContextEmail(null);
+    setComposeData(prev => ({
+      ...prev,
+      context_type: 'document',
+      context_id: doc.id
+    }));
+    setShowContextPicker(false);
+  };
+  
+  const clearContext = () => {
+    setContextEmail(null);
+    setContextDocument(null);
+    setComposeData(prev => ({
+      ...prev,
+      context_type: null,
+      context_id: null
+    }));
+  };
 
-  // Generate email with AI
+  // Generate email with AI (with context support)
   const handleAIGenerate = async () => {
     if (!aiPrompt.trim()) {
       toast.error('Bitte beschreiben Sie, was die E-Mail enthalten soll');
@@ -127,13 +236,28 @@ export default function Emails() {
     
     setAiGenerating(true);
     try {
-      const response = await api.post('/ai/generate-email', {
+      const requestData = {
         prompt: aiPrompt,
         context: {
           recipient: composeData.to,
           subject: composeData.subject
         }
-      });
+      };
+      
+      // Add document or email context
+      if (contextDocument) {
+        requestData.document_id = contextDocument.id;
+        requestData.context.document_name = contextDocument.display_name || contextDocument.original_filename;
+        requestData.context.document_summary = contextDocument.ai_summary;
+      }
+      if (contextEmail) {
+        requestData.email_id = contextEmail.id;
+        requestData.context.email_subject = contextEmail.subject;
+        requestData.context.email_from = contextEmail.from_name || contextEmail.from_address;
+        requestData.context.email_content = contextEmail.body_text?.substring(0, 2000);
+      }
+      
+      const response = await api.post('/ai/generate-email', requestData);
       
       if (response.data.success) {
         setComposeData(prev => ({
@@ -144,10 +268,12 @@ export default function Emails() {
         setAiPrompt('');
         toast.success('E-Mail wurde generiert!');
       } else {
-        toast.error('KI-Generierung fehlgeschlagen');
+        toast.error(response.data.error || 'KI-Generierung fehlgeschlagen');
       }
     } catch (error) {
-      toast.error('KI-Generierung nicht verfügbar');
+      const errorMsg = error.response?.data?.detail || 'KI-Generierung nicht verfügbar';
+      toast.error(errorMsg);
+      console.error('AI generation error:', error);
     }
     setAiGenerating(false);
   };
@@ -163,6 +289,46 @@ export default function Emails() {
     setSelectedEmail(null);
     setComposeOpen(true);
   };
+
+  // Search emails with AI
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) {
+      setSearchResults(null);
+      return;
+    }
+    
+    setSearching(true);
+    try {
+      const response = await api.post('/emails/search', { query: searchQuery });
+      if (response.data.success) {
+        setSearchResults(response.data.results);
+        if (response.data.results.length === 0) {
+          toast.info('Keine E-Mails gefunden');
+        }
+      }
+    } catch (error) {
+      // Fallback: client-side search
+      const query = searchQuery.toLowerCase();
+      const filtered = emails.filter(email => 
+        email.subject?.toLowerCase().includes(query) ||
+        email.from_address?.toLowerCase().includes(query) ||
+        email.from_name?.toLowerCase().includes(query) ||
+        email.body_text?.toLowerCase().includes(query) ||
+        email.ai_summary?.toLowerCase().includes(query)
+      );
+      setSearchResults(filtered);
+    }
+    setSearching(false);
+  };
+
+  // Clear search
+  const clearSearch = () => {
+    setSearchQuery('');
+    setSearchResults(null);
+  };
+
+  // Get displayed emails (search results or all)
+  const displayedEmails = searchResults !== null ? searchResults : emails;
 
   const handleFetchEmails = async (accountId) => {
     setFetching(true);
@@ -261,10 +427,12 @@ export default function Emails() {
   return (
     <div className="page-container" data-testid="emails-page">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">{t('nav.emails')}</h1>
-          <p className="text-gray-400 text-sm">{emails.length} E-Mails</p>
+          <p className="text-gray-400 text-sm">
+            {activeTab === 'inbox' ? `${inboxEmails.length} empfangen` : `${sentEmails.length} gesendet`}
+          </p>
         </div>
         
         <div className="flex items-center gap-3">
@@ -311,6 +479,89 @@ export default function Emails() {
         </div>
       </div>
 
+      {/* Tabs: Inbox / Sent */}
+      <div className="flex gap-1 mb-6 bg-white/5 p-1 rounded-lg w-fit">
+        <button
+          onClick={() => { setActiveTab('inbox'); clearSearch(); }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'inbox' 
+              ? 'bg-blue-500 text-white' 
+              : 'text-gray-400 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <Inbox className="w-4 h-4" />
+          Posteingang
+          {inboxEmails.length > 0 && (
+            <span className={`px-1.5 py-0.5 rounded text-xs ${
+              activeTab === 'inbox' ? 'bg-blue-600' : 'bg-white/10'
+            }`}>
+              {inboxEmails.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => { setActiveTab('sent'); clearSearch(); }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'sent' 
+              ? 'bg-green-500 text-white' 
+              : 'text-gray-400 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <SendHorizontal className="w-4 h-4" />
+          Gesendet
+          {sentEmails.length > 0 && (
+            <span className={`px-1.5 py-0.5 rounded text-xs ${
+              activeTab === 'sent' ? 'bg-green-600' : 'bg-white/10'
+            }`}>
+              {sentEmails.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Search Bar */}
+      <div className="mb-6">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              placeholder="Suche nach Absender, Betreff, Inhalt..."
+              className="pl-10 bg-black/30 border-white/10 text-white"
+            />
+            {searchQuery && (
+              <button
+                onClick={clearSearch}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          <Button 
+            onClick={handleSearch}
+            disabled={searching}
+            className="btn-primary"
+          >
+            {searching ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Search className="w-4 h-4" />
+            )}
+          </Button>
+        </div>
+        {searchResults !== null && (
+          <p className="text-sm text-gray-400 mt-2">
+            {searchResults.length} Ergebnis(se) für "{searchQuery}"
+            <button onClick={clearSearch} className="ml-2 text-blue-400 hover:underline">
+              Filter zurücksetzen
+            </button>
+          </p>
+        )}
+      </div>
+
       {/* No Mail Accounts Info */}
       {mailAccounts.length === 0 && !loading && (
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-6 mb-6">
@@ -331,7 +582,7 @@ export default function Emails() {
         <div className="flex items-center justify-center py-20">
           <div className="animate-spin w-8 h-8 border-2 border-white/20 border-t-white rounded-full" />
         </div>
-      ) : emails.length === 0 ? (
+      ) : getTabEmails().length === 0 ? (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -350,7 +601,7 @@ export default function Emails() {
         </motion.div>
       ) : (
         <div className="space-y-3">
-          {emails.map((email, index) => (
+          {getTabEmails().map((email, index) => (
             <motion.div
               key={email.id}
               initial={{ opacity: 0, y: 20 }}
@@ -608,7 +859,7 @@ export default function Emails() {
       </Dialog>
 
       {/* Compose Email Dialog */}
-      <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
+      <Dialog open={composeOpen} onOpenChange={(open) => { setComposeOpen(open); if (!open) resetComposeData(); }}>
         <DialogContent className="bg-[#121212] border-white/10 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -661,6 +912,63 @@ export default function Emails() {
               />
             </div>
             
+            {/* Context Selection for AI */}
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-blue-400" />
+                  <span className="text-blue-400 font-medium text-sm">Kontext für KI</span>
+                </div>
+                {(contextEmail || contextDocument) && (
+                  <button onClick={clearContext} className="text-xs text-gray-500 hover:text-white">
+                    Kontext entfernen
+                  </button>
+                )}
+              </div>
+              
+              {contextEmail ? (
+                <div className="flex items-center gap-2 p-2 bg-black/20 rounded">
+                  <Mail className="w-4 h-4 text-blue-400" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-sm truncate">{contextEmail.subject}</p>
+                    <p className="text-gray-500 text-xs">von {contextEmail.from_name || contextEmail.from_address}</p>
+                  </div>
+                </div>
+              ) : contextDocument ? (
+                <div className="flex items-center gap-2 p-2 bg-black/20 rounded">
+                  <File className="w-4 h-4 text-green-400" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-sm truncate">{contextDocument.display_name || contextDocument.original_filename}</p>
+                    <p className="text-gray-500 text-xs">{contextDocument.ai_summary?.substring(0, 50)}...</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowContextPicker('email')}
+                    className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                  >
+                    <Mail className="w-4 h-4 mr-2" />
+                    E-Mail auswählen
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowContextPicker('document')}
+                    className="border-green-500/30 text-green-400 hover:bg-green-500/10"
+                  >
+                    <File className="w-4 h-4 mr-2" />
+                    Dokument auswählen
+                  </Button>
+                </div>
+              )}
+              <p className="text-xs text-gray-500 mt-2">
+                Wählen Sie eine E-Mail oder ein Dokument als Kontext für die KI-Generierung
+              </p>
+            </div>
+            
             {/* AI Generation */}
             <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-3">
@@ -672,7 +980,10 @@ export default function Emails() {
                   value={aiPrompt}
                   onChange={(e) => setAiPrompt(e.target.value)}
                   className="bg-black/30 border-white/10 text-white"
-                  placeholder="z.B. 'Schreibe eine höfliche Anfrage wegen Zahlungsaufschub'"
+                  placeholder={contextEmail || contextDocument 
+                    ? "z.B. 'Antworte höflich und bitte um Fristverlängerung'" 
+                    : "z.B. 'Schreibe eine höfliche Anfrage wegen Zahlungsaufschub'"
+                  }
                   onKeyDown={(e) => e.key === 'Enter' && handleAIGenerate()}
                 />
                 <Button 
@@ -688,7 +999,10 @@ export default function Emails() {
                 </Button>
               </div>
               <p className="text-xs text-gray-500 mt-2">
-                Beschreiben Sie den Inhalt und die KI generiert die E-Mail für Sie
+                {contextEmail || contextDocument 
+                  ? "Die KI nutzt den ausgewählten Kontext um eine passende Antwort zu generieren"
+                  : "Beschreiben Sie den Inhalt und die KI generiert die E-Mail für Sie"
+                }
               </p>
             </div>
             
@@ -703,15 +1017,44 @@ export default function Emails() {
               />
             </div>
             
+            {/* Attachments */}
+            <div>
+              <Label className="text-gray-300">Anhänge</Label>
+              <input
+                ref={attachmentInputRef}
+                type="file"
+                multiple
+                onChange={handleAddAttachment}
+                className="hidden"
+              />
+              <div className="mt-2 space-y-2">
+                {composeData.attachments.map((file, index) => (
+                  <div key={index} className="flex items-center gap-2 p-2 bg-white/5 rounded">
+                    <Paperclip className="w-4 h-4 text-gray-400" />
+                    <span className="text-white text-sm flex-1 truncate">{file.name}</span>
+                    <span className="text-gray-500 text-xs">{(file.size / 1024).toFixed(0)} KB</span>
+                    <button onClick={() => handleRemoveAttachment(index)} className="text-red-400 hover:text-red-300">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => attachmentInputRef.current?.click()}
+                  className="border-white/10 text-gray-400 hover:bg-white/5"
+                >
+                  <Paperclip className="w-4 h-4 mr-2" />
+                  Anhang hinzufügen
+                </Button>
+              </div>
+            </div>
+            
             {/* Actions */}
             <div className="flex justify-end gap-3 pt-4">
               <Button 
                 variant="ghost" 
-                onClick={() => {
-                  setComposeOpen(false);
-                  setComposeData({ to: '', subject: '', body: '', account_id: mailAccounts[0]?.id || '' });
-                  setAiPrompt('');
-                }} 
+                onClick={() => { setComposeOpen(false); resetComposeData(); }} 
                 className="text-gray-400"
               >
                 Abbrechen
@@ -734,6 +1077,49 @@ export default function Emails() {
                 )}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Context Picker Dialog */}
+      <Dialog open={!!showContextPicker} onOpenChange={() => setShowContextPicker(false)}>
+        <DialogContent className="bg-[#121212] border-white/10 text-white max-w-lg max-h-[70vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {showContextPicker === 'email' ? 'E-Mail als Kontext wählen' : 'Dokument als Kontext wählen'}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+            {showContextPicker === 'email' ? (
+              inboxEmails.slice(0, 20).map(email => (
+                <button
+                  key={email.id}
+                  onClick={() => setEmailContext(email)}
+                  className="w-full flex items-start gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-lg text-left transition-colors"
+                >
+                  <Mail className="w-4 h-4 text-blue-400 mt-1 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-white text-sm font-medium truncate">{email.subject}</p>
+                    <p className="text-gray-500 text-xs">von {email.from_name || email.from_address}</p>
+                  </div>
+                </button>
+              ))
+            ) : (
+              documents.slice(0, 20).map(doc => (
+                <button
+                  key={doc.id}
+                  onClick={() => setDocumentContext(doc)}
+                  className="w-full flex items-start gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-lg text-left transition-colors"
+                >
+                  <File className="w-4 h-4 text-green-400 mt-1 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-white text-sm font-medium truncate">{doc.display_name || doc.original_filename}</p>
+                    <p className="text-gray-500 text-xs truncate">{doc.ai_summary || 'Keine Zusammenfassung'}</p>
+                  </div>
+                </button>
+              ))
+            )}
           </div>
         </DialogContent>
       </Dialog>

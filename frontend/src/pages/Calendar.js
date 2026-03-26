@@ -237,25 +237,46 @@ export default function Calendar() {
                   const isToday = isSameDay(day, new Date());
                   const isSelected = isSameDay(day, selectedDate);
                   
+                  // Event colors for multiple events
+                  const eventColors = [
+                    'bg-blue-500',
+                    'bg-green-500',
+                    'bg-purple-500',
+                    'bg-orange-500',
+                    'bg-pink-500',
+                    'bg-cyan-500'
+                  ];
+                  
                   return (
                     <button
                       key={day.toISOString()}
                       onClick={() => handleDateClick(day)}
                       className={`
-                        aspect-square p-1 rounded-lg text-sm transition-colors relative
-                        ${isToday ? 'bg-blue-500/20 text-blue-400' : ''}
-                        ${isSelected && !isToday ? 'bg-white/10 text-white' : ''}
-                        ${!isToday && !isSelected ? 'hover:bg-white/5 text-gray-300' : ''}
+                        min-h-[80px] p-1 rounded-lg text-sm transition-colors relative flex flex-col
+                        ${isToday ? 'bg-blue-500/20 ring-1 ring-blue-500/50' : ''}
+                        ${isSelected && !isToday ? 'bg-white/10 ring-1 ring-white/30' : ''}
+                        ${!isToday && !isSelected ? 'hover:bg-white/5' : ''}
                       `}
                     >
-                      <span className={`${isToday ? 'font-bold' : ''}`}>
+                      <span className={`self-end px-1 ${isToday ? 'font-bold text-blue-400' : 'text-gray-300'}`}>
                         {format(day, 'd')}
                       </span>
                       {dayEvents.length > 0 && (
-                        <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
-                          {dayEvents.slice(0, 3).map((_, i) => (
-                            <div key={i} className="w-1 h-1 rounded-full bg-blue-400" />
+                        <div className="flex-1 flex flex-col gap-0.5 mt-1 overflow-hidden">
+                          {dayEvents.slice(0, 3).map((event, i) => (
+                            <div 
+                              key={event.id} 
+                              className={`${eventColors[i % eventColors.length]} text-white text-[10px] px-1 py-0.5 rounded truncate leading-tight`}
+                              title={event.title}
+                            >
+                              {event.title}
+                            </div>
                           ))}
+                          {dayEvents.length > 3 && (
+                            <div className="text-[10px] text-gray-400 px-1">
+                              +{dayEvents.length - 3} mehr
+                            </div>
+                          )}
                         </div>
                       )}
                     </button>

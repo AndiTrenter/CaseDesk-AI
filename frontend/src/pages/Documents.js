@@ -6,7 +6,7 @@ import {
   FileText, Upload, Search, Trash2, 
   Eye, FileImage, File, MoreVertical, RefreshCw,
   Tag, Calendar, User, AlertCircle, CheckCircle,
-  Loader2, Edit, Download, X, Plus, Briefcase, CheckSquare, Bot
+  Loader2, Edit, Download, X, Plus, Briefcase, CheckSquare, Bot, Mail, Sparkles
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -349,7 +349,14 @@ export default function Documents() {
   };
   
   // Filter documents based on search
-  const filteredDocuments = documents;
+  // Sort documents - newest first
+  const sortedDocuments = [...documents].sort((a, b) => {
+    const dateA = new Date(a.created_at || 0);
+    const dateB = new Date(b.created_at || 0);
+    return dateB - dateA;
+  });
+  
+  const filteredDocuments = sortedDocuments;
 
   return (
     <div className="page-container" data-testid="documents-page">
@@ -527,174 +534,142 @@ export default function Documents() {
           </p>
         </motion.div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredDocuments.map((doc, index) => {
             const FileIcon = getFileIcon(doc.mime_type);
             const isProcessing = processing[doc.id];
             const isSelected = selectedDocIds.includes(doc.id);
             
+            // Determine source
+            const source = doc.source === 'email' || doc.email_id ? 'E-Mail' : 'Upload';
+            const sourceIcon = source === 'E-Mail' ? Mail : Upload;
+            const SourceIcon = sourceIcon;
+            
             return (
               <motion.div
                 key={doc.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.03 }}
-                className={`bg-[#121212] border rounded-xl p-4 hover:border-white/10 transition-colors group ${
-                  isSelected ? 'border-blue-500/50 bg-blue-500/5' : 'border-white/5'
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: index * 0.02 }}
+                onClick={() => !selectionMode && setSelectedDoc(doc)}
+                className={`bg-[#121212] border rounded-xl overflow-hidden hover:border-white/20 transition-all cursor-pointer group ${
+                  isSelected ? 'border-blue-500/50 bg-blue-500/5 ring-2 ring-blue-500/30' : 'border-white/5'
                 }`}
                 data-testid={`document-card-${index}`}
               >
-                <div className="flex items-start gap-4">
+                {/* Document Preview / Icon Header */}
+                <div className="relative h-32 bg-gradient-to-br from-white/5 to-white/[0.02] flex items-center justify-center">
                   {/* Selection Checkbox */}
                   {selectionMode && (
-                    <div className="flex-shrink-0 pt-1">
+                    <div 
+                      className="absolute top-2 left-2 z-10"
+                      onClick={(e) => { e.stopPropagation(); toggleSelection(doc.id); }}
+                    >
                       <input
                         type="checkbox"
                         checked={isSelected}
-                        onChange={() => toggleSelection(doc.id)}
-                        className="w-4 h-4 rounded"
+                        onChange={() => {}}
+                        className="w-5 h-5 rounded cursor-pointer"
                       />
                     </div>
                   )}
                   
-                  {/* Icon */}
-                  <div 
-                    className="w-12 h-12 bg-white/5 rounded-lg flex items-center justify-center flex-shrink-0 cursor-pointer"
-                    onClick={() => selectionMode && toggleSelection(doc.id)}
-                  >
-                    <FileIcon className="w-6 h-6 text-gray-400" />
-                  </div>
+                  {/* File Icon */}
+                  <FileIcon className="w-16 h-16 text-gray-600 group-hover:text-gray-500 transition-colors" />
                   
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    {/* Title */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <h3 className="text-white font-medium truncate">
-                          {doc.display_name || doc.original_filename}
-                        </h3>
-                        {doc.display_name && doc.display_name !== doc.original_filename && (
-                          <p className="text-gray-600 text-xs truncate">
-                            Original: {doc.original_filename}
-                          </p>
-                        )}
-                      </div>
-                      
-                      {/* Status badges */}
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {doc.case_id && (
-                          <span className="flex items-center gap-1 px-2 py-0.5 bg-purple-500/10 text-purple-400 text-xs rounded border border-purple-500/20">
-                            <Briefcase className="w-3 h-3" /> Im Fall
-                          </span>
-                        )}
-                        {doc.ai_analyzed && (
-                          <span className="flex items-center gap-1 px-2 py-0.5 bg-green-500/10 text-green-400 text-xs rounded border border-green-500/20">
-                            <CheckCircle className="w-3 h-3" /> KI
-                          </span>
-                        )}
-                        {doc.importance && (
-                          <span className={`px-2 py-0.5 text-xs rounded border ${getImportanceBadge(doc.importance)}`}>
-                            {doc.importance}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Summary */}
-                    {doc.ai_summary && (
-                      <p className="text-gray-400 text-sm mt-1 line-clamp-2">{doc.ai_summary}</p>
+                  {/* Status Badges - Top Right */}
+                  <div className="absolute top-2 right-2 flex flex-col gap-1">
+                    {doc.ai_analyzed && (
+                      <span className="flex items-center gap-1 px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded backdrop-blur-sm">
+                        <CheckCircle className="w-3 h-3" /> KI
+                      </span>
                     )}
-                    
-                    {/* Meta row */}
-                    <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-gray-500">
-                      {doc.sender && (
-                        <span className="flex items-center gap-1">
-                          <User className="w-3 h-3" /> {doc.sender}
-                        </span>
-                      )}
-                      {doc.document_date && (
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" /> {doc.document_date}
-                        </span>
-                      )}
-                      <span>{formatFileSize(doc.size)}</span>
-                      <span className="capitalize">{doc.document_type}</span>
-                    </div>
-                    
-                    {/* Tags */}
-                    {doc.tags && doc.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {doc.tags.slice(0, 5).map((tag, i) => (
-                          <span 
-                            key={i}
-                            className="px-2 py-0.5 bg-blue-500/10 text-blue-400 text-xs rounded border border-blue-500/20"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                        {doc.tags.length > 5 && (
-                          <span className="text-gray-500 text-xs">+{doc.tags.length - 5}</span>
-                        )}
-                      </div>
-                    )}
-                    
-                    {/* Deadlines warning */}
-                    {doc.deadlines && doc.deadlines.length > 0 && (
-                      <div className="flex items-center gap-2 mt-2 p-2 bg-amber-500/10 border border-amber-500/20 rounded">
-                        <AlertCircle className="w-4 h-4 text-amber-400" />
-                        <span className="text-amber-400 text-xs">
-                          Frist(en): {doc.deadlines.join(', ')}
-                        </span>
-                      </div>
+                    {doc.case_id && (
+                      <span className="flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded backdrop-blur-sm">
+                        <Briefcase className="w-3 h-3" />
+                      </span>
                     )}
                   </div>
                   
-                  {/* Actions */}
+                  {/* Source Badge - Bottom Left */}
+                  <div className="absolute bottom-2 left-2">
+                    <span className={`flex items-center gap-1 px-2 py-0.5 text-xs rounded backdrop-blur-sm ${
+                      source === 'E-Mail' ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-500/20 text-gray-400'
+                    }`}>
+                      <SourceIcon className="w-3 h-3" />
+                      {source}
+                    </span>
+                  </div>
+                  
+                  {/* Processing Overlay */}
+                  {isProcessing && (
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+                    </div>
+                  )}
+                </div>
+                
+                {/* Document Info */}
+                <div className="p-3">
+                  {/* Title */}
+                  <h3 className="text-white font-medium text-sm truncate mb-1" title={doc.display_name || doc.original_filename}>
+                    {doc.display_name || doc.original_filename}
+                  </h3>
+                  
+                  {/* Summary */}
+                  {doc.ai_summary && (
+                    <p className="text-gray-500 text-xs line-clamp-2 mb-2">{doc.ai_summary}</p>
+                  )}
+                  
+                  {/* Meta Info */}
+                  <div className="flex items-center justify-between text-xs text-gray-600">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {doc.created_at ? new Date(doc.created_at).toLocaleDateString('de-DE') : 'Unbekannt'}
+                    </span>
+                    <span>{doc.file_size ? `${(doc.file_size / 1024).toFixed(0)} KB` : ''}</span>
+                  </div>
+                  
+                  {/* Tags */}
+                  {doc.tags && doc.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {doc.tags.slice(0, 3).map((tag) => (
+                        <span key={tag} className="px-1.5 py-0.5 bg-white/5 text-gray-400 text-xs rounded">
+                          {tag}
+                        </span>
+                      ))}
+                      {doc.tags.length > 3 && (
+                        <span className="text-gray-600 text-xs">+{doc.tags.length - 3}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Quick Actions - Hidden until hover */}
+                <div className="border-t border-white/5 p-2 flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <MoreVertical className="w-4 h-4 text-gray-400" />
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-7 w-7 p-0 text-gray-400 hover:text-white"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreVertical className="w-4 h-4" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="bg-[#1A1A1A] border-white/10">
-                      <DropdownMenuItem 
-                        onClick={() => navigate(`/ai?document_id=${doc.id}`)}
-                        className="text-purple-300 focus:bg-purple-500/10"
-                        data-testid={`ask-ai-doc-${doc.id}`}
-                      >
-                        <Bot className="w-4 h-4 mr-2" /> KI fragen
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDownload(doc); }} className="text-gray-300 focus:bg-white/10">
+                        <Download className="w-4 h-4 mr-2" /> Download
                       </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => setSelectedDoc(doc)}
-                        className="text-gray-300 focus:bg-white/10"
-                      >
-                        <Eye className="w-4 h-4 mr-2" /> Details anzeigen
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => handleEditDocument(doc)}
-                        className="text-gray-300 focus:bg-white/10"
-                      >
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEditingDoc(doc); }} className="text-gray-300 focus:bg-white/10">
                         <Edit className="w-4 h-4 mr-2" /> Bearbeiten
                       </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => handleReprocess(doc)}
-                        disabled={isProcessing}
-                        className="text-gray-300 focus:bg-white/10"
-                      >
-                        <RefreshCw className={`w-4 h-4 mr-2 ${isProcessing ? 'animate-spin' : ''}`} /> 
-                        Erneut analysieren
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild className="text-gray-300 focus:bg-white/10">
-                        <a 
-                          href={documentUpdateAPI.downloadUrl(doc.id)} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                        >
-                          <Download className="w-4 h-4 mr-2" /> Herunterladen
-                        </a>
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleShowSuggestions(doc); }} className="text-gray-300 focus:bg-white/10">
+                        <Sparkles className="w-4 h-4 mr-2" /> KI-Vorschläge
                       </DropdownMenuItem>
                       <DropdownMenuItem 
-                        onClick={() => handleDelete(doc.id)}
+                        onClick={(e) => { e.stopPropagation(); handleDelete(doc.id); }} 
                         className="text-red-400 focus:bg-red-500/10"
                       >
                         <Trash2 className="w-4 h-4 mr-2" /> Löschen

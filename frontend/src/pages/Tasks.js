@@ -289,10 +289,10 @@ export default function Tasks() {
                       </div>
                     </motion.div>
                   ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
             );
           })}
         </div>

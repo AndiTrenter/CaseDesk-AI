@@ -1076,9 +1076,11 @@ async def generate_email_with_ai(
     data: dict,
     user: dict = Depends(require_auth)
 ):
-    """Generate email content using AI"""
+    """Generate email content using AI (Ollama or OpenAI)"""
     prompt = data.get("prompt", "")
     context = data.get("context", {})
+    document_id = data.get("document_id")
+    email_id = data.get("email_id")
     
     if not prompt:
         raise HTTPException(status_code=400, detail="Prompt erforderlich")
@@ -1087,8 +1089,32 @@ async def generate_email_with_ai(
         from ai_service import get_ai_service
         ai_service = await get_ai_service(db)
         
-        if not ai_service:
-            raise HTTPException(status_code=503, detail="KI-Service nicht verfügbar")
+        # Check if AI is available
+        availability = await ai_service.check_availability()
+        if not availability["ollama"]["available"] and not availability["openai"]["available"]:
+            raise HTTPException(
+                status_code=503, 
+                detail="KI-Service nicht verfügbar. Bitte aktivieren Sie Ollama (lokal) oder fügen Sie einen OpenAI API-Key in den Einstellungen hinzu."
+            )
+        
+        # Build context from document or email if provided
+        context_info = ""
+        
+        if document_id:
+            doc = await db.documents.find_one({"id": document_id, "user_id": user["id"]}, {"_id": 0})
+            if doc:
+                doc_name = context.get("document_name") or doc.get("display_name") or doc.get("original_filename")
+                doc_summary = context.get("document_summary") or doc.get("ai_summary") or ""
+                doc_text = doc.get("ocr_text", "")[:2000]
+                context_info = f"\n\nKONTEXT - DOKUMENT '{doc_name}':\nZusammenfassung: {doc_summary}\nInhalt (Auszug): {doc_text}"
+        
+        if email_id:
+            email = await db.emails.find_one({"id": email_id, "user_id": user["id"]}, {"_id": 0})
+            if email:
+                email_subject = context.get("email_subject") or email.get("subject", "")
+                email_from = context.get("email_from") or email.get("from_name") or email.get("from_address", "")
+                email_content = context.get("email_content") or email.get("body_text", "")[:2000]
+                context_info = f"\n\nKONTEXT - E-MAIL von {email_from}:\nBetreff: {email_subject}\nInhalt (Auszug): {email_content}"
         
         # Build AI prompt for email generation
         recipient = context.get("recipient", "")
@@ -1115,22 +1141,17 @@ Wichtige Regeln:
 
 {f"Empfänger: {recipient}" if recipient else ""}
 {f"Bisheriger Betreff: {existing_subject}" if existing_subject else ""}
+{context_info}
 
 Antworte NUR mit dem JSON-Objekt."""
         
-        response = await ai_service.chat(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.7
-        )
-        
-        content = response.get("content", "")
+        # Use generate() method instead of non-existent chat()
+        response_text = await ai_service.generate(user_prompt, system_prompt, max_tokens=1500)
         
         # Try to parse JSON from response
         try:
             # Extract JSON from response (handle markdown code blocks)
+            content = response_text
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0]
             elif "```" in content:
@@ -1145,13 +1166,13 @@ Antworte NUR mit dem JSON-Objekt."""
             }
         except json.JSONDecodeError:
             # If JSON parsing fails, try to extract content manually
-            logger.warning(f"Could not parse AI response as JSON: {content[:200]}")
+            logger.warning(f"Could not parse AI response as JSON: {response_text[:200]}")
             
             # Fallback: use the content as body
             return {
                 "success": True,
                 "subject": existing_subject or "Ihre Anfrage",
-                "body": content
+                "body": response_text
             }
             
     except HTTPException:
