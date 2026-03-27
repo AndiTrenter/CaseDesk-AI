@@ -9,7 +9,7 @@ import json
 
 def test_system_endpoints():
     """Test System/Update endpoints for CaseDesk AI v1.0.1"""
-    base_url = os.environ.get('REACT_APP_BACKEND_URL', 'https://dev-browse.preview.emergentagent.com')
+    base_url = os.environ.get('REACT_APP_BACKEND_URL', 'https://local-ai-setup-1.preview.emergentagent.com')
     
     print("🔧 Testing CaseDesk AI System/Update Endpoints v1.0.1")
     print("=" * 60)
