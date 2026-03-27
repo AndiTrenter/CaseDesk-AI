@@ -86,13 +86,49 @@ services:
       - "11434:11434"
     networks:
       - default
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     # Für NVIDIA GPU auf Unraid:
     # runtime: nvidia
     # environment:
     #   - NVIDIA_VISIBLE_DEVICES=all
-    #
-    # Nach dem Start Modell herunterladen:
-    # docker exec casedesk-ollama ollama pull llama3.2
+
+  # Ollama Modell-Initialisierer (lädt Modell automatisch beim ersten Start)
+  ollama-init:
+    image: curlimages/curl:latest
+    container_name: casedesk-ollama-init
+    depends_on:
+      ollama:
+        condition: service_started
+    environment:
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "=== CaseDesk Ollama Initialisierung ==="
+        echo "Warte auf Ollama-Service..."
+        until curl -s http://ollama:11434/api/tags > /dev/null 2>&1; do
+          echo "Ollama noch nicht bereit, warte 5s..."
+          sleep 5
+        done
+        echo "✓ Ollama ist bereit!"
+        
+        # Prüfe ob Modell existiert
+        if curl -s http://ollama:11434/api/tags | grep -q "$${OLLAMA_MODEL}"; then
+          echo "✓ Modell $${OLLAMA_MODEL} bereits vorhanden"
+        else
+          echo "Lade Modell $${OLLAMA_MODEL} herunter (kann einige Minuten dauern)..."
+          curl -X POST http://ollama:11434/api/pull -d "{\"name\": \"$${OLLAMA_MODEL}\"}"
+          echo "✓ Modell $${OLLAMA_MODEL} heruntergeladen!"
+        fi
+        echo "=== Initialisierung abgeschlossen ==="
+    networks:
+      - default
+    restart: "no"
 
 networks:
   default:

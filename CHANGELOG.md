@@ -18,8 +18,8 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 ### Hinzugefügt
 - 🤖 **Ollama als Standard-Service**
   - Ollama Docker-Container wird automatisch mit CaseDesk gestartet
-  - Keine manuelle Installation mehr nötig
-  - Nach Start einmalig Modell laden: `docker exec casedesk-ollama ollama pull llama3.2`
+  - **Modell wird automatisch heruntergeladen** (kein manueller Befehl mehr nötig!)
+  - ollama-init Container lädt `llama3.2` beim ersten Start
   
 - 🔄 **Automatischer KI-Fallback**
   - Bei OpenAI-Fehlern (Rate Limit, ungültiger Key, Verbindungsproblem) automatischer Wechsel zu Ollama
@@ -44,6 +44,7 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 
 ### Geändert
 - Docker Compose: Ollama ist jetzt Pflicht-Service (nicht mehr optional via --profile)
+- Neuer `ollama-init` Container für automatischen Modell-Download
 - Backend hängt von Ollama ab (depends_on: ollama)
 - Verbesserte Fehlerbehandlung für OpenAI (AuthenticationError, RateLimitError, etc.)
 
@@ -52,6 +53,7 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 - `get_ai_service()` prüft Umgebungsvariablen UND Datenbank-Einstellungen
 - Health-Check zeigt immer beide KI-Provider an
 - OLLAMA_URL Standard geändert von localhost auf http://ollama:11434
+- Healthcheck für Ollama-Container hinzugefügt
 
 ---
 
@@ -170,15 +172,15 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 1. Als Admin einloggen
 2. Einstellungen → Updates
 3. "Update installieren" klicken
-4. Nach Update: `docker exec casedesk-ollama ollama pull llama3.2`
+4. Das Ollama-Modell wird **automatisch** heruntergeladen
 
 **Option 2: Manuell**
 ```bash
 cd /mnt/user/appdata/casedesk
 docker compose -f docker-compose.unraid.yml pull
 docker compose -f docker-compose.unraid.yml up -d
-# Ollama-Modell laden:
-docker exec casedesk-ollama ollama pull llama3.2
+# Modell wird automatisch vom ollama-init Container geladen
+# Prüfen mit: docker logs casedesk-ollama-init
 ```
 
 ### Von v1.0.0 auf v1.0.1
