@@ -31,7 +31,7 @@ async def admin_health_check(user: dict = Depends(require_admin)):
 
     # MongoDB
     try:
-        info = await db.command("ping")
+        await db.command("ping")
         doc_count = await db.documents.count_documents({})
         user_count = await db.users.count_documents({})
         results["services"]["mongodb"] = {
@@ -205,7 +205,7 @@ async def get_storage_settings(user: dict = Depends(require_admin)):
             "free_gb": round(free / (1024**3), 2),
             "usage_percent": round(used / total * 100, 1)
         }
-    except:
+    except Exception:
         disk_info = {"error": "Could not read disk info"}
     
     # Get per-user storage usage
