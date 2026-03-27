@@ -1,6 +1,7 @@
 """
 CaseDesk AI - AI Service
 Abstraction layer for local (Ollama) and external (OpenAI) AI providers
+Mit automatischem Fallback zu Ollama wenn OpenAI nicht verfügbar
 """
 import os
 import httpx
@@ -12,26 +13,52 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_URL = os.environ.get('OLLAMA_URL', 'http://localhost:11434')
+OLLAMA_URL = os.environ.get('OLLAMA_URL', 'http://ollama:11434')
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'llama3.2')
 
 
 class AIService:
-    """AI Service supporting Ollama (local) and OpenAI (external)"""
+    """AI Service supporting Ollama (local) and OpenAI (external) with automatic fallback"""
     
-    def __init__(self, provider: str = "ollama", api_key: str = None):
+    def __init__(self, provider: str = "openai", api_key: str = None, enable_fallback: bool = True):
         self.provider = provider
         self.api_key = api_key or OPENAI_API_KEY
         self.ollama_url = OLLAMA_URL
-        self.model = "llama3.2" if provider == "ollama" else "gpt-4o"
+        self.ollama_model = OLLAMA_MODEL
+        self.openai_model = "gpt-4o"
+        self.enable_fallback = enable_fallback  # Fallback zu Ollama wenn OpenAI fehlschlägt
     
     async def generate(self, prompt: str, system_prompt: str = None, max_tokens: int = 2000) -> str:
-        """Generate text using configured AI provider"""
+        """Generate text using configured AI provider with automatic fallback"""
+        
+        # Provider: Ollama
         if self.provider == "ollama":
             return await self._generate_ollama(prompt, system_prompt)
-        elif self.provider == "openai" and self.api_key:
-            return await self._generate_openai(prompt, system_prompt, max_tokens)
+        
+        # Provider: OpenAI
+        elif self.provider == "openai":
+            if not self.api_key:
+                logger.warning("OpenAI API key not configured, trying Ollama fallback")
+                if self.enable_fallback:
+                    return await self._generate_ollama(prompt, system_prompt)
+                return "OpenAI API-Key nicht konfiguriert. Bitte in den Einstellungen hinterlegen."
+            
+            result = await self._generate_openai(prompt, system_prompt, max_tokens)
+            
+            # Fallback zu Ollama bei OpenAI-Fehlern
+            if result.startswith("OpenAI Fehler:") and self.enable_fallback:
+                logger.info("OpenAI failed, falling back to Ollama")
+                ollama_result = await self._generate_ollama(prompt, system_prompt)
+                if not ollama_result.startswith("Ollama"):
+                    return ollama_result
+            
+            return result
+        
         else:
+            # Kein Provider konfiguriert - versuche Ollama als Fallback
+            if self.enable_fallback:
+                return await self._generate_ollama(prompt, system_prompt)
             return "AI ist nicht konfiguriert. Bitte aktivieren Sie Ollama oder OpenAI in den Einstellungen."
     
     async def _generate_ollama(self, prompt: str, system_prompt: str = None) -> str:
@@ -46,7 +73,7 @@ class AIService:
                 response = await client.post(
                     f"{self.ollama_url}/api/chat",
                     json={
-                        "model": self.model,
+                        "model": self.ollama_model,
                         "messages": messages,
                         "stream": False
                     }
@@ -57,14 +84,14 @@ class AIService:
                     return result.get("message", {}).get("content", "")
                 else:
                     logger.error(f"Ollama error: {response.status_code} - {response.text}")
-                    return f"Ollama Fehler: {response.status_code}"
+                    return f"Ollama Fehler: {response.status_code}. Modell '{self.ollama_model}' möglicherweise nicht installiert. Führe aus: docker exec casedesk-ollama ollama pull {self.ollama_model}"
                     
         except httpx.ConnectError:
             logger.error("Cannot connect to Ollama service")
-            return "Ollama-Service nicht erreichbar. Bitte starten Sie den Ollama-Container."
+            return "Ollama-Service nicht erreichbar. Container läuft möglicherweise nicht."
         except Exception as e:
             logger.error(f"Ollama generation error: {e}")
-            return f"KI-Fehler: {str(e)}"
+            return f"Ollama Fehler: {str(e)}"
     
     async def _generate_openai(self, prompt: str, system_prompt: str = None, max_tokens: int = 2000) -> str:
         """Generate using OpenAI API"""
@@ -78,7 +105,7 @@ class AIService:
             messages.append({"role": "user", "content": prompt})
             
             response = client.chat.completions.create(
-                model=self.model,
+                model=self.openai_model,
                 messages=messages,
                 max_tokens=max_tokens,
                 temperature=0.7
@@ -86,6 +113,15 @@ class AIService:
             
             return response.choices[0].message.content
             
+        except openai.AuthenticationError as e:
+            logger.error(f"OpenAI authentication error: {e}")
+            return "OpenAI Fehler: Ungültiger API-Key. Bitte überprüfen Sie den Schlüssel in den Einstellungen."
+        except openai.RateLimitError as e:
+            logger.error(f"OpenAI rate limit error: {e}")
+            return "OpenAI Fehler: Rate Limit erreicht. Bitte warten Sie einen Moment."
+        except openai.APIConnectionError as e:
+            logger.error(f"OpenAI connection error: {e}")
+            return "OpenAI Fehler: Verbindungsproblem. Prüfen Sie Ihre Internetverbindung."
         except Exception as e:
             logger.error(f"OpenAI generation error: {e}")
             return f"OpenAI Fehler: {str(e)}"
@@ -93,21 +129,25 @@ class AIService:
     async def check_availability(self) -> Dict[str, Any]:
         """Check if AI services are available"""
         result = {
-            "ollama": {"available": False, "model": None},
-            "openai": {"available": bool(self.api_key)}
+            "ollama": {"available": False, "model": None, "models": []},
+            "openai": {"available": bool(self.api_key)},
+            "active_provider": self.provider,
+            "fallback_enabled": self.enable_fallback
         }
         
+        # Prüfe Ollama-Verfügbarkeit
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.get(f"{self.ollama_url}/api/tags")
                 if response.status_code == 200:
                     data = response.json()
                     models = [m.get("name") for m in data.get("models", [])]
-                    result["ollama"]["available"] = True
+                    result["ollama"]["available"] = len(models) > 0
                     result["ollama"]["models"] = models
-                    result["ollama"]["model"] = self.model if self.model in models else (models[0] if models else None)
-        except:
-            pass
+                    result["ollama"]["model"] = self.ollama_model if self.ollama_model in models else (models[0] if models else None)
+                    result["ollama"]["url"] = self.ollama_url
+        except Exception as e:
+            result["ollama"]["error"] = str(e)
         
         return result
 
@@ -644,26 +684,40 @@ Extrahiere neue persoenliche Fakten."""
 
 
 async def get_ai_service(db) -> AIService:
-    """Get configured AI service from database settings or environment"""
+    """Get configured AI service from database settings or environment
+    
+    Priorität:
+    1. Umgebungsvariablen (für Docker-Deployment)
+    2. Datenbank-Einstellungen (über UI konfiguriert)
+    3. Fallback zu Ollama wenn nichts konfiguriert
+    """
     import os
     
     settings = await db.system_settings.find_one({}, {"_id": 0})
     
-    # Environment variable AI_PROVIDER takes priority (for Docker deploy)
+    # Umgebungsvariablen haben Priorität (für Docker deploy)
     env_provider = os.environ.get("AI_PROVIDER")
     env_api_key = os.environ.get("OPENAI_API_KEY")
     
+    # API-Key: Umgebungsvariable ODER Datenbank (UI-Eingabe)
+    # WICHTIG: Datenbank-Key wird verwendet wenn Umgebungsvariable leer ist
     if settings:
-        provider = env_provider or settings.get("ai_provider", "ollama")
-        api_key = env_api_key or settings.get("openai_api_key")
+        provider = env_provider or settings.get("ai_provider", "openai")
+        # API-Key aus DB verwenden wenn Umgebungsvariable leer oder nicht gesetzt
+        db_api_key = settings.get("openai_api_key")
+        api_key = env_api_key if env_api_key else db_api_key
     else:
         provider = env_provider or "openai"
         api_key = env_api_key
     
+    # "disabled" wird zu Ollama (Fallback)
     if provider == "disabled":
         provider = "ollama"
     
-    return AIService(provider=provider, api_key=api_key)
+    # Debug-Logging (ohne den Key selbst zu loggen)
+    logger.info(f"AI Service initialized: provider={provider}, api_key_configured={bool(api_key)}")
+    
+    return AIService(provider=provider, api_key=api_key, enable_fallback=True)
 
 
 class ProactiveAssistant:

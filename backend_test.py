@@ -1,791 +1,372 @@
+#!/usr/bin/env python3
 """
-CaseDesk AI Backend API Testing
-Comprehensive test suite for all backend endpoints
+CaseDesk AI Backend Testing - v1.0.4 Features
+Testing the new health-check endpoint, system version, and settings system
 """
 import requests
 import json
 import sys
-from datetime import datetime
-import tempfile
 import os
 
-class CaseDeskAPITester:
-    def __init__(self, base_url=None):
-        self.base_url = base_url or os.environ.get('REACT_APP_BACKEND_URL', 'http://localhost:8001')
-        self.token = None
-        self.session_id = None
-        self.tests_run = 0
-        self.tests_passed = 0
-        self.admin_user = None
-        self.created_items = {
-            'cases': [],
-            'tasks': [],
-            'events': [],
-            'documents': []
-        }
+# Backend URL from frontend .env
+BACKEND_URL = "https://local-ai-setup-1.preview.emergentagent.com/api"
 
-    def log_test(self, name, success, details=""):
-        """Log test results"""
-        self.tests_run += 1
-        if success:
-            self.tests_passed += 1
-            print(f"✅ {name}")
-        else:
-            print(f"❌ {name} - {details}")
+# Test credentials (admin user)
+ADMIN_EMAIL = "andi.trenter@gmail.com"
+ADMIN_PASSWORD = "admin123"
 
-    def run_test(self, name, method, endpoint, expected_status, data=None, files=None, form_data=None):
-        """Run a single API test"""
-        url = f"{self.base_url}/api{endpoint}"
-        headers = {}
+class BackendTester:
+    def __init__(self):
+        self.session = requests.Session()
+        self.auth_token = None
+        self.user_data = None
         
-        if self.token:
-            headers['Authorization'] = f'Bearer {self.token}'
-
+    def setup_admin_if_needed(self):
+        """Check if setup is needed and create admin user"""
+        print("🔧 Checking setup status...")
+        
         try:
-            if form_data:
-                # Use form data for multipart requests
-                response = getattr(requests, method.lower())(url, data=form_data, headers=headers, files=files)
-            elif data:
-                headers['Content-Type'] = 'application/json'
-                response = getattr(requests, method.lower())(url, json=data, headers=headers)
+            response = self.session.get(f"{BACKEND_URL}/setup/status")
+            if response.status_code == 200:
+                status = response.json()
+                print(f"   Setup configured: {status.get('is_configured')}")
+                print(f"   Has admin: {status.get('has_admin')}")
+                
+                if not status.get('has_admin'):
+                    print("🔧 No admin user found, initializing setup...")
+                    
+                    setup_data = {
+                        "admin_email": ADMIN_EMAIL,
+                        "admin_username": "admin",
+                        "admin_password": ADMIN_PASSWORD,
+                        "admin_full_name": "Admin User",
+                        "language": "de",
+                        "ai_provider": "ollama",
+                        "internet_access": "allowed",
+                        "organization_name": "CaseDesk Test"
+                    }
+                    
+                    setup_response = self.session.post(f"{BACKEND_URL}/setup/init", data=setup_data)
+                    print(f"Setup response status: {setup_response.status_code}")
+                    
+                    if setup_response.status_code == 200:
+                        setup_result = setup_response.json()
+                        print("✅ Setup completed successfully")
+                        
+                        # Extract token from setup response
+                        self.auth_token = setup_result.get("access_token")
+                        self.user_data = setup_result.get("user")
+                        
+                        if self.auth_token:
+                            self.session.headers.update({"Authorization": f"Bearer {self.auth_token}"})
+                            print(f"✅ Admin user created and authenticated: {self.user_data.get('email')}")
+                            return True
+                        else:
+                            print("❌ Setup completed but no token received")
+                            return False
+                    else:
+                        print(f"❌ Setup failed: {setup_response.status_code}")
+                        print(f"   Response: {setup_response.text}")
+                        return False
+                else:
+                    print("✅ Admin user already exists")
+                    return True
             else:
-                response = getattr(requests, method.lower())(url, headers=headers)
-
-            success = response.status_code == expected_status
-            result_data = {}
-            
-            if response.headers.get('content-type', '').startswith('application/json'):
-                try:
-                    result_data = response.json()
-                except:
-                    pass
-
-            if success:
-                self.log_test(name, True)
-            else:
-                error_msg = f"Expected {expected_status}, got {response.status_code}"
-                if result_data and 'detail' in result_data:
-                    error_msg += f" - {result_data['detail']}"
-                self.log_test(name, False, error_msg)
-
-            return success, result_data
-
+                print(f"❌ Could not check setup status: {response.status_code}")
+                return False
+                
         except Exception as e:
-            self.log_test(name, False, f"Request error: {str(e)}")
-            return False, {}
-
-    def test_health_check(self):
-        """Test health endpoint"""
-        success, data = self.run_test("Health Check", "GET", "/health", 200)
-        return success and data.get("status") == "healthy"
-
-    def test_setup_status(self):
-        """Test setup status endpoint"""
-        success, data = self.run_test("Setup Status", "GET", "/setup/status", 200)
-        return success and "setup_completed" in data
-
-    def test_setup_initialization(self):
-        """Test setup initialization or skip if already completed"""
-        success, data = self.run_test("Setup Status Check", "GET", "/setup/status", 200)
+            print(f"❌ Setup check error: {e}")
+            return False
+    
+    def authenticate(self):
+        """Authenticate with admin credentials"""
+        print("🔐 Authenticating with admin credentials...")
         
-        if success and data.get('setup_completed'):
-            # Setup already completed, skip initialization
-            self.log_test("Setup Already Completed", True)
+        # First check if we need to setup
+        if not self.setup_admin_if_needed():
+            return False
+        
+        # If we already got a token from setup, we're done
+        if self.auth_token:
             return True
-        else:
-            # Try to initialize setup
-            setup_data = {
-                'language': 'en',
-                'admin_email': f'admin_{datetime.now().strftime("%H%M%S")}@test.com',
-                'admin_username': f'admin_{datetime.now().strftime("%H%M%S")}',
-                'admin_password': 'TestAdmin123!',
-                'admin_full_name': 'Test Administrator',
-                'ai_provider': 'disabled',
-                'internet_access': 'denied'
+        
+        # Try to login (using form data, not JSON)
+        login_data = {
+            "email": ADMIN_EMAIL,
+            "password": ADMIN_PASSWORD
+        }
+        
+        try:
+            response = self.session.post(f"{BACKEND_URL}/auth/login", data=login_data)
+            print(f"Login response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.auth_token = data.get("access_token")
+                self.user_data = data.get("user")
+                
+                if self.auth_token:
+                    # Set authorization header for future requests
+                    self.session.headers.update({"Authorization": f"Bearer {self.auth_token}"})
+                    print(f"✅ Authentication successful for user: {self.user_data.get('email')}")
+                    print(f"   User role: {self.user_data.get('role')}")
+                    return True
+                else:
+                    print("❌ No access token received")
+                    return False
+            else:
+                print(f"❌ Login failed: {response.status_code}")
+                print(f"   Response: {response.text}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Authentication error: {e}")
+            return False
+    
+    def test_health_endpoint(self):
+        """Test the new health-check endpoint (GET /api/admin/health)"""
+        print("\n🏥 Testing Health-Check Endpoint...")
+        
+        try:
+            response = self.session.get(f"{BACKEND_URL}/admin/health")
+            print(f"Health endpoint status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                print("✅ Health endpoint accessible")
+                
+                # Check required structure
+                required_fields = ["timestamp", "services"]
+                missing_fields = [field for field in required_fields if field not in data]
+                
+                if missing_fields:
+                    print(f"❌ Missing required fields: {missing_fields}")
+                    return False
+                
+                services = data.get("services", {})
+                print(f"   Found {len(services)} services")
+                
+                # Check OpenAI service
+                if "openai" in services:
+                    openai_service = services["openai"]
+                    print(f"   OpenAI: status={openai_service.get('status')}, active={openai_service.get('active')}")
+                    
+                    required_openai_fields = ["status", "active"]
+                    missing_openai = [field for field in required_openai_fields if field not in openai_service]
+                    if missing_openai:
+                        print(f"❌ OpenAI service missing fields: {missing_openai}")
+                        return False
+                else:
+                    print("❌ OpenAI service not found in health response")
+                    return False
+                
+                # Check Ollama service
+                if "ollama" in services:
+                    ollama_service = services["ollama"]
+                    print(f"   Ollama: status={ollama_service.get('status')}, url={ollama_service.get('url')}, active={ollama_service.get('active')}")
+                    print(f"   Ollama models: {ollama_service.get('models', [])}")
+                    
+                    required_ollama_fields = ["status", "url", "models", "active"]
+                    missing_ollama = [field for field in required_ollama_fields if field not in ollama_service]
+                    if missing_ollama:
+                        print(f"❌ Ollama service missing fields: {missing_ollama}")
+                        return False
+                else:
+                    print("❌ Ollama service not found in health response")
+                    return False
+                
+                # Check AI config
+                if "ai_config" in services:
+                    ai_config = services["ai_config"]
+                    print(f"   AI Config: active_provider={ai_config.get('active_provider')}, fallback_available={ai_config.get('fallback_available')}")
+                    
+                    required_ai_config_fields = ["active_provider", "fallback_available"]
+                    missing_ai_config = [field for field in required_ai_config_fields if field not in ai_config]
+                    if missing_ai_config:
+                        print(f"❌ AI config missing fields: {missing_ai_config}")
+                        return False
+                else:
+                    print("❌ AI config not found in health response")
+                    return False
+                
+                print("✅ Health endpoint structure is correct")
+                return True
+                
+            elif response.status_code == 401:
+                print("❌ Health endpoint requires authentication (401)")
+                return False
+            else:
+                print(f"❌ Health endpoint failed: {response.status_code}")
+                print(f"   Response: {response.text}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Health endpoint error: {e}")
+            return False
+    
+    def test_system_version(self):
+        """Test system version endpoint (GET /api/system/version)"""
+        print("\n📋 Testing System Version Endpoint...")
+        
+        try:
+            response = self.session.get(f"{BACKEND_URL}/system/version")
+            print(f"Version endpoint status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                version = data.get("version")
+                print(f"   Current version: {version}")
+                print(f"   Build date: {data.get('build_date')}")
+                print(f"   Release notes: {data.get('release_notes')}")
+                
+                if version == "1.0.4":
+                    print("✅ Version endpoint returns correct v1.0.4")
+                    return True
+                else:
+                    print(f"❌ Expected version 1.0.4, got {version}")
+                    return False
+                    
+            else:
+                print(f"❌ Version endpoint failed: {response.status_code}")
+                print(f"   Response: {response.text}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Version endpoint error: {e}")
+            return False
+    
+    def test_system_settings_get(self):
+        """Test GET /api/settings/system"""
+        print("\n⚙️ Testing System Settings GET...")
+        
+        try:
+            response = self.session.get(f"{BACKEND_URL}/settings/system")
+            print(f"Settings GET status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                print("✅ System settings GET successful")
+                print(f"   AI Provider: {data.get('ai_provider')}")
+                print(f"   OpenAI API Key: {data.get('openai_api_key')}")
+                print(f"   Settings keys: {list(data.keys())}")
+                return True
+                
+            elif response.status_code == 401:
+                print("❌ System settings GET requires authentication (401)")
+                return False
+            else:
+                print(f"❌ System settings GET failed: {response.status_code}")
+                print(f"   Response: {response.text}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ System settings GET error: {e}")
+            return False
+    
+    def test_system_settings_put(self):
+        """Test PUT /api/settings/system"""
+        print("\n⚙️ Testing System Settings PUT...")
+        
+        try:
+            # Test updating AI provider and API key
+            test_data = {
+                "ai_provider": "openai",
+                "openai_api_key": "sk-test-key-for-testing-purposes"
             }
             
-            success, data = self.run_test("Setup Initialization", "POST", "/setup/init", 200, form_data=setup_data)
+            response = self.session.put(f"{BACKEND_URL}/settings/system", data=test_data)
+            print(f"Settings PUT status: {response.status_code}")
             
-            if success and data.get('success'):
-                self.token = data.get('access_token')
-                self.admin_user = data.get('user')
-                return True
+            if response.status_code == 200:
+                data = response.json()
+                print("✅ System settings PUT successful")
+                print(f"   Response: {data}")
+                
+                # Verify the settings were saved by getting them again
+                get_response = self.session.get(f"{BACKEND_URL}/settings/system")
+                if get_response.status_code == 200:
+                    saved_data = get_response.json()
+                    saved_provider = saved_data.get("ai_provider")
+                    saved_key = saved_data.get("openai_api_key")
+                    
+                    print(f"   Verified AI Provider: {saved_provider}")
+                    print(f"   Verified API Key: {saved_key}")
+                    
+                    if saved_provider == "openai" and saved_key == "***configured***":
+                        print("✅ Settings correctly saved and masked")
+                        return True
+                    else:
+                        print("❌ Settings not saved correctly")
+                        return False
+                else:
+                    print("❌ Could not verify saved settings")
+                    return False
+                
+            elif response.status_code == 401:
+                print("❌ System settings PUT requires authentication (401)")
+                return False
+            else:
+                print(f"❌ System settings PUT failed: {response.status_code}")
+                print(f"   Response: {response.text}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ System settings PUT error: {e}")
             return False
-
-    def test_authentication(self):
-        """Test login with provided test credentials"""        
-        login_data = {
-            'email': 'andi.trenter@gmail.com',
-            'password': 'Speedy@181279'
-        }
-        
-        success, data = self.run_test("User Login", "POST", "/auth/login", 200, form_data=login_data)
-        
-        if success and data.get('access_token'):
-            self.token = data['access_token']
-            self.admin_user = data.get('user')
-            return True
-        
-        # Fallback to admin credentials if test credentials don't work
-        login_data = {
-            'email': 'admin@casedesk.app',
-            'password': 'admin123'
-        }
-        
-        success, data = self.run_test("Admin Login Fallback", "POST", "/auth/login", 200, form_data=login_data)
-        
-        if success and data.get('access_token'):
-            self.token = data['access_token']
-            self.admin_user = data.get('user')
-            return True
-        return False
-
-    def test_get_current_user(self):
-        """Test getting current user info"""
-        success, data = self.run_test("Get Current User", "GET", "/auth/me", 200)
-        return success and data.get('email')
-
-    def test_cases_crud(self):
-        """Test Cases CRUD operations"""
-        all_passed = True
-        
-        # Create case
-        case_data = {
-            "title": "Test Case 001",
-            "description": "Test case for API testing",
-            "reference_number": "CASE-TEST-001",
-            "status": "open"
-        }
-        success, data = self.run_test("Create Case", "POST", "/cases", 200, case_data)
-        if success and data.get('id'):
-            case_id = data['id']
-            self.created_items['cases'].append(case_id)
-            
-            # Get case
-            success, _ = self.run_test("Get Case", "GET", f"/cases/{case_id}", 200)
-            all_passed = all_passed and success
-            
-            # List cases
-            success, data = self.run_test("List Cases", "GET", "/cases", 200)
-            all_passed = all_passed and success and len(data) > 0
-            
-            # Update case
-            update_data = {**case_data, "status": "in_progress"}
-            success, _ = self.run_test("Update Case", "PUT", f"/cases/{case_id}", 200, update_data)
-            all_passed = all_passed and success
-            
-        else:
-            all_passed = False
-            
-        return all_passed
-
-    def test_tasks_crud(self):
-        """Test Tasks CRUD operations"""
-        all_passed = True
-        
-        # Create task
-        task_data = {
-            "title": "Test Task 001",
-            "description": "Test task for API testing",
-            "priority": "high",
-            "status": "todo",
-            "due_date": "2024-12-31T23:59:59Z"
-        }
-        success, data = self.run_test("Create Task", "POST", "/tasks", 200, task_data)
-        if success and data.get('id'):
-            task_id = data['id']
-            self.created_items['tasks'].append(task_id)
-            
-            # List tasks
-            success, data = self.run_test("List Tasks", "GET", "/tasks", 200)
-            all_passed = all_passed and success and len(data) > 0
-            
-            # Update task
-            update_data = {**task_data, "status": "done"}
-            success, _ = self.run_test("Update Task", "PUT", f"/tasks/{task_id}", 200, update_data)
-            all_passed = all_passed and success
-            
-        else:
-            all_passed = False
-            
-        return all_passed
-
-    def test_events_crud(self):
-        """Test Events CRUD operations"""
-        all_passed = True
-        
-        # Create event
-        event_data = {
-            "title": "Test Meeting",
-            "description": "Test meeting for API testing",
-            "start_time": "2024-12-01T10:00:00Z",
-            "end_time": "2024-12-01T11:00:00Z",
-            "all_day": False,
-            "location": "Conference Room A"
-        }
-        success, data = self.run_test("Create Event", "POST", "/events", 200, event_data)
-        if success and data.get('id'):
-            event_id = data['id']
-            self.created_items['events'].append(event_id)
-            
-            # List events
-            success, data = self.run_test("List Events", "GET", "/events", 200)
-            all_passed = all_passed and success and len(data) > 0
-            
-            # Update event
-            update_data = {**event_data, "location": "Conference Room B"}
-            success, _ = self.run_test("Update Event", "PUT", f"/events/{event_id}", 200, update_data)
-            all_passed = all_passed and success
-            
-        else:
-            all_passed = False
-            
-        return all_passed
-
-    def test_document_upload(self):
-        """Test Document upload functionality"""
-        # Create a test file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-            f.write("Test document content for API testing")
-            temp_file_path = f.name
-
-        try:
-            with open(temp_file_path, 'rb') as f:
-                files = {'file': ('test_document.txt', f, 'text/plain')}
-                form_data = {
-                    'document_type': 'other'
-                }
-                
-                success, data = self.run_test("Upload Document", "POST", "/documents/upload", 200, 
-                                            files=files, form_data=form_data)
-                
-                if success and data.get('success') and data.get('document'):
-                    doc_id = data['document']['id']
-                    self.created_items['documents'].append(doc_id)
-                    
-                    # List documents
-                    success, _ = self.run_test("List Documents", "GET", "/documents", 200)
-                    return success
-                    
-        finally:
-            os.unlink(temp_file_path)
-        
-        return False
-
-    def test_ai_action_endpoints(self):
-        """Test AI Action endpoints as specified in review request"""
-        all_passed = True
-        
-        print("  Testing AI Action Endpoints (AI service may be unavailable)...")
-        
-        # Test 1: POST /api/ai/parse-action
-        parse_data = {
-            'message': 'Lege einen Termin für Luzias Geburtstag am 15. März mit Erinnerung an'
-        }
-        success, data = self.run_test("AI Parse Action", "POST", "/ai/parse-action", 200, form_data=parse_data)
-        if success:
-            if data.get('success') and data.get('action_detected') and data.get('action_type') == 'create_event':
-                print(f"  ✓ Detected action_type: {data['action_type']}")
-                if data.get('action_data'):
-                    print(f"  ✓ Action data extracted successfully")
-                    
-                    # Test 2: POST /api/ai/execute-action - Create Event
-                    import json
-                    execute_data = {
-                        'action_type': 'create_event',
-                        'action_data': json.dumps(data['action_data']),
-                        'confirmed': True
-                    }
-                    success2, data2 = self.run_test("AI Execute Action - Create Event", "POST", "/ai/execute-action", 200, form_data=execute_data)
-                    if success2 and data2.get('success') and data2.get('created'):
-                        event_id = data2['created']['id']
-                        self.created_items['events'].append(event_id)
-                        print(f"  ✓ Created event: {data2['created']['title']}")
-                        
-                        # Test 3: Verify event was created via GET /api/events
-                        success3, events_data = self.run_test("Verify Event Created", "GET", "/events", 200)
-                        if success3 and any(e.get('id') == event_id for e in events_data):
-                            print(f"  ✓ Event verified in events list")
-                        else:
-                            all_passed = False
-                            print(f"  ❌ Event not found in events list")
-                    else:
-                        all_passed = False
-                        print(f"  ❌ Failed to execute create_event action")
-                else:
-                    print(f"  ⚠ Action detected but no data extracted (AI service unavailable)")
-                    # Test with manual action data since AI parsing failed
-                    manual_action_data = {
-                        "title": "Luzias Geburtstag",
-                        "description": "Geburtstag von Luzia",
-                        "date": "2025-03-15",
-                        "start_time": "09:00",
-                        "end_time": "10:00",
-                        "all_day": True,
-                        "location": "",
-                        "reminder_question": "Soll ich auch eine Erinnerungsaufgabe anlegen?"
-                    }
-                    execute_data = {
-                        'action_type': 'create_event',
-                        'action_data': json.dumps(manual_action_data),
-                        'confirmed': True
-                    }
-                    success2, data2 = self.run_test("AI Execute Action - Manual Data", "POST", "/ai/execute-action", 200, form_data=execute_data)
-                    if success2 and data2.get('success'):
-                        event_id = data2['created']['id']
-                        self.created_items['events'].append(event_id)
-                        print(f"  ✓ Created event with manual data: {data2['created']['title']}")
-                    else:
-                        all_passed = False
-            elif data.get('action_detected') and data.get('action_type') == 'create_event':
-                print(f"  ✓ Action detection working (detected: {data['action_type']})")
-                print(f"  ⚠ AI parsing failed: {data.get('error', 'Unknown error')}")
-                # This is expected when AI service is unavailable
-            else:
-                all_passed = False
-                print(f"  ❌ Action detection failed")
-        else:
-            all_passed = False
-        
-        # Test 4: Test creating a task
-        task_parse_data = {
-            'message': 'Erstelle eine Aufgabe: Rechnung bezahlen bis nächste Woche'
-        }
-        success, data = self.run_test("AI Parse Action - Task", "POST", "/ai/parse-action", 200, form_data=task_parse_data)
-        if success and data.get('action_detected') and data.get('action_type') == 'create_task':
-            print(f"  ✓ Task action detected: {data['action_type']}")
-            if data.get('action_data'):
-                execute_task_data = {
-                    'action_type': 'create_task',
-                    'action_data': json.dumps(data['action_data']),
-                    'confirmed': True
-                }
-                success2, data2 = self.run_test("AI Execute Action - Create Task", "POST", "/ai/execute-action", 200, form_data=execute_task_data)
-                if success2 and data2.get('success') and data2.get('created'):
-                    task_id = data2['created']['id']
-                    self.created_items['tasks'].append(task_id)
-                    print(f"  ✓ Created task: {data2['created']['title']}")
-                else:
-                    all_passed = False
-            else:
-                print(f"  ⚠ Task action detected but AI parsing failed (expected when AI unavailable)")
-        else:
-            all_passed = False
-        
-        # Test 5: GET /api/ai/correspondence-search
-        search_success, search_data = self.run_test("AI Correspondence Search", "GET", "/ai/correspondence-search?query=Zahlungsfristverlängerung", 200)
-        if search_success and search_data.get('success'):
-            print(f"  ✓ Correspondence search returned: found={search_data.get('found', False)}")
-            if not search_data.get('found'):
-                print(f"  ✓ No correspondence found (expected for new system)")
-        else:
-            all_passed = False
-        
-        # Test 6: POST /api/ai/chat - Test that chat returns action_preview
-        chat_data = {
-            'message': 'Erstelle eine Aufgabe: Rechnung bezahlen bis nächste Woche'
-        }
-        success, data = self.run_test("AI Chat with Action Preview", "POST", "/ai/chat", 200, form_data=chat_data)
-        if success and data.get('success'):
-            if data.get('action_preview'):
-                print(f"  ✓ Chat returned action_preview: {data['action_preview']['action_type']}")
-            else:
-                print(f"  ⚠ Chat did not return action_preview (expected when AI service unavailable)")
-                # This is expected when AI service is not available
-        else:
-            all_passed = False
-        
-        return all_passed
-
-    def test_settings_crud(self):
-        """Test Settings operations"""
-        all_passed = True
-        
-        # Get system settings (admin only)
-        success, _ = self.run_test("Get System Settings", "GET", "/settings/system", 200)
-        all_passed = all_passed and success
-        
-        # Get user settings
-        success, _ = self.run_test("Get User Settings", "GET", "/settings/user", 200)
-        all_passed = all_passed and success
-        
-        # Update user settings
-        user_settings = {
-            'language': 'de',
-            'theme': 'dark',
-            'notifications_enabled': True
-        }
-        success, _ = self.run_test("Update User Settings", "PUT", "/settings/user", 200, form_data=user_settings)
-        all_passed = all_passed and success
-        
-        return all_passed
-
-    def test_dashboard_stats(self):
-        """Test Dashboard statistics"""
-        success, data = self.run_test("Get Dashboard Stats", "GET", "/dashboard/stats", 200)
-        return success and 'cases' in data and 'documents' in data and 'tasks' in data
-
-    def test_storage_settings(self):
-        """Test Storage Settings endpoints as specified in review request"""
-        all_passed = True
-        
-        print("  Testing Storage Settings Endpoints (admin only)...")
-        
-        # Test 1: GET /api/settings/storage - Get storage settings
-        success, data = self.run_test("Get Storage Settings", "GET", "/settings/storage", 200)
-        if success:
-            # Verify response structure
-            if 'limits' in data and 'disk' in data and 'user_storage' in data:
-                print(f"  ✓ Storage settings structure correct")
-                
-                # Verify default limits are present
-                limits = data['limits']
-                expected_limits = ['max_single_file_mb', 'max_email_attachment_mb', 'max_total_storage_gb', 'max_user_storage_gb']
-                missing_limits = [limit for limit in expected_limits if limit not in limits]
-                
-                if not missing_limits:
-                    print(f"  ✓ All expected default limits present: {list(limits.keys())}")
-                    
-                    # Store original limits for restoration
-                    original_limits = limits.copy()
-                    
-                    # Test 2: PUT /api/settings/storage - Update storage settings
-                    update_data = {
-                        'max_single_file_mb': 150,
-                        'max_user_storage_gb': 20
-                    }
-                    success2, data2 = self.run_test("Update Storage Settings", "PUT", "/settings/storage", 200, form_data=update_data)
-                    
-                    if success2 and data2.get('success'):
-                        print(f"  ✓ Storage settings updated successfully")
-                        
-                        # Verify the limits were updated
-                        updated_limits = data2.get('limits', {})
-                        if (updated_limits.get('max_single_file_mb') == 150 and 
-                            updated_limits.get('max_user_storage_gb') == 20):
-                            print(f"  ✓ Updated limits verified: max_single_file_mb=150, max_user_storage_gb=20")
-                            
-                            # Test 3: GET /api/settings/storage - Verify changes persisted
-                            success3, data3 = self.run_test("Verify Storage Settings Updated", "GET", "/settings/storage", 200)
-                            if success3 and data3.get('limits'):
-                                persisted_limits = data3['limits']
-                                if (persisted_limits.get('max_single_file_mb') == 150 and 
-                                    persisted_limits.get('max_user_storage_gb') == 20):
-                                    print(f"  ✓ Storage settings changes persisted correctly")
-                                else:
-                                    all_passed = False
-                                    print(f"  ❌ Storage settings changes not persisted")
-                            else:
-                                all_passed = False
-                                print(f"  ❌ Failed to verify storage settings persistence")
-                            
-                            # Test 4: GET /api/settings/storage/user/{user_id} - Get user storage limit
-                            if self.admin_user and self.admin_user.get('id'):
-                                user_id = self.admin_user['id']
-                                success4, data4 = self.run_test("Get User Storage Limit", "GET", f"/settings/storage/user/{user_id}", 200)
-                                
-                                if success4:
-                                    # Verify response structure
-                                    expected_fields = ['user_id', 'effective_limit_gb', 'storage_used_mb']
-                                    missing_fields = [field for field in expected_fields if field not in data4]
-                                    
-                                    if not missing_fields:
-                                        print(f"  ✓ User storage response structure correct")
-                                        print(f"  ✓ User {user_id}: effective_limit_gb={data4.get('effective_limit_gb')}, storage_used_mb={data4.get('storage_used_mb')}")
-                                    else:
-                                        all_passed = False
-                                        print(f"  ❌ User storage response missing fields: {missing_fields}")
-                                else:
-                                    all_passed = False
-                                    print(f"  ❌ Failed to get user storage limit")
-                            else:
-                                all_passed = False
-                                print(f"  ❌ No admin user ID available for user storage test")
-                            
-                            # Restore original limits
-                            restore_data = {
-                                'max_single_file_mb': original_limits.get('max_single_file_mb'),
-                                'max_email_attachment_mb': original_limits.get('max_email_attachment_mb'),
-                                'max_total_storage_gb': original_limits.get('max_total_storage_gb'),
-                                'max_user_storage_gb': original_limits.get('max_user_storage_gb'),
-                                'max_database_gb': original_limits.get('max_database_gb'),
-                                'max_ollama_models_gb': original_limits.get('max_ollama_models_gb')
-                            }
-                            success_restore, _ = self.run_test("Restore Original Storage Settings", "PUT", "/settings/storage", 200, form_data=restore_data)
-                            if success_restore:
-                                print(f"  ✓ Original storage settings restored")
-                            else:
-                                print(f"  ⚠ Failed to restore original storage settings")
-                                
-                        else:
-                            all_passed = False
-                            print(f"  ❌ Updated limits not reflected in response")
-                    else:
-                        all_passed = False
-                        print(f"  ❌ Failed to update storage settings")
-                else:
-                    all_passed = False
-                    print(f"  ❌ Missing expected default limits: {missing_limits}")
-            else:
-                all_passed = False
-                print(f"  ❌ Storage settings response structure incorrect")
-        else:
-            all_passed = False
-            print(f"  ❌ Failed to get storage settings")
-        
-        return all_passed
-
-    def test_system_endpoints(self):
-        """Test System/Update endpoints for CaseDesk AI v1.0.1"""
-        all_passed = True
-        
-        print("  Testing System/Update Endpoints...")
-        
-        # Test 1: GET /api/system/version - Should return current version, build_date, release_notes
-        success, data = self.run_test("System Version", "GET", "/system/version", 200)
-        if success:
-            # Verify response structure
-            expected_fields = ['version', 'build_date', 'release_notes']
-            missing_fields = [field for field in expected_fields if field not in data]
-            
-            if not missing_fields:
-                print(f"  ✓ Version endpoint structure correct")
-                print(f"  ✓ Version: {data.get('version')}, Build Date: {data.get('build_date')}")
-                print(f"  ✓ Release Notes: {data.get('release_notes')}")
-                
-                # Verify version is 1.0.1 as expected
-                if data.get('version') == '1.0.1':
-                    print(f"  ✓ Version 1.0.1 confirmed")
-                else:
-                    print(f"  ⚠ Version is {data.get('version')}, expected 1.0.1")
-            else:
-                all_passed = False
-                print(f"  ❌ Version endpoint missing fields: {missing_fields}")
-        else:
-            all_passed = False
-            print(f"  ❌ Failed to get system version")
-        
-        # Test 2: GET /api/system/check-update - Should compare local vs remote version
-        success, data = self.run_test("System Check Update", "GET", "/system/check-update", 200)
-        if success:
-            # Verify response structure
-            expected_fields = ['current_version', 'latest_version', 'update_available']
-            missing_fields = [field for field in expected_fields if field not in data]
-            
-            if not missing_fields:
-                print(f"  ✓ Check update endpoint structure correct")
-                print(f"  ✓ Current: {data.get('current_version')}, Latest: {data.get('latest_version')}")
-                print(f"  ✓ Update available: {data.get('update_available')}")
-                
-                # Check if GitHub URL returned 404 (expected)
-                if data.get('error'):
-                    print(f"  ✓ GitHub URL error (expected): {data.get('error')}")
-                elif data.get('latest_version'):
-                    print(f"  ✓ Successfully fetched remote version: {data.get('latest_version')}")
-                    if data.get('release_date'):
-                        print(f"  ✓ Release date: {data.get('release_date')}")
-                    if data.get('release_notes'):
-                        print(f"  ✓ Release notes available")
-            else:
-                all_passed = False
-                print(f"  ❌ Check update endpoint missing fields: {missing_fields}")
-        else:
-            all_passed = False
-            print(f"  ❌ Failed to check for updates")
-        
-        # Test 3: GET /api/system/changelog - Should return changelog content
-        success, data = self.run_test("System Changelog", "GET", "/system/changelog", 200)
-        if success:
-            # Verify response structure
-            expected_fields = ['changelog', 'fetched_at']
-            missing_fields = [field for field in expected_fields if field not in data]
-            
-            if not missing_fields:
-                print(f"  ✓ Changelog endpoint structure correct")
-                print(f"  ✓ Fetched at: {data.get('fetched_at')}")
-                
-                # Check if it's local fallback or remote
-                if data.get('source') == 'local':
-                    print(f"  ✓ Using local changelog fallback (GitHub URL may not exist)")
-                else:
-                    print(f"  ✓ Successfully fetched remote changelog")
-                
-                # Verify changelog content exists
-                changelog_content = data.get('changelog', '')
-                if changelog_content and len(changelog_content) > 0:
-                    print(f"  ✓ Changelog content available ({len(changelog_content)} characters)")
-                else:
-                    print(f"  ⚠ Changelog content is empty")
-            else:
-                all_passed = False
-                print(f"  ❌ Changelog endpoint missing fields: {missing_fields}")
-        else:
-            all_passed = False
-            print(f"  ❌ Failed to get changelog")
-        
-        # Test 4: POST /api/system/update - Admin only, test authentication requirement
-        # Note: This may fail with 500 if GitHub URL returns 404 (expected)
-        success, data = self.run_test("System Update (Admin Required)", "POST", "/system/update", 200)
-        if success:
-            # Verify response structure for admin user
-            expected_fields = ['success', 'message', 'from_version', 'to_version']
-            missing_fields = [field for field in expected_fields if field not in data]
-            
-            if not missing_fields:
-                print(f"  ✓ Update endpoint structure correct")
-                print(f"  ✓ Update message: {data.get('message')}")
-                print(f"  ✓ From version: {data.get('from_version')} to {data.get('to_version')}")
-                
-                # Check if Docker socket is available
-                if data.get('docker_executed'):
-                    print(f"  ✓ Docker commands executed successfully")
-                elif data.get('manual_required'):
-                    print(f"  ✓ Manual update required (Docker socket not available)")
-                    if data.get('manual_commands'):
-                        print(f"  ✓ Manual commands provided: {len(data.get('manual_commands', []))} commands")
-                
-                if data.get('instructions'):
-                    print(f"  ✓ Update instructions provided: {len(data.get('instructions', []))} steps")
-            else:
-                all_passed = False
-                print(f"  ❌ Update endpoint missing fields: {missing_fields}")
-        else:
-            # Check if it failed due to GitHub 404 (expected behavior)
-            success_alt, data_alt = self.run_test("System Update (GitHub 404 Expected)", "POST", "/system/update", 500)
-            if success_alt and data_alt.get('detail') and 'version.json' in data_alt.get('detail', ''):
-                print(f"  ✓ Update endpoint correctly failed due to GitHub URL 404 (expected)")
-                print(f"  ✓ Error message: {data_alt.get('detail')}")
-            else:
-                all_passed = False
-                print(f"  ❌ Update endpoint failed unexpectedly")
-        
-        # Test 5: POST /api/system/rollback - Admin only, test authentication requirement
-        success, data = self.run_test("System Rollback (Admin Required)", "POST", "/system/rollback", 400)
-        if success:
-            # Expecting 400 because no previous version should be available
-            print(f"  ✓ Rollback correctly returned 400 (no previous version available)")
-            if data.get('detail'):
-                print(f"  ✓ Error message: {data.get('detail')}")
-        else:
-            # If it didn't return 400, check if it returned 200 with proper structure
-            success_alt, data_alt = self.run_test("System Rollback Alternative", "POST", "/system/rollback", 200)
-            if success_alt:
-                print(f"  ✓ Rollback endpoint accessible (previous version available)")
-                expected_fields = ['success', 'message', 'from_version', 'to_version']
-                missing_fields = [field for field in expected_fields if field not in data_alt]
-                
-                if not missing_fields:
-                    print(f"  ✓ Rollback endpoint structure correct")
-                    print(f"  ✓ Rollback message: {data_alt.get('message')}")
-                else:
-                    all_passed = False
-                    print(f"  ❌ Rollback endpoint missing fields: {missing_fields}")
-            else:
-                all_passed = False
-                print(f"  ❌ Failed to access rollback endpoint")
-        
-        # Test 6: GET /api/system/update-history - Admin only, returns list of past updates
-        success, data = self.run_test("System Update History (Admin Required)", "GET", "/system/update-history", 200)
-        if success:
-            # Verify response structure
-            if 'history' in data:
-                print(f"  ✓ Update history endpoint structure correct")
-                history = data.get('history', [])
-                print(f"  ✓ Update history contains {len(history)} entries")
-                
-                # If there are history entries, verify their structure
-                if history:
-                    first_entry = history[0]
-                    expected_fields = ['id', 'type', 'action', 'user_id', 'timestamp']
-                    missing_fields = [field for field in expected_fields if field not in first_entry]
-                    
-                    if not missing_fields:
-                        print(f"  ✓ History entry structure correct")
-                        print(f"  ✓ Latest entry: {first_entry.get('action')} at {first_entry.get('timestamp')}")
-                    else:
-                        all_passed = False
-                        print(f"  ❌ History entry missing fields: {missing_fields}")
-                else:
-                    print(f"  ✓ No update history yet (expected for new system)")
-            else:
-                all_passed = False
-                print(f"  ❌ Update history endpoint missing 'history' field")
-        else:
-            all_passed = False
-            print(f"  ❌ Failed to get update history")
-        
-        return all_passed
-
-    def cleanup_test_data(self):
-        """Clean up created test data"""
-        print(f"\n🧹 Cleaning up test data...")
-        
-        # Delete created items
-        for doc_id in self.created_items['documents']:
-            self.run_test(f"Delete Document {doc_id}", "DELETE", f"/documents/{doc_id}", 200)
-            
-        for event_id in self.created_items['events']:
-            self.run_test(f"Delete Event {event_id}", "DELETE", f"/events/{event_id}", 200)
-            
-        for task_id in self.created_items['tasks']:
-            self.run_test(f"Delete Task {task_id}", "DELETE", f"/tasks/{task_id}", 200)
-            
-        for case_id in self.created_items['cases']:
-            self.run_test(f"Delete Case {case_id}", "DELETE", f"/cases/{case_id}", 200)
-
+    
     def run_all_tests(self):
-        """Run all backend API tests"""
-        print("🚀 Starting CaseDesk AI Backend API Tests")
-        print("=" * 50)
+        """Run all v1.0.4 tests"""
+        print("🚀 Starting CaseDesk AI v1.0.4 Backend Tests")
+        print(f"Backend URL: {BACKEND_URL}")
+        print("=" * 60)
         
-        # Core functionality tests
+        # Authenticate first
+        if not self.authenticate():
+            print("\n❌ Authentication failed - cannot proceed with tests")
+            return False
+        
+        # Run tests
         tests = [
-            ("Health Check", self.test_health_check),
-            ("Setup Status", self.test_setup_status),
-            ("Setup Initialization", self.test_setup_initialization),
-            ("Authentication", self.test_authentication),
-            ("Get Current User", self.test_get_current_user),
-            ("AI Action Endpoints", self.test_ai_action_endpoints),
-            ("Cases CRUD", self.test_cases_crud),
-            ("Tasks CRUD", self.test_tasks_crud),
-            ("Events CRUD", self.test_events_crud),
-            ("Document Upload", self.test_document_upload),
-            ("Settings Operations", self.test_settings_crud),
-            ("Storage Settings", self.test_storage_settings),
-            ("System Endpoints", self.test_system_endpoints),
-            ("Dashboard Stats", self.test_dashboard_stats),
+            ("Health-Check Endpoint", self.test_health_endpoint),
+            ("System Version", self.test_system_version),
+            ("System Settings GET", self.test_system_settings_get),
+            ("System Settings PUT", self.test_system_settings_put),
         ]
         
-        failed_tests = []
-        
+        results = {}
         for test_name, test_func in tests:
             try:
-                if not test_func():
-                    failed_tests.append(test_name)
+                results[test_name] = test_func()
             except Exception as e:
-                print(f"❌ {test_name} - Exception: {str(e)}")
-                failed_tests.append(test_name)
+                print(f"\n❌ {test_name} crashed: {e}")
+                results[test_name] = False
         
-        # Cleanup
-        self.cleanup_test_data()
+        # Summary
+        print("\n" + "=" * 60)
+        print("📊 TEST SUMMARY")
+        print("=" * 60)
         
-        print("\n" + "=" * 50)
-        print(f"📊 Test Results: {self.tests_passed}/{self.tests_run} passed")
+        passed = 0
+        total = len(results)
         
-        if failed_tests:
-            print(f"❌ Failed tests: {', '.join(failed_tests)}")
-            return False
-        else:
-            print("✅ All tests passed!")
+        for test_name, result in results.items():
+            status = "✅ PASS" if result else "❌ FAIL"
+            print(f"{status} {test_name}")
+            if result:
+                passed += 1
+        
+        print(f"\nResults: {passed}/{total} tests passed")
+        
+        if passed == total:
+            print("🎉 All tests passed!")
             return True
-
-
-def main():
-    """Main test execution"""
-    tester = CaseDeskAPITester()
-    success = tester.run_all_tests()
-    return 0 if success else 1
+        else:
+            print("⚠️ Some tests failed")
+            return False
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    tester = BackendTester()
+    success = tester.run_all_tests()
+    sys.exit(0 if success else 1)

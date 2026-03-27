@@ -2,7 +2,7 @@
 # CaseDesk AI - Docker Compose für Unraid
 # ============================================================
 # Optimiert für Unraid NAS
-# Keine künstlichen Ressourcen-Limits
+# Ollama ist immer aktiv als Fallback-KI
 # ============================================================
 #
 # Installation:
@@ -10,8 +10,8 @@
 #   2. nano .env  (Werte anpassen)
 #   3. docker compose -f docker-compose.unraid.yml up -d
 #
-# Mit lokaler KI (Ollama):
-#   docker compose -f docker-compose.unraid.yml --profile ollama up -d
+# Nach dem Start Ollama-Modell herunterladen:
+#   docker exec casedesk-ollama ollama pull llama3.2
 #
 # Web-Oberfläche: http://[DEINE-IP]:9090
 #
@@ -38,6 +38,7 @@ services:
     restart: unless-stopped
     depends_on:
       - mongodb
+      - ollama
     environment:
       - MONGO_URL=mongodb://mongodb:27017/${DB_NAME:-casedesk}
       - UPLOAD_DIR=/app/uploads
@@ -74,13 +75,10 @@ services:
       - default
     # Tesseract OCR mit Deutsch + Englisch
 
-  # Ollama - Lokale KI (optional)
-  # Starten mit: --profile ollama
+  # Ollama - Lokale KI (immer aktiv als Fallback)
   ollama:
     image: ollama/ollama:latest
     container_name: casedesk-ollama
-    profiles:
-      - ollama
     restart: unless-stopped
     volumes:
       - /mnt/user/appdata/casedesk/ollama:/root/.ollama
@@ -92,6 +90,9 @@ services:
     # runtime: nvidia
     # environment:
     #   - NVIDIA_VISIBLE_DEVICES=all
+    #
+    # Nach dem Start Modell herunterladen:
+    # docker exec casedesk-ollama ollama pull llama3.2
 
 networks:
   default:

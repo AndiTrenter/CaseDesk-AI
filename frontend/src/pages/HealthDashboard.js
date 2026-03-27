@@ -25,12 +25,12 @@ const statusColor = (status) => {
 };
 
 const serviceIcon = (name) => {
-  const icons = { mongodb: Database, openai: Cloud, ollama: Bot, ocr: Server, email_sync: Mail, storage: HardDrive, tesseract: Server, ai: Bot };
+  const icons = { mongodb: Database, openai: Cloud, ollama: Bot, ocr: Server, email_sync: Mail, storage: HardDrive, tesseract: Server, ai: Bot, ai_config: Activity };
   return icons[name] || Activity;
 };
 
 const serviceName = (name) => {
-  const names = { mongodb: 'MongoDB', openai: 'OpenAI API', ollama: 'Ollama (Lokal)', ocr: 'OCR Service', email_sync: 'E-Mail Sync', storage: 'Speicher', tesseract: 'Tesseract OCR', ai: 'KI-Provider' };
+  const names = { mongodb: 'MongoDB', openai: 'OpenAI API', ollama: 'Ollama (Lokal)', ocr: 'OCR Service', email_sync: 'E-Mail Sync', storage: 'Speicher', tesseract: 'Tesseract OCR', ai: 'KI-Provider', ai_config: 'KI-Konfiguration' };
   return names[name] || name;
 };
 
@@ -111,6 +111,23 @@ export default function HealthDashboard() {
                     {/* MongoDB specifics */}
                     {info.documents !== undefined && (
                       <div className="text-gray-400">Dokumente: {info.documents} | Benutzer: {info.users}</div>
+                    )}
+
+                    {/* Active indicator for AI services */}
+                    {info.active !== undefined && (
+                      <div className={`text-xs px-2 py-0.5 rounded-full inline-block ${info.active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                        {info.active ? '● Aktiv' : '○ Inaktiv'}
+                      </div>
+                    )}
+
+                    {/* AI Config specifics */}
+                    {info.active_provider && (
+                      <div className="text-gray-400">
+                        Provider: <span className="text-white">{info.active_provider === 'openai' ? 'OpenAI' : 'Ollama'}</span>
+                        {info.fallback_available && (
+                          <span className="text-emerald-400 ml-2">• Fallback bereit</span>
+                        )}
+                      </div>
                     )}
 
                     {/* Storage specifics */}

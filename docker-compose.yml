@@ -28,6 +28,7 @@ services:
     restart: unless-stopped
     depends_on:
       - mongodb
+      - ollama
     environment:
       - MONGO_URL=mongodb://mongodb:27017/${DB_NAME:-casedesk}
       - UPLOAD_DIR=/app/uploads
@@ -68,13 +69,10 @@ services:
     networks:
       - default
 
-  # Ollama - Lokale KI (optional)
-  # Starten mit: --profile ollama
+  # Ollama - Lokale KI (immer aktiv als Fallback)
   ollama:
     image: ollama/ollama:latest
     container_name: casedesk-ollama
-    profiles:
-      - ollama
     restart: unless-stopped
     volumes:
       - ollama_data:/root/.ollama
@@ -82,6 +80,8 @@ services:
       - "11434:11434"
     networks:
       - default
+    # Nach dem Start muss ein Modell heruntergeladen werden:
+    # docker exec casedesk-ollama ollama pull llama3.2
 
 volumes:
   mongodb_data:

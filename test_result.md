@@ -247,6 +247,11 @@ agent_communication:
     message: "Implemented Update-System v1.0.1: New backend router /api/system with endpoints: GET /version, GET /check-update, GET /changelog, POST /update, POST /rollback, GET /update-history. Frontend: New 'Updates' tab in Settings with changelog display, update button, rollback option. Created version.json, updated CHANGELOG.md, new README_UPDATE_SYSTEM.md. Updated GitHub Actions for semantic versioning (v1.0.1 tags)."
   - agent: "testing"
     message: "✅ SYSTEM ENDPOINTS TESTING COMPLETE: All 6 system/update endpoints tested and working perfectly. GET /api/system/version returns v1.0.1 with correct structure. GET /api/system/check-update handles GitHub 404 gracefully (expected). GET /api/system/changelog successfully fetches remote content. POST /api/system/update, POST /api/system/rollback, GET /api/system/update-history all correctly require admin authentication. All endpoints properly secured and functional."
+  - agent: "main"
+    message: "v1.0.4: Ollama als Standard-Service in docker-compose (nicht mehr optional). Erweiterter Health-Check zeigt immer Ollama UND OpenAI an. AI-Service mit automatischem Fallback zu Ollama. OpenAI API-Key wird jetzt korrekt aus DB geladen. Bitte Health-Endpoint testen."
+  - agent: "testing"
+    message: "✅ v1.0.4 BACKEND TESTING COMPLETE: All new v1.0.4 features tested and working perfectly. Admin Health-Check endpoint (GET /api/admin/health) returns comprehensive service status with OpenAI, Ollama, and AI config information. System Version endpoint correctly returns v1.0.4. System Settings endpoints (GET/PUT /api/settings/system) working correctly for ai_provider and openai_api_key management. Fixed missing 'models' field in Ollama health response. All endpoints require proper admin authentication. Admin user (andi.trenter@gmail.com) created and authenticated successfully."
+
 
 backend:
   - task: "AI Action Detection - Parse natural language commands"
@@ -359,6 +364,45 @@ backend:
       - working: true
         agent: "testing"
         comment: "✅ TESTED: System version endpoint working perfectly. Returns correct structure with version=1.0.1, build_date=2025-07-25, release_notes='Update-System eingeführt'. All expected fields present."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.0.4: System version endpoint updated and working perfectly. Returns correct structure with version=1.0.4, build_date=2026-03-26, release_notes='Update-System eingeführt'. Version correctly updated from 1.0.3 to 1.0.4."
+
+  - task: "Admin Health-Check Endpoint"
+    implemented: true
+    working: true
+    file: "routers/settings.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.0.4: Admin health-check endpoint (GET /api/admin/health) working perfectly. Returns comprehensive service status including OpenAI (status, active), Ollama (status, url, models, active), and ai_config (active_provider, fallback_available). Fixed missing 'models' field in Ollama service response. Admin authentication required and working correctly."
+
+  - task: "System Settings - Get System Settings"
+    implemented: true
+    working: true
+    file: "routers/settings.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.0.4: GET /api/settings/system endpoint working perfectly. Returns system configuration including ai_provider and openai_api_key (properly masked as ***configured***). Admin authentication required and working correctly."
+
+  - task: "System Settings - Update System Settings"
+    implemented: true
+    working: true
+    file: "routers/settings.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.0.4: PUT /api/settings/system endpoint working perfectly. Successfully saves ai_provider and openai_api_key settings. API key properly masked in responses. Changes persist correctly and verified through subsequent GET request. Admin authentication required and working correctly."
 
   - task: "System Check Update Endpoint"
     implemented: true
@@ -463,7 +507,7 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 5
+  test_sequence: 6
   run_ui: false
 
 test_plan:

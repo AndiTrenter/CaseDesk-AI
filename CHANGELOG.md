@@ -13,6 +13,58 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 
 ---
 
+## [1.0.4] - 2025-07-26
+
+### Hinzugefügt
+- 🤖 **Ollama als Standard-Service**
+  - Ollama Docker-Container wird automatisch mit CaseDesk gestartet
+  - Keine manuelle Installation mehr nötig
+  - Nach Start einmalig Modell laden: `docker exec casedesk-ollama ollama pull llama3.2`
+  
+- 🔄 **Automatischer KI-Fallback**
+  - Bei OpenAI-Fehlern (Rate Limit, ungültiger Key, Verbindungsproblem) automatischer Wechsel zu Ollama
+  - Bei Internetausfall weiterhin KI-Funktionen über lokales Ollama
+  - Kein manuelles Umschalten nötig
+
+- 📊 **Erweitertes Health-Dashboard**
+  - Ollama und OpenAI werden IMMER im Status angezeigt
+  - "Aktiv"-Indikator zeigt welcher Provider gerade verwendet wird
+  - Hinweis wenn Ollama-Modell noch nicht installiert ist
+  - Anzeige ob Fallback verfügbar ist
+
+### Behoben
+- 🔑 **OpenAI API-Key Problem behoben**
+  - API-Key aus UI-Einstellungen wird jetzt korrekt gespeichert und verwendet
+  - Datenbank-Key wird verwendet wenn keine Umgebungsvariable gesetzt ist
+  - Bessere Fehlermeldungen bei ungültigem API-Key
+
+- ⚡ **KI-Provider Umschaltung**
+  - Wechsel zwischen "Lokal" (Ollama) und "OpenAI" funktioniert jetzt zuverlässig
+  - Einstellungen werden sofort wirksam
+
+### Geändert
+- Docker Compose: Ollama ist jetzt Pflicht-Service (nicht mehr optional via --profile)
+- Backend hängt von Ollama ab (depends_on: ollama)
+- Verbesserte Fehlerbehandlung für OpenAI (AuthenticationError, RateLimitError, etc.)
+
+### Technisch
+- `AIService` Klasse mit `enable_fallback` Parameter
+- `get_ai_service()` prüft Umgebungsvariablen UND Datenbank-Einstellungen
+- Health-Check zeigt immer beide KI-Provider an
+- OLLAMA_URL Standard geändert von localhost auf http://ollama:11434
+
+---
+
+## [1.0.3] - 2025-03-26
+
+### Hinzugefügt
+- ✉️ **KI E-Mail-Komposition mit Kontext**
+- 🎯 **Dynamische Versionierung**
+- 📢 **Update-Banner**
+- 🔄 **Verbessertes Update-System**
+
+---
+
 ## [1.0.2] - 2025-07-25
 
 ### Hinzugefügt
@@ -112,6 +164,23 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 
 ## Upgrade-Anleitung
 
+### Von v1.0.3 auf v1.0.4
+
+**Option 1: Über das Portal (empfohlen)**
+1. Als Admin einloggen
+2. Einstellungen → Updates
+3. "Update installieren" klicken
+4. Nach Update: `docker exec casedesk-ollama ollama pull llama3.2`
+
+**Option 2: Manuell**
+```bash
+cd /mnt/user/appdata/casedesk
+docker compose -f docker-compose.unraid.yml pull
+docker compose -f docker-compose.unraid.yml up -d
+# Ollama-Modell laden:
+docker exec casedesk-ollama ollama pull llama3.2
+```
+
 ### Von v1.0.0 auf v1.0.1
 
 **Option 1: Über das Portal (empfohlen)**
@@ -132,4 +201,5 @@ docker compose -f docker-compose.unraid.yml up -d
 
 Bei Problemen:
 1. Logs prüfen: `docker logs casedesk-backend`
-2. GitHub Issues: https://github.com/AndiTrenter/CaseDesk-AI/issues
+2. Ollama-Status: `docker logs casedesk-ollama`
+3. GitHub Issues: https://github.com/AndiTrenter/CaseDesk-AI/issues

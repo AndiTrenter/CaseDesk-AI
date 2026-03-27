@@ -57,31 +57,54 @@ async def admin_health_check(user: dict = Depends(require_admin)):
             "note": "Fallback-OCR (Tesseract) aktiv"
         }
 
-    # AI Provider
+    # AI Provider - Lade aus DB oder Umgebungsvariablen
     settings = await db.system_settings.find_one({}, {"_id": 0})
-    ai_provider = os.environ.get("AI_PROVIDER") or (settings.get("ai_provider") if settings else "disabled")
+    ai_provider = os.environ.get("AI_PROVIDER") or (settings.get("ai_provider") if settings else "openai")
     api_key = os.environ.get("OPENAI_API_KEY") or (settings.get("openai_api_key") if settings else None)
+    ollama_url = os.environ.get("OLLAMA_URL", "http://ollama:11434")
 
-    if ai_provider == "openai":
-        results["services"]["openai"] = {
-            "status": "configured" if api_key else "no_api_key",
-            "provider": "openai"
-        }
-    elif ai_provider == "ollama":
-        ollama_url = os.environ.get("OLLAMA_URL", "http://ollama:11434")
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(f"{ollama_url}/api/tags")
-                models = [m["name"] for m in resp.json().get("models", [])] if resp.status_code == 200 else []
+    # OpenAI Status (immer anzeigen)
+    results["services"]["openai"] = {
+        "status": "configured" if api_key else "no_api_key",
+        "provider": "openai",
+        "active": ai_provider == "openai"
+    }
+
+    # Ollama Status (immer anzeigen - als Fallback verfügbar)
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{ollama_url}/api/tags")
+            if resp.status_code == 200:
+                models = [m["name"] for m in resp.json().get("models", [])]
                 results["services"]["ollama"] = {
-                    "status": "connected",
+                    "status": "connected" if models else "no_models",
                     "url": ollama_url,
-                    "models": models
+                    "models": models,
+                    "active": ai_provider == "ollama",
+                    "note": "Modell herunterladen: docker exec casedesk-ollama ollama pull llama3.2" if not models else None
                 }
-        except Exception:
-            results["services"]["ollama"] = {"status": "unavailable", "url": ollama_url}
-    else:
-        results["services"]["ai"] = {"status": "disabled"}
+            else:
+                results["services"]["ollama"] = {
+                    "status": "error",
+                    "url": ollama_url,
+                    "models": [],
+                    "active": ai_provider == "ollama"
+                }
+    except Exception:
+        results["services"]["ollama"] = {
+            "status": "unavailable",
+            "url": ollama_url,
+            "models": [],
+            "active": ai_provider == "ollama",
+            "note": "Ollama-Container nicht erreichbar"
+        }
+
+    # Aktueller AI-Provider Status
+    results["services"]["ai_config"] = {
+        "status": "configured",
+        "active_provider": ai_provider,
+        "fallback_available": results["services"]["ollama"]["status"] == "connected"
+    }
 
     # Email Sync
     mail_accounts = await db.mail_accounts.count_documents({})
