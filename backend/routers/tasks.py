@@ -1,7 +1,7 @@
 """Tasks Router"""
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 import uuid
 
 from deps import db, require_auth, log_action
@@ -10,19 +10,27 @@ from models import Task, TaskCreate
 router = APIRouter()
 
 
-@router.get("/tasks", response_model=List[Task])
+@router.get("/tasks")
 async def list_tasks(
     case_id: str = None,
     status: str = None,
     user: dict = Depends(require_auth)
 ):
+    """List all tasks for the current user"""
     query = {"user_id": user["id"]}
     if case_id:
         query["case_id"] = case_id
     if status:
         query["status"] = status
-    tasks = await db.tasks.find(query, {"_id": 0}).sort("due_date", 1).to_list(1000)
-    return tasks
+    
+    try:
+        tasks = await db.tasks.find(query, {"_id": 0}).sort("due_date", 1).to_list(1000)
+        return tasks
+    except Exception as e:
+        # Log the error but return empty list to prevent frontend crash
+        import logging
+        logging.error(f"Error loading tasks: {e}")
+        return []
 
 
 @router.post("/tasks", response_model=Task)

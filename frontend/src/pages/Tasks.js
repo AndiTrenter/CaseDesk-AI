@@ -66,10 +66,18 @@ export default function Tasks() {
   const loadTasks = async () => {
     try {
       const response = await tasksAPI.list();
-      setTasks(response.data);
+      // Handle both array response and object with data property
+      const taskData = Array.isArray(response.data) ? response.data : 
+                       (response.data?.data || response.data || []);
+      setTasks(Array.isArray(taskData) ? taskData : []);
     } catch (error) {
       console.error('Failed to load tasks:', error);
-      toast.error('Failed to load tasks');
+      console.error('Error details:', error.response?.status, error.response?.data);
+      // Only show error toast if it's not an auth error (those are handled by interceptor)
+      if (error.response?.status !== 401) {
+        toast.error(`Aufgaben konnten nicht geladen werden: ${error.response?.data?.detail || error.message}`);
+      }
+      setTasks([]);
     }
     setLoading(false);
   };
