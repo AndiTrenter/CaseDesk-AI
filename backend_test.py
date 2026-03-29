@@ -9,7 +9,7 @@ import sys
 import os
 
 # Backend URL from frontend .env
-BACKEND_URL = "https://local-ai-setup-1.preview.emergentagent.com/api"
+BACKEND_URL = "https://kai-organizer.preview.emergentagent.com/api"
 
 # Test credentials (admin user)
 ADMIN_EMAIL = "andi.trenter@gmail.com"
