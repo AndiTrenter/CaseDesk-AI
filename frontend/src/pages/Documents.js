@@ -47,6 +47,10 @@ export default function Documents() {
   const [editingDoc, setEditingDoc] = useState(null);
   const [processing, setProcessing] = useState({});
   
+  // Document preview state
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  
   // Upload queue state
   const [uploadQueue, setUploadQueue] = useState([]);
   const [processingQueue, setProcessingQueue] = useState([]);
@@ -96,6 +100,35 @@ export default function Documents() {
       toast.error('Dokumente konnten nicht geladen werden');
     }
     setLoading(false);
+  };
+
+  // Load document preview with token-based URL
+  const loadDocumentPreview = async (doc) => {
+    setLoadingPreview(true);
+    setPreviewUrl(null);
+    try {
+      const response = await documentUpdateAPI.getDownloadToken(doc.id);
+      const token = response.data.token;
+      const url = documentUpdateAPI.viewUrl(doc.id, token);
+      setPreviewUrl(url);
+    } catch (error) {
+      console.error('Failed to get preview token:', error);
+      toast.error('Vorschau konnte nicht geladen werden');
+    }
+    setLoadingPreview(false);
+  };
+
+  // Check if document is previewable
+  const isPreviewable = (mimeType) => {
+    const previewableTypes = [
+      'application/pdf',
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'image/svg+xml'
+    ];
+    return previewableTypes.includes(mimeType);
   };
 
   const handleSearch = async (e) => {
@@ -684,18 +717,53 @@ export default function Documents() {
       )}
 
       {/* Document Detail Dialog */}
-      <Dialog open={!!selectedDoc} onOpenChange={() => setSelectedDoc(null)}>
-        <DialogContent className="bg-[#121212] border-white/10 text-white max-w-2xl max-h-[80vh] overflow-y-auto">
+      <Dialog open={!!selectedDoc} onOpenChange={() => { setSelectedDoc(null); setPreviewUrl(null); }}>
+        <DialogContent className="bg-[#121212] border-white/10 text-white max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Dokumentdetails</DialogTitle>
           </DialogHeader>
           
           {selectedDoc && (
             <div className="space-y-4">
-              <div>
-                <h3 className="text-lg font-semibold text-white">{selectedDoc.display_name}</h3>
-                <p className="text-gray-500 text-sm">Original: {selectedDoc.original_filename}</p>
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">{selectedDoc.display_name}</h3>
+                  <p className="text-gray-500 text-sm">Original: {selectedDoc.original_filename}</p>
+                </div>
+                {isPreviewable(selectedDoc.mime_type) && !previewUrl && (
+                  <Button
+                    onClick={() => loadDocumentPreview(selectedDoc)}
+                    disabled={loadingPreview}
+                    className="btn-secondary"
+                  >
+                    {loadingPreview ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Eye className="w-4 h-4 mr-2" />
+                    )}
+                    Vorschau
+                  </Button>
+                )}
               </div>
+              
+              {/* Document Preview */}
+              {previewUrl && (
+                <div className="border border-white/10 rounded-lg overflow-hidden bg-white">
+                  {selectedDoc.mime_type === 'application/pdf' ? (
+                    <iframe
+                      src={previewUrl}
+                      className="w-full h-[500px]"
+                      title="Document Preview"
+                    />
+                  ) : selectedDoc.mime_type?.startsWith('image/') ? (
+                    <img
+                      src={previewUrl}
+                      alt={selectedDoc.display_name}
+                      className="max-w-full max-h-[500px] object-contain mx-auto"
+                    />
+                  ) : null}
+                </div>
+              )}
               
               {selectedDoc.ai_summary && (
                 <div>
@@ -743,7 +811,7 @@ export default function Documents() {
                 </div>
               )}
               
-              {selectedDoc.ocr_text && (
+              {!previewUrl && selectedDoc.ocr_text && (
                 <div>
                   <label className="text-gray-400 text-sm">OCR-Text (Auszug)</label>
                   <pre className="mt-1 p-3 bg-black/30 rounded text-gray-300 text-xs whitespace-pre-wrap max-h-40 overflow-y-auto">
@@ -763,15 +831,21 @@ export default function Documents() {
               )}
               
               <div className="flex gap-3 pt-4 border-t border-white/5">
-                <a
-                  href={documentUpdateAPI.downloadUrl(selectedDoc.id)}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Button
+                  onClick={async () => {
+                    try {
+                      const response = await documentUpdateAPI.getDownloadToken(selectedDoc.id);
+                      const token = response.data.token;
+                      const url = documentUpdateAPI.viewUrl(selectedDoc.id, token);
+                      window.open(url, '_blank');
+                    } catch (error) {
+                      toast.error('Download fehlgeschlagen');
+                    }
+                  }}
+                  className="btn-primary"
                 >
-                  <Button className="btn-primary">
-                    <Download className="w-4 h-4 mr-2" /> Herunterladen
-                  </Button>
-                </a>
+                  <Download className="w-4 h-4 mr-2" /> Herunterladen
+                </Button>
                 <Button 
                   variant="secondary" 
                   onClick={() => {

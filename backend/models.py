@@ -277,6 +277,9 @@ class EventBase(BaseDocument):
 class EventCreate(EventBase):
     case_id: Optional[str] = None
     create_task: bool = False
+    reminder_enabled: bool = False
+    reminder_type: str = "none"  # none, at_time, 5_min, 15_min, 30_min, 1_hour, 1_day, 1_week, etc.
+    reminder_channels: List[str] = ["app"]  # app, email, whatsapp (for future)
 
 
 class Event(EventBase):
@@ -285,9 +288,28 @@ class Event(EventBase):
     case_id: Optional[str] = None
     document_id: Optional[str] = None
     is_deadline: bool = False
+    reminder_enabled: bool = False
+    reminder_type: str = "none"
     reminder_minutes: Optional[int] = None
+    reminder_channels: List[str] = ["app"]
+    reminder_sent: bool = False
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
+
+
+# Reminder Model (for notification system)
+class Reminder(BaseDocument):
+    id: str = Field(default_factory=generate_uuid)
+    user_id: str
+    event_id: Optional[str] = None
+    task_id: Optional[str] = None
+    title: str
+    reminder_time: datetime
+    channels: List[str] = ["app"]  # app, email, whatsapp
+    sent: bool = False
+    sent_at: Optional[datetime] = None
+    sent_channels: List[str] = []  # which channels were actually used
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 # Draft Models

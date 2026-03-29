@@ -1,6 +1,6 @@
 {
-  "version": "1.0.4",
-  "release_date": "2025-07-26",
-  "release_notes": "Ollama als Standard-Fallback-KI, verbessertes KI-Konfigurationssystem, OpenAI API-Key Fix",
+  "version": "1.0.5",
+  "release_date": "2025-07-29",
+  "release_notes": "KI-Assistent mit kombinierten Aktionen (Event+Task+Erinnerung), Kalender-Erinnerungen, Dokument-Vorschau, WhatsApp-Vorbereitung",
   "changelog_url": "https://raw.githubusercontent.com/AndiTrenter/CaseDesk-AI/main/CHANGELOG.md"
 }

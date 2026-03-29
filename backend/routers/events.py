@@ -1,13 +1,28 @@
-"""Events Router with deadline automation"""
+"""Events Router with deadline automation and reminders"""
 from fastapi import APIRouter, HTTPException, Depends
-from datetime import datetime, timezone
-from typing import List
+from datetime import datetime, timezone, timedelta
+from typing import List, Optional
 import uuid
 
 from deps import db, require_auth, log_action
 from models import Event, EventCreate
 
 router = APIRouter()
+
+# Reminder time options (in minutes before event)
+REMINDER_OPTIONS = {
+    "none": None,
+    "at_time": 0,
+    "5_min": 5,
+    "15_min": 15,
+    "30_min": 30,
+    "1_hour": 60,
+    "2_hours": 120,
+    "1_day": 1440,
+    "2_days": 2880,
+    "1_week": 10080,
+    "2_weeks": 20160
+}
 
 
 @router.get("/events", response_model=List[Event])
@@ -22,10 +37,36 @@ async def list_events(
     return events
 
 
+@router.get("/events/reminder-options")
+async def get_reminder_options(user: dict = Depends(require_auth)):
+    """Get available reminder time options"""
+    return {
+        "options": [
+            {"value": "none", "label": "Keine Erinnerung"},
+            {"value": "at_time", "label": "Zur Terminzeit"},
+            {"value": "5_min", "label": "5 Minuten vorher"},
+            {"value": "15_min", "label": "15 Minuten vorher"},
+            {"value": "30_min", "label": "30 Minuten vorher"},
+            {"value": "1_hour", "label": "1 Stunde vorher"},
+            {"value": "2_hours", "label": "2 Stunden vorher"},
+            {"value": "1_day", "label": "1 Tag vorher"},
+            {"value": "2_days", "label": "2 Tage vorher"},
+            {"value": "1_week", "label": "1 Woche vorher"},
+            {"value": "2_weeks", "label": "2 Wochen vorher"}
+        ]
+    }
+
+
 @router.post("/events", response_model=Event)
 async def create_event(event_data: EventCreate, user: dict = Depends(require_auth)):
     now = datetime.now(timezone.utc).isoformat()
     event_id = str(uuid.uuid4())
+    
+    # Get reminder settings
+    reminder_enabled = getattr(event_data, 'reminder_enabled', False)
+    reminder_type = getattr(event_data, 'reminder_type', 'none')
+    reminder_minutes = REMINDER_OPTIONS.get(reminder_type)
+    reminder_channels = getattr(event_data, 'reminder_channels', ['app'])  # Future: ['app', 'email', 'whatsapp']
     
     new_event = {
         "id": event_id,
@@ -37,11 +78,34 @@ async def create_event(event_data: EventCreate, user: dict = Depends(require_aut
         "all_day": event_data.all_day if hasattr(event_data, 'all_day') else False,
         "location": event_data.location if hasattr(event_data, 'location') else None,
         "case_id": event_data.case_id,
+        "reminder_enabled": reminder_enabled,
+        "reminder_type": reminder_type,
+        "reminder_minutes": reminder_minutes,
+        "reminder_channels": reminder_channels,
+        "reminder_sent": False,
         "created_at": now,
         "updated_at": now
     }
     await db.events.insert_one(new_event)
     await log_action(user["id"], "create_event", "event", event_id)
+
+    # Create reminder record if enabled
+    if reminder_enabled and reminder_minutes is not None and event_data.start_time:
+        reminder_time = event_data.start_time - timedelta(minutes=reminder_minutes)
+        reminder_id = str(uuid.uuid4())
+        reminder = {
+            "id": reminder_id,
+            "user_id": user["id"],
+            "event_id": event_id,
+            "title": f"Erinnerung: {event_data.title}",
+            "reminder_time": reminder_time.isoformat(),
+            "channels": reminder_channels,
+            "sent": False,
+            "sent_at": None,
+            "created_at": now
+        }
+        await db.reminders.insert_one(reminder)
+        new_event["reminder_id"] = reminder_id
 
     # Auto-create task if requested
     create_task = getattr(event_data, 'create_task', False)

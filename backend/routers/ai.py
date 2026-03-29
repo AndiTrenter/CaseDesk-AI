@@ -18,7 +18,9 @@ ACTION_PATTERNS = {
     "create_event": [
         r"(?:lege|erstelle|mach|plane).*(?:termin|ereignis|eintrag).*(?:an|für)",
         r"(?:termin|kalendereintrag).*(?:anlegen|erstellen|eintragen)",
-        r"(?:trag|notier).*(?:in den kalender|termin)"
+        r"(?:trag|notier).*(?:in den kalender|termin)",
+        r"geburtstag.*(?:eintragen|anlegen|erstellen)",
+        r"(?:am|den|für).*\d+\..*(?:termin|eintrag|event)"
     ],
     "create_task": [
         r"(?:lege|erstelle|mach).*(?:aufgabe|task|todo|to-do).*(?:an|für)",
@@ -33,6 +35,12 @@ ACTION_PATTERNS = {
         r"(?:erstelle|schreibe|verfasse).*(?:e-?mail|nachricht|schreiben).*(?:an|für)",
         r"(?:e-?mail|nachricht).*(?:senden|schicken|schreiben).*(?:an|für)",
         r"schreib.*(?:an|der|dem).*(?:krankenkasse|versicherung|bank|amt|behörde|arbeitgeber)"
+    ],
+    "combined_event_task": [
+        r"(?:erstelle|lege).*(?:termin|kalendereintrag).*(?:und|mit).*(?:aufgabe|task|erinnerung)",
+        r"(?:termin|eintrag).*(?:erinnerung|aufgabe).*(?:gleichzeitig|dazu|auch)",
+        r"(?:trage|erstelle).*(?:gleichzeitig|und).*(?:aufgabe|task)",
+        r"(?:mit|und).*(?:einer?|).*erinnerung.*(?:vorher|davor)"
     ]
 }
 
@@ -40,7 +48,16 @@ ACTION_PATTERNS = {
 def detect_action_intent(message: str) -> Optional[str]:
     """Detect if the user message contains an action intent"""
     message_lower = message.lower()
+    
+    # Check for combined action first (event + task + reminder)
+    for pattern in ACTION_PATTERNS["combined_event_task"]:
+        if re.search(pattern, message_lower):
+            return "combined_event_task"
+    
+    # Then check for single actions
     for action_type, patterns in ACTION_PATTERNS.items():
+        if action_type == "combined_event_task":
+            continue
         for pattern in patterns:
             if re.search(pattern, message_lower):
                 return action_type
@@ -716,6 +733,49 @@ Regeln:
 - Bei Behörden verwende "Sehr geehrte Damen und Herren"
 - Speichere den Kontext für spätere Nachverfolgung"""
 
+    elif action_type == "combined_event_task":
+        system_prompt = f"""Du bist ein Assistent der kombinierte Kalender- und Aufgabenanfragen aus natürlicher Sprache extrahiert.
+Heute ist der {current_date}.
+
+Der Benutzer möchte GLEICHZEITIG:
+1. Einen Kalendereintrag erstellen
+2. Eine oder mehrere Aufgaben erstellen
+3. Optional: Eine Erinnerung festlegen
+
+Extrahiere folgende Informationen und antworte NUR mit validem JSON:
+{{
+    "event": {{
+        "title": "Titel des Kalendereintrags",
+        "description": "Beschreibung",
+        "date": "YYYY-MM-DD",
+        "start_time": "HH:MM (oder '09:00' wenn ganztägig)",
+        "end_time": "HH:MM (oder '10:00' wenn ganztägig)",
+        "all_day": true/false,
+        "location": "Ort wenn angegeben"
+    }},
+    "tasks": [
+        {{
+            "title": "Titel der Aufgabe",
+            "description": "Beschreibung",
+            "due_date": "YYYY-MM-DD oder null",
+            "priority": "medium"
+        }}
+    ],
+    "reminder": {{
+        "enabled": true/false,
+        "type": "1_week/1_day/2_days/none",
+        "description": "z.B. '1 Woche vorher'"
+    }}
+}}
+
+Regeln:
+- Wenn "Geburtstag" erwähnt wird, setze all_day auf true
+- Wenn kein Jahr angegeben, verwende {current_year} oder {current_year + 1}
+- Erkenne "Erinnerung X Tage/Wochen vorher" und setze reminder.enabled=true mit passendem type
+- type kann sein: none, 1_day, 2_days, 1_week, 2_weeks
+- Wenn eine separate Aufgabe erwähnt wird (z.B. "Kuchen kaufen"), füge sie zur tasks-Liste hinzu
+- Die Aufgabe due_date sollte VOR dem Event-Datum liegen wenn sinnvoll"""
+
     try:
         result = await ai_service.generate(message, system_prompt, max_tokens=1500)
         
@@ -925,6 +985,120 @@ async def execute_action(
             "action_type": "send_email",
             "created": correspondence,
             "message": f"E-Mail-Entwurf an '{data.get('recipient')}' wurde erstellt. Bitte überprüfen und bestätigen Sie den Versand."
+        }
+    
+    elif action_type == "combined_event_task":
+        # Handle combined event + task + reminder creation
+        results = {
+            "event": None,
+            "tasks": [],
+            "reminder": None
+        }
+        messages = []
+        
+        # 1. Create Event
+        event_data = data.get("event", {})
+        if event_data:
+            event_id = str(uuid.uuid4())
+            event_date = event_data.get("date", now[:10])
+            start_time = event_data.get("start_time", "09:00")
+            end_time = event_data.get("end_time", "10:00")
+            
+            # Handle reminder settings
+            reminder_data = data.get("reminder", {})
+            reminder_enabled = reminder_data.get("enabled", False)
+            reminder_type = reminder_data.get("type", "none")
+            
+            # Map reminder type to minutes
+            reminder_minutes_map = {
+                "none": None, "at_time": 0, "5_min": 5, "15_min": 15, "30_min": 30,
+                "1_hour": 60, "2_hours": 120, "1_day": 1440, "2_days": 2880,
+                "1_week": 10080, "2_weeks": 20160
+            }
+            reminder_minutes = reminder_minutes_map.get(reminder_type)
+            
+            event = {
+                "id": event_id,
+                "user_id": user["id"],
+                "title": event_data.get("title", "Neuer Termin"),
+                "description": event_data.get("description", ""),
+                "start_time": f"{event_date}T{start_time}:00",
+                "end_time": f"{event_date}T{end_time}:00",
+                "all_day": event_data.get("all_day", False),
+                "location": event_data.get("location"),
+                "reminder_enabled": reminder_enabled,
+                "reminder_type": reminder_type,
+                "reminder_minutes": reminder_minutes,
+                "reminder_channels": ["app"],
+                "reminder_sent": False,
+                "source": "ai_chat",
+                "created_at": now,
+                "updated_at": now
+            }
+            
+            await db.events.insert_one(event)
+            await log_action(user["id"], "create_event_via_ai", "event", event_id)
+            
+            # Create reminder record if enabled
+            if reminder_enabled and reminder_minutes is not None:
+                try:
+                    event_dt = datetime.fromisoformat(f"{event_date}T{start_time}:00")
+                    reminder_time = event_dt - timedelta(minutes=reminder_minutes)
+                    reminder_id = str(uuid.uuid4())
+                    reminder = {
+                        "id": reminder_id,
+                        "user_id": user["id"],
+                        "event_id": event_id,
+                        "title": f"Erinnerung: {event_data.get('title', 'Termin')}",
+                        "reminder_time": reminder_time.isoformat(),
+                        "channels": ["app"],
+                        "sent": False,
+                        "created_at": now
+                    }
+                    await db.reminders.insert_one(reminder)
+                    if "_id" in reminder:
+                        del reminder["_id"]
+                    results["reminder"] = reminder
+                except Exception as e:
+                    logger.error(f"Reminder creation error: {e}")
+            
+            if "_id" in event:
+                del event["_id"]
+            results["event"] = event
+            messages.append(f"Kalendereintrag '{event_data.get('title')}' am {event_date} erstellt")
+            if reminder_enabled:
+                messages.append(f"Erinnerung {reminder_data.get('description', '')} hinzugefügt")
+        
+        # 2. Create Tasks
+        tasks_data = data.get("tasks", [])
+        for task_data in tasks_data:
+            task_id = str(uuid.uuid4())
+            task = {
+                "id": task_id,
+                "user_id": user["id"],
+                "title": task_data.get("title", "Neue Aufgabe"),
+                "description": task_data.get("description", ""),
+                "priority": task_data.get("priority", "medium"),
+                "status": "todo",
+                "due_date": task_data.get("due_date"),
+                "event_id": event_id if event_data else None,
+                "source": "ai_chat",
+                "created_at": now,
+                "updated_at": now
+            }
+            await db.tasks.insert_one(task)
+            await log_action(user["id"], "create_task_via_ai", "task", task_id)
+            
+            if "_id" in task:
+                del task["_id"]
+            results["tasks"].append(task)
+            messages.append(f"Aufgabe '{task_data.get('title')}' erstellt")
+        
+        return {
+            "success": True,
+            "action_type": "combined_event_task",
+            "created": results,
+            "message": " | ".join(messages)
         }
     
     else:

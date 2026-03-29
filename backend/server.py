@@ -67,7 +67,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="CaseDesk AI",
     description="Self-hosted document and case management with AI support",
-    version="1.0.4",
+    version="1.0.5",
     lifespan=lifespan
 )
 
@@ -113,4 +113,4 @@ app.include_router(api_router)
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint used by Docker Compose healthcheck"""
-    return {"status": "healthy", "service": "casedesk-backend", "version": "1.0.4"}
+    return {"status": "healthy", "service": "casedesk-backend", "version": "1.0.5"}

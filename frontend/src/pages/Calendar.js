@@ -22,6 +22,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../components/ui/dropdown-menu';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../components/ui/select';
 import { eventsAPI } from '../lib/api';
 import { toast } from 'sonner';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from 'date-fns';
@@ -35,6 +42,7 @@ export default function Calendar() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
+  const [reminderOptions, setReminderOptions] = useState([]);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -42,13 +50,16 @@ export default function Calendar() {
     end_time: '',
     all_day: false,
     location: '',
-    create_task: false
+    create_task: false,
+    reminder_enabled: false,
+    reminder_type: 'none'
   });
 
   const locale = i18n.language === 'de' ? de : enUS;
 
   useEffect(() => {
     loadEvents();
+    loadReminderOptions();
   }, []);
 
   const loadEvents = async () => {
@@ -62,6 +73,23 @@ export default function Calendar() {
     setLoading(false);
   };
 
+  const loadReminderOptions = async () => {
+    try {
+      const response = await eventsAPI.getReminderOptions();
+      setReminderOptions(response.data.options || []);
+    } catch (error) {
+      console.error('Failed to load reminder options:', error);
+      // Fallback options
+      setReminderOptions([
+        { value: 'none', label: 'Keine Erinnerung' },
+        { value: '15_min', label: '15 Minuten vorher' },
+        { value: '1_hour', label: '1 Stunde vorher' },
+        { value: '1_day', label: '1 Tag vorher' },
+        { value: '1_week', label: '1 Woche vorher' }
+      ]);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -72,7 +100,10 @@ export default function Calendar() {
         end_time: new Date(formData.end_time).toISOString(),
         all_day: formData.all_day,
         location: formData.location || null,
-        create_task: formData.create_task
+        create_task: formData.create_task,
+        reminder_enabled: formData.reminder_enabled,
+        reminder_type: formData.reminder_type,
+        reminder_channels: ['app'] // Future: add email, whatsapp
       };
       
       if (editingEvent) {
@@ -99,7 +130,9 @@ export default function Calendar() {
       end_time: '',
       all_day: false,
       location: '',
-      create_task: false
+      create_task: false,
+      reminder_enabled: false,
+      reminder_type: 'none'
     });
   };
 
@@ -419,6 +452,45 @@ export default function Calendar() {
                 className="mt-1 bg-black/30 border-white/10 text-white"
                 placeholder="Optional"
               />
+            </div>
+            
+            {/* Erinnerung - wie Outlook */}
+            <div className="space-y-3 py-3 px-3 bg-amber-500/5 border border-amber-500/10 rounded-lg">
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="reminder_enabled"
+                  checked={formData.reminder_enabled}
+                  onChange={(e) => setFormData({ ...formData, reminder_enabled: e.target.checked })}
+                  className="w-4 h-4 rounded border-white/20 bg-black/30 text-amber-500"
+                  data-testid="reminder-checkbox"
+                />
+                <label htmlFor="reminder_enabled" className="text-gray-300 text-sm cursor-pointer flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-amber-400" />
+                  Erinnerung
+                </label>
+              </div>
+              
+              {formData.reminder_enabled && (
+                <div className="ml-7">
+                  <Select
+                    value={formData.reminder_type}
+                    onValueChange={(value) => setFormData({ ...formData, reminder_type: value })}
+                  >
+                    <SelectTrigger className="bg-black/30 border-white/10 text-white" data-testid="reminder-type-select">
+                      <SelectValue placeholder="Wann erinnern?" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#1A1A1A] border-white/10">
+                      {reminderOptions.map(opt => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Zukünftig: E-Mail & WhatsApp Benachrichtigungen
+                  </p>
+                </div>
+              )}
             </div>
             
             <div className="flex items-center gap-3 py-2 px-3 bg-blue-500/5 border border-blue-500/10 rounded-lg">

@@ -12,7 +12,7 @@ import aiofiles
 import logging
 import io
 
-from deps import db, require_auth, log_action, UPLOAD_DIR, OCR_SERVICE_URL
+from deps import db, require_auth, log_action, UPLOAD_DIR, OCR_SERVICE_URL, create_download_token, verify_download_token
 from models import Document
 
 logger = logging.getLogger(__name__)
@@ -411,6 +411,53 @@ async def download_document(document_id: str, user: dict = Depends(require_auth)
         file_path,
         filename=document.get("display_name", document["original_filename"]),
         media_type=document["mime_type"]
+    )
+
+
+@router.get("/documents/{document_id}/download-token")
+async def get_download_token(document_id: str, user: dict = Depends(require_auth)):
+    """Generate a short-lived token for downloading the document"""
+    document = await db.documents.find_one(
+        {"id": document_id, "user_id": user["id"]}, {"_id": 0}
+    )
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    token = create_download_token(document_id, user["id"], expires_minutes=5)
+    return {"token": token, "expires_in": 300}
+
+
+@router.get("/documents/{document_id}/view")
+async def view_document_with_token(document_id: str, token: str = Query(...)):
+    """View/download document using a token (no auth header needed)"""
+    payload = verify_download_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    
+    if payload.get("doc_id") != document_id:
+        raise HTTPException(status_code=403, detail="Token does not match document")
+    
+    document = await db.documents.find_one(
+        {"id": document_id, "user_id": payload["user_id"]}, {"_id": 0}
+    )
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    file_path = document["storage_path"]
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Return file for inline viewing (Content-Disposition: inline)
+    from fastapi.responses import Response
+    async with aiofiles.open(file_path, 'rb') as f:
+        content = await f.read()
+    
+    return Response(
+        content=content,
+        media_type=document["mime_type"],
+        headers={
+            "Content-Disposition": f'inline; filename="{document.get("display_name", document["original_filename"])}"'
+        }
     )
 
 

@@ -146,6 +146,7 @@ export const eventsAPI = {
   create: (data) => api.post('/events', data),
   update: (id, data) => api.put(`/events/${id}`, data),
   delete: (id) => api.delete(`/events/${id}`),
+  getReminderOptions: () => api.get('/events/reminder-options'),
 };
 
 // Drafts
@@ -414,6 +415,8 @@ export const documentUpdateAPI = {
   },
   preview: (id) => api.get(`/documents/${id}/preview`),
   downloadUrl: (id) => `${API_URL}/api/documents/${id}/download`,
+  getDownloadToken: (id) => api.get(`/documents/${id}/download-token`),
+  viewUrl: (id, token) => `${API_URL}/api/documents/${id}/view?token=${token}`,
 };
 
 // Health

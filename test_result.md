@@ -404,6 +404,78 @@ backend:
         agent: "testing"
         comment: "✅ TESTED v1.0.4: PUT /api/settings/system endpoint working perfectly. Successfully saves ai_provider and openai_api_key settings. API key properly masked in responses. Changes persist correctly and verified through subsequent GET request. Admin authentication required and working correctly."
 
+  - task: "Events Reminder Options v1.0.5"
+    implemented: true
+    working: true
+    file: "routers/events.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.0.5: GET /api/events/reminder-options endpoint working perfectly. Returns 11 reminder options including none, 5_min, 15_min, 30_min, 1_hour, 1_day, 1_week, 2_weeks with proper German labels. All expected reminder values present."
+
+  - task: "Events with Reminders v1.0.5"
+    implemented: true
+    working: true
+    file: "routers/events.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.0.5: POST /api/events with reminder settings working perfectly. Creates events with reminder_enabled=true, reminder_type='1_day', reminder_minutes=1440. Automatically creates corresponding reminder records in reminders collection with proper timing calculations. Verified reminder record creation in database."
+
+  - task: "Document Download Token v1.0.5"
+    implemented: true
+    working: true
+    file: "routers/documents.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.0.5: GET /api/documents/{id}/download-token endpoint working perfectly. Generates JWT tokens with 5-minute expiration (300 seconds). Token contains document ID and user ID for secure access verification."
+
+  - task: "Document View with Token v1.0.5"
+    implemented: true
+    working: true
+    file: "routers/documents.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.0.5: GET /api/documents/{id}/view?token={token} endpoint working perfectly. Allows document access without auth headers using valid tokens. Returns document content with proper Content-Disposition headers for inline viewing."
+
+  - task: "AI Combined Action Parse v1.0.5"
+    implemented: true
+    working: false
+    file: "routers/ai.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "testing"
+        comment: "❌ TESTED v1.0.5: POST /api/ai/parse-action endpoint detects combined_event_task action type correctly but fails to extract data due to missing AI service. Endpoint structure is correct but requires Ollama/OpenAI to be configured for full functionality. Pattern detection works without AI service."
+
+  - task: "System Version v1.0.5"
+    implemented: true
+    working: true
+    file: "routers/system.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.0.5: GET /api/system/version endpoint correctly returns version 1.0.5 with proper structure including build_date and release_notes. Version number updated correctly from previous versions."
+
   - task: "System Check Update Endpoint"
     implemented: true
     working: true
@@ -559,3 +631,7 @@ test_plan:
 agent_communication:
   - agent: "testing"
     message: "✅ v1.0.4 FRONTEND TESTING COMPLETE: All requested features tested and working. Login successful with andi.trenter@gmail.com/admin123. Health Dashboard shows both Ollama and OpenAI services with 'Aktiv' indicators (OpenAI active, Ollama unavailable due to container not reachable). Settings > KI-Konfiguration allows switching between Ollama/OpenAI with OpenAI API key input field visible. Settings > Updates tab correctly displays version 1.0.4. Only infrastructure issue: Ollama container not reachable (not a UI/frontend issue). Screenshots captured for all tested features."
+  - agent: "main"
+    message: "v1.0.5: Implementiert kombinierte KI-Aktionen (Event + Task + Erinnerung), Kalender-Erinnerungen (wie Outlook), Dokument-Vorschau mit Token-basiertem Download, WhatsApp-Vorbereitung im Datenmodell. Backend: Neue Endpunkte /events/reminder-options, /documents/{id}/download-token, /documents/{id}/view. Models: Event, EventCreate, Reminder erweitert. Frontend: Calendar.js mit Erinnerungs-Checkbox, Documents.js mit Vorschau-Dialog."
+  - agent: "testing"
+    message: "✅ v1.0.5 BACKEND TESTING COMPLETE: Tested all new v1.0.5 features with 88.9% success rate (8/9 tests passed). ✅ Events Reminder Options endpoint returns 11 reminder options correctly. ✅ Events with Reminders creates events with reminder settings and generates reminder records in database. ✅ Document Download Token generates 5-minute tokens correctly. ✅ Document View with Token allows token-based access without auth headers. ✅ System Version correctly returns v1.0.5. ❌ AI Parse Combined Action fails due to missing AI service (expected - requires Ollama/OpenAI). Reminder system fully functional: events create corresponding reminder records with proper timing calculations. All core v1.0.5 features operational."

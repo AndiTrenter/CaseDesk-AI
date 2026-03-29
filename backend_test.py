@@ -1,372 +1,506 @@
 #!/usr/bin/env python3
 """
-CaseDesk AI Backend Testing - v1.0.4 Features
-Testing the new health-check endpoint, system version, and settings system
+CaseDesk AI v1.0.5 Backend Testing
+Test new features: Events Reminders, Document Download Tokens, AI Combined Actions
 """
-import requests
+
+import asyncio
+import aiohttp
 import json
 import sys
-import os
+from datetime import datetime, timedelta
+from typing import Dict, Any, Optional
 
-# Backend URL from frontend .env
+# Backend URL from environment
 BACKEND_URL = "https://kai-organizer.preview.emergentagent.com/api"
 
-# Test credentials (admin user)
-ADMIN_EMAIL = "andi.trenter@gmail.com"
-ADMIN_PASSWORD = "admin123"
+# Test credentials
+TEST_EMAIL = "andi.trenter@gmail.com"
+TEST_PASSWORD = "admin123"
 
-class BackendTester:
+class CaseDeskTester:
     def __init__(self):
-        self.session = requests.Session()
+        self.session = None
         self.auth_token = None
-        self.user_data = None
+        self.user_id = None
+        self.test_results = []
         
-    def setup_admin_if_needed(self):
-        """Check if setup is needed and create admin user"""
-        print("🔧 Checking setup status...")
+    async def __aenter__(self):
+        self.session = aiohttp.ClientSession()
+        return self
         
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.session:
+            await self.session.close()
+    
+    def log_result(self, test_name: str, success: bool, message: str, details: Any = None):
+        """Log test result"""
+        result = {
+            "test": test_name,
+            "success": success,
+            "message": message,
+            "details": details,
+            "timestamp": datetime.now().isoformat()
+        }
+        self.test_results.append(result)
+        status = "✅ PASS" if success else "❌ FAIL"
+        print(f"{status} {test_name}: {message}")
+        if details and not success:
+            print(f"   Details: {details}")
+    
+    async def setup_system_if_needed(self) -> bool:
+        """Setup system if not configured"""
         try:
-            response = self.session.get(f"{BACKEND_URL}/setup/status")
-            if response.status_code == 200:
-                status = response.json()
-                print(f"   Setup configured: {status.get('is_configured')}")
-                print(f"   Has admin: {status.get('has_admin')}")
-                
-                if not status.get('has_admin'):
-                    print("🔧 No admin user found, initializing setup...")
+            # Check setup status
+            async with self.session.get(f"{BACKEND_URL}/setup/status") as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get("is_configured"):
+                        return True  # Already configured
                     
-                    setup_data = {
-                        "admin_email": ADMIN_EMAIL,
-                        "admin_username": "admin",
-                        "admin_password": ADMIN_PASSWORD,
-                        "admin_full_name": "Admin User",
-                        "language": "de",
-                        "ai_provider": "ollama",
-                        "internet_access": "allowed",
-                        "organization_name": "CaseDesk Test"
-                    }
+                    # Need to setup
+                    self.log_result("System Setup", True, "System needs initial setup")
                     
-                    setup_response = self.session.post(f"{BACKEND_URL}/setup/init", data=setup_data)
-                    print(f"Setup response status: {setup_response.status_code}")
+                    # Initialize setup
+                    form_data = aiohttp.FormData()
+                    form_data.add_field('admin_email', TEST_EMAIL)
+                    form_data.add_field('admin_username', 'admin')
+                    form_data.add_field('admin_password', TEST_PASSWORD)
+                    form_data.add_field('admin_full_name', 'Test Admin')
+                    form_data.add_field('language', 'de')
+                    form_data.add_field('ai_provider', 'ollama')
+                    form_data.add_field('internet_access', 'denied')
+                    form_data.add_field('organization_name', 'CaseDesk Test')
                     
-                    if setup_response.status_code == 200:
-                        setup_result = setup_response.json()
-                        print("✅ Setup completed successfully")
-                        
-                        # Extract token from setup response
-                        self.auth_token = setup_result.get("access_token")
-                        self.user_data = setup_result.get("user")
-                        
-                        if self.auth_token:
-                            self.session.headers.update({"Authorization": f"Bearer {self.auth_token}"})
-                            print(f"✅ Admin user created and authenticated: {self.user_data.get('email')}")
+                    async with self.session.post(f"{BACKEND_URL}/setup/init", data=form_data) as setup_resp:
+                        if setup_resp.status == 200:
+                            setup_data = await setup_resp.json()
+                            self.auth_token = setup_data.get("access_token")
+                            self.user_id = setup_data.get("user", {}).get("id")
+                            self.log_result("System Setup", True, "System initialized successfully")
                             return True
                         else:
-                            print("❌ Setup completed but no token received")
+                            error_text = await setup_resp.text()
+                            self.log_result("System Setup", False, f"Setup failed: {setup_resp.status}", error_text)
                             return False
-                    else:
-                        print(f"❌ Setup failed: {setup_response.status_code}")
-                        print(f"   Response: {setup_response.text}")
-                        return False
                 else:
-                    print("✅ Admin user already exists")
-                    return True
-            else:
-                print(f"❌ Could not check setup status: {response.status_code}")
-                return False
-                
+                    error_text = await resp.text()
+                    self.log_result("System Setup", False, f"Status check failed: {resp.status}", error_text)
+                    return False
         except Exception as e:
-            print(f"❌ Setup check error: {e}")
+            self.log_result("System Setup", False, f"Setup error: {str(e)}")
+            return False
+
+    async def authenticate(self) -> bool:
+        """Authenticate with test credentials"""
+        try:
+            # Use form data for login
+            form_data = aiohttp.FormData()
+            form_data.add_field('email', TEST_EMAIL)
+            form_data.add_field('password', TEST_PASSWORD)
+            
+            async with self.session.post(f"{BACKEND_URL}/auth/login", data=form_data) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    self.auth_token = data.get("access_token")
+                    self.user_id = data.get("user", {}).get("id")
+                    self.log_result("Authentication", True, f"Logged in as {TEST_EMAIL}")
+                    return True
+                else:
+                    error_text = await resp.text()
+                    self.log_result("Authentication", False, f"Login failed: {resp.status}", error_text)
+                    return False
+        except Exception as e:
+            self.log_result("Authentication", False, f"Login error: {str(e)}")
             return False
     
-    def authenticate(self):
-        """Authenticate with admin credentials"""
-        print("🔐 Authenticating with admin credentials...")
-        
-        # First check if we need to setup
-        if not self.setup_admin_if_needed():
-            return False
-        
-        # If we already got a token from setup, we're done
-        if self.auth_token:
-            return True
-        
-        # Try to login (using form data, not JSON)
-        login_data = {
-            "email": ADMIN_EMAIL,
-            "password": ADMIN_PASSWORD
+    def get_headers(self) -> Dict[str, str]:
+        """Get headers with auth token"""
+        return {
+            "Authorization": f"Bearer {self.auth_token}",
+            "Content-Type": "application/json"
         }
-        
+    
+    async def test_events_reminder_options(self) -> bool:
+        """Test GET /api/events/reminder-options"""
         try:
-            response = self.session.post(f"{BACKEND_URL}/auth/login", data=login_data)
-            print(f"Login response status: {response.status_code}")
-            
-            if response.status_code == 200:
-                data = response.json()
-                self.auth_token = data.get("access_token")
-                self.user_data = data.get("user")
-                
-                if self.auth_token:
-                    # Set authorization header for future requests
-                    self.session.headers.update({"Authorization": f"Bearer {self.auth_token}"})
-                    print(f"✅ Authentication successful for user: {self.user_data.get('email')}")
-                    print(f"   User role: {self.user_data.get('role')}")
+            async with self.session.get(f"{BACKEND_URL}/events/reminder-options", headers=self.get_headers()) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    options = data.get("options", [])
+                    
+                    # Check for expected reminder options
+                    expected_values = ["none", "5_min", "15_min", "30_min", "1_hour", "1_day", "1_week", "2_weeks"]
+                    found_values = [opt.get("value") for opt in options]
+                    
+                    missing = [val for val in expected_values if val not in found_values]
+                    if missing:
+                        self.log_result("Events Reminder Options", False, f"Missing options: {missing}", data)
+                        return False
+                    
+                    self.log_result("Events Reminder Options", True, f"Found {len(options)} reminder options", options)
                     return True
                 else:
-                    print("❌ No access token received")
+                    error_text = await resp.text()
+                    self.log_result("Events Reminder Options", False, f"HTTP {resp.status}", error_text)
                     return False
-            else:
-                print(f"❌ Login failed: {response.status_code}")
-                print(f"   Response: {response.text}")
-                return False
-                
         except Exception as e:
-            print(f"❌ Authentication error: {e}")
+            self.log_result("Events Reminder Options", False, f"Request error: {str(e)}")
             return False
     
-    def test_health_endpoint(self):
-        """Test the new health-check endpoint (GET /api/admin/health)"""
-        print("\n🏥 Testing Health-Check Endpoint...")
-        
+    async def test_events_with_reminders(self) -> tuple[bool, Optional[str]]:
+        """Test POST /api/events with reminder settings"""
         try:
-            response = self.session.get(f"{BACKEND_URL}/admin/health")
-            print(f"Health endpoint status: {response.status_code}")
-            
-            if response.status_code == 200:
-                data = response.json()
-                print("✅ Health endpoint accessible")
-                
-                # Check required structure
-                required_fields = ["timestamp", "services"]
-                missing_fields = [field for field in required_fields if field not in data]
-                
-                if missing_fields:
-                    print(f"❌ Missing required fields: {missing_fields}")
-                    return False
-                
-                services = data.get("services", {})
-                print(f"   Found {len(services)} services")
-                
-                # Check OpenAI service
-                if "openai" in services:
-                    openai_service = services["openai"]
-                    print(f"   OpenAI: status={openai_service.get('status')}, active={openai_service.get('active')}")
-                    
-                    required_openai_fields = ["status", "active"]
-                    missing_openai = [field for field in required_openai_fields if field not in openai_service]
-                    if missing_openai:
-                        print(f"❌ OpenAI service missing fields: {missing_openai}")
-                        return False
-                else:
-                    print("❌ OpenAI service not found in health response")
-                    return False
-                
-                # Check Ollama service
-                if "ollama" in services:
-                    ollama_service = services["ollama"]
-                    print(f"   Ollama: status={ollama_service.get('status')}, url={ollama_service.get('url')}, active={ollama_service.get('active')}")
-                    print(f"   Ollama models: {ollama_service.get('models', [])}")
-                    
-                    required_ollama_fields = ["status", "url", "models", "active"]
-                    missing_ollama = [field for field in required_ollama_fields if field not in ollama_service]
-                    if missing_ollama:
-                        print(f"❌ Ollama service missing fields: {missing_ollama}")
-                        return False
-                else:
-                    print("❌ Ollama service not found in health response")
-                    return False
-                
-                # Check AI config
-                if "ai_config" in services:
-                    ai_config = services["ai_config"]
-                    print(f"   AI Config: active_provider={ai_config.get('active_provider')}, fallback_available={ai_config.get('fallback_available')}")
-                    
-                    required_ai_config_fields = ["active_provider", "fallback_available"]
-                    missing_ai_config = [field for field in required_ai_config_fields if field not in ai_config]
-                    if missing_ai_config:
-                        print(f"❌ AI config missing fields: {missing_ai_config}")
-                        return False
-                else:
-                    print("❌ AI config not found in health response")
-                    return False
-                
-                print("✅ Health endpoint structure is correct")
-                return True
-                
-            elif response.status_code == 401:
-                print("❌ Health endpoint requires authentication (401)")
-                return False
-            else:
-                print(f"❌ Health endpoint failed: {response.status_code}")
-                print(f"   Response: {response.text}")
-                return False
-                
-        except Exception as e:
-            print(f"❌ Health endpoint error: {e}")
-            return False
-    
-    def test_system_version(self):
-        """Test system version endpoint (GET /api/system/version)"""
-        print("\n📋 Testing System Version Endpoint...")
-        
-        try:
-            response = self.session.get(f"{BACKEND_URL}/system/version")
-            print(f"Version endpoint status: {response.status_code}")
-            
-            if response.status_code == 200:
-                data = response.json()
-                version = data.get("version")
-                print(f"   Current version: {version}")
-                print(f"   Build date: {data.get('build_date')}")
-                print(f"   Release notes: {data.get('release_notes')}")
-                
-                if version == "1.0.4":
-                    print("✅ Version endpoint returns correct v1.0.4")
-                    return True
-                else:
-                    print(f"❌ Expected version 1.0.4, got {version}")
-                    return False
-                    
-            else:
-                print(f"❌ Version endpoint failed: {response.status_code}")
-                print(f"   Response: {response.text}")
-                return False
-                
-        except Exception as e:
-            print(f"❌ Version endpoint error: {e}")
-            return False
-    
-    def test_system_settings_get(self):
-        """Test GET /api/settings/system"""
-        print("\n⚙️ Testing System Settings GET...")
-        
-        try:
-            response = self.session.get(f"{BACKEND_URL}/settings/system")
-            print(f"Settings GET status: {response.status_code}")
-            
-            if response.status_code == 200:
-                data = response.json()
-                print("✅ System settings GET successful")
-                print(f"   AI Provider: {data.get('ai_provider')}")
-                print(f"   OpenAI API Key: {data.get('openai_api_key')}")
-                print(f"   Settings keys: {list(data.keys())}")
-                return True
-                
-            elif response.status_code == 401:
-                print("❌ System settings GET requires authentication (401)")
-                return False
-            else:
-                print(f"❌ System settings GET failed: {response.status_code}")
-                print(f"   Response: {response.text}")
-                return False
-                
-        except Exception as e:
-            print(f"❌ System settings GET error: {e}")
-            return False
-    
-    def test_system_settings_put(self):
-        """Test PUT /api/settings/system"""
-        print("\n⚙️ Testing System Settings PUT...")
-        
-        try:
-            # Test updating AI provider and API key
-            test_data = {
-                "ai_provider": "openai",
-                "openai_api_key": "sk-test-key-for-testing-purposes"
+            # Create event with reminder
+            event_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
+            event_data = {
+                "title": "Test Event with Reminder",
+                "description": "Testing v1.0.5 reminder functionality",
+                "start_time": f"{event_date}T14:00:00",
+                "end_time": f"{event_date}T15:00:00",
+                "all_day": False,
+                "reminder_enabled": True,
+                "reminder_type": "1_day",
+                "reminder_channels": ["app"]
             }
             
-            response = self.session.put(f"{BACKEND_URL}/settings/system", data=test_data)
-            print(f"Settings PUT status: {response.status_code}")
+            async with self.session.post(f"{BACKEND_URL}/events", json=event_data, headers=self.get_headers()) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    event_id = data.get("id")
+                    
+                    # Verify reminder settings in response
+                    if not data.get("reminder_enabled"):
+                        self.log_result("Events with Reminders", False, "reminder_enabled not set", data)
+                        return False, None
+                    
+                    if data.get("reminder_type") != "1_day":
+                        self.log_result("Events with Reminders", False, "reminder_type incorrect", data)
+                        return False, None
+                    
+                    if data.get("reminder_minutes") != 1440:  # 1 day = 1440 minutes
+                        self.log_result("Events with Reminders", False, "reminder_minutes incorrect", data)
+                        return False, None
+                    
+                    self.log_result("Events with Reminders", True, f"Event created with reminder: {event_id}", {
+                        "event_id": event_id,
+                        "reminder_enabled": data.get("reminder_enabled"),
+                        "reminder_type": data.get("reminder_type"),
+                        "reminder_minutes": data.get("reminder_minutes")
+                    })
+                    return True, event_id
+                else:
+                    error_text = await resp.text()
+                    self.log_result("Events with Reminders", False, f"HTTP {resp.status}", error_text)
+                    return False, None
+        except Exception as e:
+            self.log_result("Events with Reminders", False, f"Request error: {str(e)}")
+            return False, None
+    
+    async def test_document_upload_and_tokens(self) -> tuple[bool, Optional[str]]:
+        """Test document upload and token-based access"""
+        try:
+            # Create a test document (simple text file)
+            test_content = b"This is a test document for v1.0.5 token testing."
             
-            if response.status_code == 200:
-                data = response.json()
-                print("✅ System settings PUT successful")
-                print(f"   Response: {data}")
-                
-                # Verify the settings were saved by getting them again
-                get_response = self.session.get(f"{BACKEND_URL}/settings/system")
-                if get_response.status_code == 200:
-                    saved_data = get_response.json()
-                    saved_provider = saved_data.get("ai_provider")
-                    saved_key = saved_data.get("openai_api_key")
+            # Upload document
+            form_data = aiohttp.FormData()
+            form_data.add_field('file', test_content, filename='test_v1.0.5.txt', content_type='text/plain')
+            form_data.add_field('document_type', 'other')
+            
+            headers = {"Authorization": f"Bearer {self.auth_token}"}
+            
+            async with self.session.post(f"{BACKEND_URL}/documents/upload", data=form_data, headers=headers) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if not data.get("success"):
+                        self.log_result("Document Upload", False, "Upload not successful", data)
+                        return False, None
                     
-                    print(f"   Verified AI Provider: {saved_provider}")
-                    print(f"   Verified API Key: {saved_key}")
+                    document_id = data.get("document", {}).get("id")
+                    if not document_id:
+                        self.log_result("Document Upload", False, "No document ID returned", data)
+                        return False, None
                     
-                    if saved_provider == "openai" and saved_key == "***configured***":
-                        print("✅ Settings correctly saved and masked")
+                    self.log_result("Document Upload", True, f"Document uploaded: {document_id}")
+                    return True, document_id
+                else:
+                    error_text = await resp.text()
+                    self.log_result("Document Upload", False, f"HTTP {resp.status}", error_text)
+                    return False, None
+        except Exception as e:
+            self.log_result("Document Upload", False, f"Request error: {str(e)}")
+            return False, None
+    
+    async def test_document_download_token(self, document_id: str) -> tuple[bool, Optional[str]]:
+        """Test GET /api/documents/{id}/download-token"""
+        try:
+            async with self.session.get(f"{BACKEND_URL}/documents/{document_id}/download-token", headers=self.get_headers()) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    token = data.get("token")
+                    expires_in = data.get("expires_in")
+                    
+                    if not token:
+                        self.log_result("Document Download Token", False, "No token returned", data)
+                        return False, None
+                    
+                    if expires_in != 300:  # 5 minutes = 300 seconds
+                        self.log_result("Document Download Token", False, f"Unexpected expires_in: {expires_in}", data)
+                        return False, None
+                    
+                    self.log_result("Document Download Token", True, f"Token generated, expires in {expires_in}s", {
+                        "token_length": len(token),
+                        "expires_in": expires_in
+                    })
+                    return True, token
+                else:
+                    error_text = await resp.text()
+                    self.log_result("Document Download Token", False, f"HTTP {resp.status}", error_text)
+                    return False, None
+        except Exception as e:
+            self.log_result("Document Download Token", False, f"Request error: {str(e)}")
+            return False, None
+    
+    async def test_document_view_with_token(self, document_id: str, token: str) -> bool:
+        """Test GET /api/documents/{id}/view?token={token}"""
+        try:
+            # Test without auth header (token should be sufficient)
+            async with self.session.get(f"{BACKEND_URL}/documents/{document_id}/view?token={token}") as resp:
+                if resp.status == 200:
+                    content = await resp.read()
+                    content_type = resp.headers.get('content-type', '')
+                    
+                    # Verify we got the document content
+                    if b"This is a test document for v1.0.5 token testing." in content:
+                        self.log_result("Document View with Token", True, f"Document accessed via token", {
+                            "content_length": len(content),
+                            "content_type": content_type
+                        })
                         return True
                     else:
-                        print("❌ Settings not saved correctly")
+                        self.log_result("Document View with Token", False, "Unexpected content", {
+                            "content_preview": content[:100].decode('utf-8', errors='ignore')
+                        })
                         return False
                 else:
-                    print("❌ Could not verify saved settings")
+                    error_text = await resp.text()
+                    self.log_result("Document View with Token", False, f"HTTP {resp.status}", error_text)
                     return False
-                
-            elif response.status_code == 401:
-                print("❌ System settings PUT requires authentication (401)")
-                return False
-            else:
-                print(f"❌ System settings PUT failed: {response.status_code}")
-                print(f"   Response: {response.text}")
-                return False
-                
         except Exception as e:
-            print(f"❌ System settings PUT error: {e}")
+            self.log_result("Document View with Token", False, f"Request error: {str(e)}")
             return False
     
-    def run_all_tests(self):
-        """Run all v1.0.4 tests"""
-        print("🚀 Starting CaseDesk AI v1.0.4 Backend Tests")
-        print(f"Backend URL: {BACKEND_URL}")
-        print("=" * 60)
-        
-        # Authenticate first
-        if not self.authenticate():
-            print("\n❌ Authentication failed - cannot proceed with tests")
+    async def test_ai_parse_combined_action(self) -> tuple[bool, Optional[dict]]:
+        """Test POST /api/ai/parse-action for combined event/task creation"""
+        try:
+            # German message requesting combined event + task + reminder
+            message = "Erstelle mir am 26.4.2026 einen Kalendereintrag 'Luzia Geburtstag' mit einer Erinnerung 1 Woche vorher und trage gleichzeitig als Aufgabe 'Kuchen kaufen' ein"
+            
+            form_data = aiohttp.FormData()
+            form_data.add_field('message', message)
+            
+            headers = {"Authorization": f"Bearer {self.auth_token}"}
+            
+            async with self.session.post(f"{BACKEND_URL}/ai/parse-action", data=form_data, headers=headers) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    
+                    if not data.get("success"):
+                        self.log_result("AI Parse Combined Action", False, "Parse not successful", data)
+                        return False, None
+                    
+                    if not data.get("action_detected"):
+                        self.log_result("AI Parse Combined Action", False, "No action detected", data)
+                        return False, None
+                    
+                    action_type = data.get("action_type")
+                    if action_type != "combined_event_task":
+                        self.log_result("AI Parse Combined Action", False, f"Wrong action type: {action_type}", data)
+                        return False, None
+                    
+                    action_data = data.get("action_data", {})
+                    
+                    # Verify structure contains event, tasks, and reminder
+                    if "event" not in action_data:
+                        self.log_result("AI Parse Combined Action", False, "Missing event data", data)
+                        return False, None
+                    
+                    if "tasks" not in action_data:
+                        self.log_result("AI Parse Combined Action", False, "Missing tasks data", data)
+                        return False, None
+                    
+                    if "reminder" not in action_data:
+                        self.log_result("AI Parse Combined Action", False, "Missing reminder data", data)
+                        return False, None
+                    
+                    self.log_result("AI Parse Combined Action", True, f"Combined action parsed successfully", {
+                        "action_type": action_type,
+                        "event_title": action_data.get("event", {}).get("title"),
+                        "tasks_count": len(action_data.get("tasks", [])),
+                        "reminder_enabled": action_data.get("reminder", {}).get("enabled")
+                    })
+                    return True, action_data
+                else:
+                    error_text = await resp.text()
+                    self.log_result("AI Parse Combined Action", False, f"HTTP {resp.status}", error_text)
+                    return False, None
+        except Exception as e:
+            self.log_result("AI Parse Combined Action", False, f"Request error: {str(e)}")
+            return False, None
+    
+    async def test_ai_execute_combined_action(self, action_data: dict) -> bool:
+        """Test POST /api/ai/execute-action for combined event/task creation"""
+        try:
+            form_data = aiohttp.FormData()
+            form_data.add_field('action_type', 'combined_event_task')
+            form_data.add_field('action_data', json.dumps(action_data))
+            form_data.add_field('confirmed', 'true')
+            
+            headers = {"Authorization": f"Bearer {self.auth_token}"}
+            
+            async with self.session.post(f"{BACKEND_URL}/ai/execute-action", data=form_data, headers=headers) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    
+                    if not data.get("success"):
+                        self.log_result("AI Execute Combined Action", False, "Execution not successful", data)
+                        return False
+                    
+                    if data.get("action_type") != "combined_event_task":
+                        self.log_result("AI Execute Combined Action", False, "Wrong action type in response", data)
+                        return False
+                    
+                    created = data.get("created", {})
+                    
+                    # Verify event was created
+                    if not created.get("event"):
+                        self.log_result("AI Execute Combined Action", False, "No event created", data)
+                        return False
+                    
+                    # Verify tasks were created
+                    if not created.get("tasks"):
+                        self.log_result("AI Execute Combined Action", False, "No tasks created", data)
+                        return False
+                    
+                    # Verify reminder was created (if enabled)
+                    reminder_data = action_data.get("reminder", {})
+                    if reminder_data.get("enabled") and not created.get("reminder"):
+                        self.log_result("AI Execute Combined Action", False, "No reminder created despite being enabled", data)
+                        return False
+                    
+                    self.log_result("AI Execute Combined Action", True, "Combined action executed successfully", {
+                        "event_id": created.get("event", {}).get("id"),
+                        "tasks_created": len(created.get("tasks", [])),
+                        "reminder_created": bool(created.get("reminder")),
+                        "message": data.get("message")
+                    })
+                    return True
+                else:
+                    error_text = await resp.text()
+                    self.log_result("AI Execute Combined Action", False, f"HTTP {resp.status}", error_text)
+                    return False
+        except Exception as e:
+            self.log_result("AI Execute Combined Action", False, f"Request error: {str(e)}")
             return False
+    
+    async def test_system_version(self) -> bool:
+        """Test GET /api/system/version should return 1.0.5"""
+        try:
+            async with self.session.get(f"{BACKEND_URL}/system/version", headers=self.get_headers()) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    version = data.get("version")
+                    
+                    if version != "1.0.5":
+                        self.log_result("System Version", False, f"Expected v1.0.5, got {version}", data)
+                        return False
+                    
+                    self.log_result("System Version", True, f"Version {version} confirmed", data)
+                    return True
+                else:
+                    error_text = await resp.text()
+                    self.log_result("System Version", False, f"HTTP {resp.status}", error_text)
+                    return False
+        except Exception as e:
+            self.log_result("System Version", False, f"Request error: {str(e)}")
+            return False
+    
+    async def run_all_tests(self):
+        """Run all v1.0.5 tests"""
+        print("🚀 Starting CaseDesk AI v1.0.5 Backend Tests")
+        print(f"Backend URL: {BACKEND_URL}")
+        print(f"Test User: {TEST_EMAIL}")
+        print("-" * 60)
         
-        # Run tests
-        tests = [
-            ("Health-Check Endpoint", self.test_health_endpoint),
-            ("System Version", self.test_system_version),
-            ("System Settings GET", self.test_system_settings_get),
-            ("System Settings PUT", self.test_system_settings_put),
-        ]
+        # Setup system if needed, then authenticate
+        if not await self.setup_system_if_needed():
+            print("❌ System setup failed - cannot continue with tests")
+            return
         
-        results = {}
-        for test_name, test_func in tests:
-            try:
-                results[test_name] = test_func()
-            except Exception as e:
-                print(f"\n❌ {test_name} crashed: {e}")
-                results[test_name] = False
+        if not self.auth_token:  # If not already authenticated from setup
+            if not await self.authenticate():
+                print("❌ Authentication failed - cannot continue with tests")
+                return
+        
+        # Test 1: Events Reminder Options
+        await self.test_events_reminder_options()
+        
+        # Test 2: Events with Reminders
+        event_success, event_id = await self.test_events_with_reminders()
+        
+        # Test 3: Document Upload and Tokens
+        doc_success, document_id = await self.test_document_upload_and_tokens()
+        
+        if doc_success and document_id:
+            # Test 4: Document Download Token
+            token_success, token = await self.test_document_download_token(document_id)
+            
+            if token_success and token:
+                # Test 5: Document View with Token
+                await self.test_document_view_with_token(document_id, token)
+        
+        # Test 6: AI Combined Action Parse
+        parse_success, action_data = await self.test_ai_parse_combined_action()
+        
+        if parse_success and action_data:
+            # Test 7: AI Combined Action Execute
+            await self.test_ai_execute_combined_action(action_data)
+        
+        # Test 8: System Version
+        await self.test_system_version()
         
         # Summary
         print("\n" + "=" * 60)
         print("📊 TEST SUMMARY")
         print("=" * 60)
         
-        passed = 0
-        total = len(results)
+        passed = sum(1 for r in self.test_results if r["success"])
+        total = len(self.test_results)
         
-        for test_name, result in results.items():
-            status = "✅ PASS" if result else "❌ FAIL"
-            print(f"{status} {test_name}")
-            if result:
-                passed += 1
+        print(f"Total Tests: {total}")
+        print(f"Passed: {passed}")
+        print(f"Failed: {total - passed}")
+        print(f"Success Rate: {(passed/total*100):.1f}%")
         
-        print(f"\nResults: {passed}/{total} tests passed")
+        if total - passed > 0:
+            print("\n❌ FAILED TESTS:")
+            for result in self.test_results:
+                if not result["success"]:
+                    print(f"  - {result['test']}: {result['message']}")
         
-        if passed == total:
-            print("🎉 All tests passed!")
-            return True
-        else:
-            print("⚠️ Some tests failed")
-            return False
+        print("\n✅ PASSED TESTS:")
+        for result in self.test_results:
+            if result["success"]:
+                print(f"  - {result['test']}: {result['message']}")
+        
+        return passed == total
 
+async def main():
+    """Main test runner"""
+    async with CaseDeskTester() as tester:
+        success = await tester.run_all_tests()
+        sys.exit(0 if success else 1)
 
 if __name__ == "__main__":
-    tester = BackendTester()
-    success = tester.run_all_tests()
-    sys.exit(0 if success else 1)
+    asyncio.run(main())

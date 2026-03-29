@@ -102,3 +102,28 @@ async def get_user_language(user: dict) -> str:
     """Get user's preferred language from settings"""
     user_settings = await db.user_settings.find_one({"user_id": user["id"]}, {"_id": 0})
     return (user_settings or {}).get("language") or user.get("language") or "de"
+
+
+def create_download_token(document_id: str, user_id: str, expires_minutes: int = 5) -> str:
+    """Create a short-lived token for document downloads"""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
+    payload = {
+        "doc_id": document_id,
+        "user_id": user_id,
+        "type": "download",
+        "exp": expire
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def verify_download_token(token: str) -> Optional[dict]:
+    """Verify a download token and return payload"""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "download":
+            return None
+        return payload
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None
