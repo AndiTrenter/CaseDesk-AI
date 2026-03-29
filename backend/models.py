@@ -259,6 +259,8 @@ class Task(TaskBase):
     case_id: Optional[str] = None
     document_id: Optional[str] = None
     email_id: Optional[str] = None
+    event_id: Optional[str] = None  # Link to associated event
+    source: Optional[str] = None  # Where this task was created from (ai_chat, ai_reminder, etc.)
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
     completed_at: Optional[datetime] = None

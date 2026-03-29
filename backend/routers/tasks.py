@@ -3,10 +3,12 @@ from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime, timezone
 from typing import List, Optional
 import uuid
+import logging
 
 from deps import db, require_auth, log_action
-from models import Task, TaskCreate
+from models import TaskCreate
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -25,15 +27,19 @@ async def list_tasks(
     
     try:
         tasks = await db.tasks.find(query, {"_id": 0}).sort("due_date", 1).to_list(1000)
+        # Ensure all tasks have required fields for frontend
+        for task in tasks:
+            if "priority" not in task:
+                task["priority"] = "medium"
+            if "status" not in task:
+                task["status"] = "todo"
         return tasks
     except Exception as e:
-        # Log the error but return empty list to prevent frontend crash
-        import logging
-        logging.error(f"Error loading tasks: {e}")
+        logger.error(f"Error loading tasks: {e}")
         return []
 
 
-@router.post("/tasks", response_model=Task)
+@router.post("/tasks")
 async def create_task(task_data: TaskCreate, user: dict = Depends(require_auth)):
     now = datetime.now(timezone.utc).isoformat()
     task_id = str(uuid.uuid4())
@@ -45,17 +51,20 @@ async def create_task(task_data: TaskCreate, user: dict = Depends(require_auth))
         "description": task_data.description,
         "priority": task_data.priority or "medium",
         "status": task_data.status or "todo",
-        "due_date": task_data.due_date,
+        "due_date": task_data.due_date.isoformat() if task_data.due_date else None,
         "case_id": task_data.case_id,
         "created_at": now,
         "updated_at": now
     }
     await db.tasks.insert_one(new_task)
     await log_action(user["id"], "create_task", "task", task_id)
-    return Task(**new_task)
+    
+    # Return without _id
+    new_task.pop("_id", None)
+    return new_task
 
 
-@router.put("/tasks/{task_id}", response_model=Task)
+@router.put("/tasks/{task_id}")
 async def update_task(task_id: str, task_data: TaskCreate, user: dict = Depends(require_auth)):
     task = await db.tasks.find_one({"id": task_id, "user_id": user["id"]})
     if not task:
@@ -71,7 +80,7 @@ async def update_task(task_id: str, task_data: TaskCreate, user: dict = Depends(
     if task_data.status is not None:
         update_data["status"] = task_data.status
     if task_data.due_date is not None:
-        update_data["due_date"] = task_data.due_date
+        update_data["due_date"] = task_data.due_date.isoformat() if hasattr(task_data.due_date, 'isoformat') else task_data.due_date
     if task_data.case_id is not None:
         update_data["case_id"] = task_data.case_id
     
@@ -79,7 +88,7 @@ async def update_task(task_id: str, task_data: TaskCreate, user: dict = Depends(
     await log_action(user["id"], "update_task", "task", task_id)
     
     updated = await db.tasks.find_one({"id": task_id}, {"_id": 0})
-    return Task(**updated)
+    return updated
 
 
 @router.delete("/tasks/{task_id}")
