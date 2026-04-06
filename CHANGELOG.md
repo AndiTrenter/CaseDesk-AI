@@ -13,6 +13,27 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 
 ---
 
+## [1.1.1] - 2026-04-06
+
+### 🔴 KRITISCHER FIX
+
+- 🔧 **Automatische Backend-URL Erkennung**
+  - Frontend erkennt jetzt automatisch ob lokale Installation oder Preview
+  - Lokale Installationen (IP-Adressen, localhost) verwenden relative URLs
+  - Preview-Umgebung verwendet weiterhin die konfigurierte URL
+  - **Behebt definitiv:**
+    - "Failed to load tasks"
+    - "Authentication required" bei allen API-Aufrufen
+    - Kalendereinträge erstellen funktioniert nicht
+    - Dokumenten-Download/Preview
+
+### Technische Details
+- `api.js` prüft jetzt den aktuellen Hostnamen
+- Wenn der Host eine IP-Adresse ist oder "localhost", wird automatisch relative URL verwendet
+- Keine manuelle Konfiguration der `.env` Datei mehr nötig
+
+---
+
 ## [1.1.0] - 2026-04-06
 
 ### 🔴 KRITISCHER FIX

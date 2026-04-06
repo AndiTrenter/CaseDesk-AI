@@ -1,6 +1,6 @@
 {
-  "version": "1.1.0",
+  "version": "1.1.1",
   "release_date": "2026-04-06",
-  "release_notes": "KRITISCH: Backend-URL Fix für lokale Installationen, Dokumenten-Preview/Download behoben, ZIP-Download",
+  "release_notes": "KRITISCH: Automatische Backend-URL Erkennung für lokale Installationen",
   "changelog_url": "https://raw.githubusercontent.com/AndiTrenter/CaseDesk-AI/main/CHANGELOG.md"
 }

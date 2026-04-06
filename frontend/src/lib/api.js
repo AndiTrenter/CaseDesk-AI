@@ -1,8 +1,35 @@
 import axios from 'axios';
 
-// Use relative URL for production (nginx proxy handles /api -> backend:8001)
-// Only use REACT_APP_BACKEND_URL if explicitly set (development)
-const API_URL = process.env.REACT_APP_BACKEND_URL || '';
+// Determine the correct API URL
+// - If REACT_APP_BACKEND_URL is set and we're on that domain, use it
+// - Otherwise use relative URLs (for local installations with nginx proxy)
+const getApiUrl = () => {
+  const envUrl = process.env.REACT_APP_BACKEND_URL;
+  
+  // If no env URL or we're not on the preview domain, use relative URLs
+  if (!envUrl) {
+    return '';
+  }
+  
+  // Check if we're actually on the preview domain
+  try {
+    const envHostname = new URL(envUrl).hostname;
+    const currentHostname = window.location.hostname;
+    
+    // If we're on the preview domain, use the env URL
+    if (currentHostname === envHostname || 
+        currentHostname.includes('preview.emergentagent.com')) {
+      return envUrl;
+    }
+  } catch (e) {
+    // URL parsing failed, use relative
+  }
+  
+  // For local installations (IP addresses, localhost, etc.), use relative URLs
+  return '';
+};
+
+const API_URL = getApiUrl();
 
 const api = axios.create({
   baseURL: `${API_URL}/api`,
