@@ -563,6 +563,18 @@ backend:
         agent: "testing"
         comment: "✅ TESTED: Complete Tasks API testing successful (100% pass rate). Login with form data works correctly. GET /api/tasks returns empty array initially. POST /api/tasks creates tasks with proper data structure (title: 'Test Aufgabe'). GET /api/tasks returns created tasks correctly. DELETE /api/tasks cleanup works. All CRUD operations verified and functional."
 
+  - task: "Settings Persistence Fix - CRITICAL"
+    implemented: true
+    working: true
+    file: "routers/settings.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED CRITICAL FIX: Settings persistence fix working perfectly! The upsert=True fix successfully resolves the issue where settings were not being saved to database. PUT /api/settings/system now properly saves ai_provider='openai', openai_api_key (masked as ***configured***), and internet_access='allowed'. GET /api/settings/system correctly retrieves saved settings (not empty). GET /api/ai/status shows configured_provider='openai'. All settings persist correctly across requests. Database upsert functionality verified."
+
 frontend:
   - task: "AI Chat with Action Preview Cards"
     implemented: true
@@ -630,7 +642,7 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 8
+  test_sequence: 9
   run_ui: false
 
 test_plan:
@@ -649,3 +661,5 @@ agent_communication:
     message: "✅ v1.0.5 BACKEND TESTING COMPLETE: Tested all new v1.0.5 features with 88.9% success rate (8/9 tests passed). ✅ Events Reminder Options endpoint returns 11 reminder options correctly. ✅ Events with Reminders creates events with reminder settings and generates reminder records in database. ✅ Document Download Token generates 5-minute tokens correctly. ✅ Document View with Token allows token-based access without auth headers. ✅ System Version correctly returns v1.0.5. ❌ AI Parse Combined Action fails due to missing AI service (expected - requires Ollama/OpenAI). Reminder system fully functional: events create corresponding reminder records with proper timing calculations. All core v1.0.5 features operational."
   - agent: "testing"
     message: "✅ TASKS API TESTING COMPLETE: Comprehensive Tasks API testing successful with 100% pass rate (6/6 tests passed). Authentication works correctly with form data (andi.trenter@gmail.com/admin123). GET /api/tasks returns empty array initially as expected. POST /api/tasks creates tasks successfully with proper data structure (title: 'Test Aufgabe'). GET /api/tasks retrieves created tasks correctly. DELETE /api/tasks cleanup works perfectly. GET /api/ai/status returns proper AI service status (Ollama unavailable, OpenAI not configured - expected). All CRUD operations verified and fully functional."
+  - agent: "testing"
+    message: "✅ SETTINGS PERSISTENCE FIX TESTING COMPLETE: CRITICAL FIX verified working perfectly! The upsert=True fix successfully resolves the settings persistence issue. Comprehensive testing performed: 1) Login with admin credentials (andi.trenter@gmail.com/admin123) ✅ 2) PUT /api/settings/system with ai_provider='openai', openai_api_key='sk-test-key-12345', internet_access='allowed' ✅ 3) GET /api/settings/system returns saved settings (not empty!) with proper masking ✅ 4) GET /api/ai/status shows configured_provider='openai' ✅. Settings now persist correctly across requests. Database upsert functionality working as expected. Bug fix confirmed successful."

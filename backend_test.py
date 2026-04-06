@@ -1,279 +1,215 @@
 #!/usr/bin/env python3
 """
-CaseDesk AI Backend Testing - Tasks API Focus
-Testing the Tasks API endpoints as requested in the review.
+CaseDesk AI Backend Testing - Settings Persistence Fix
+Testing the CRITICAL FIX for settings persistence where upsert=True was missing.
 """
 
-import requests
+import asyncio
+import httpx
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 
-# Configuration
+# Backend URL from environment
 BACKEND_URL = "https://task-portal-fix.preview.emergentagent.com/api"
+
+# Test credentials
 TEST_EMAIL = "andi.trenter@gmail.com"
 TEST_PASSWORD = "admin123"
 
-class TasksAPITester:
+class BackendTester:
     def __init__(self):
-        self.session = requests.Session()
         self.auth_token = None
-        self.user_id = None
-        self.test_results = []
+        self.client = httpx.AsyncClient(timeout=30.0)
         
-    def log_test(self, test_name, success, details=""):
-        """Log test result"""
-        status = "✅ PASS" if success else "❌ FAIL"
-        self.test_results.append({
-            "test": test_name,
-            "success": success,
-            "details": details
-        })
-        print(f"{status}: {test_name}")
-        if details:
-            print(f"   Details: {details}")
-        print()
-    
-    def test_login(self):
-        """Test 1: Login and get auth token"""
-        print("=== Testing Login ===")
+    async def close(self):
+        await self.client.aclose()
+        
+    async def login(self):
+        """Login and get auth token"""
+        print("🔐 Testing Login...")
+        
+        # Use form data for login
+        login_data = {
+            "email": TEST_EMAIL,
+            "password": TEST_PASSWORD
+        }
+        
+        response = await self.client.post(
+            f"{BACKEND_URL}/auth/login",
+            data=login_data
+        )
+        
+        if response.status_code != 200:
+            print(f"❌ Login failed: {response.status_code} - {response.text}")
+            return False
+            
+        data = response.json()
+        if not data.get("access_token"):
+            print(f"❌ No access token in response: {data}")
+            return False
+            
+        self.auth_token = data["access_token"]
+        print(f"✅ Login successful - Token: {self.auth_token[:20]}...")
+        return True
+        
+    def get_headers(self):
+        """Get headers with auth token"""
+        return {"Authorization": f"Bearer {self.auth_token}"}
+        
+    async def test_settings_persistence_fix(self):
+        """Test the CRITICAL FIX for settings persistence"""
+        print("\n🔧 Testing Settings Persistence Fix...")
+        
+        # Step 1: Clear any existing settings first (optional - just to test from clean state)
+        print("📋 Step 1: Getting current settings...")
+        response = await self.client.get(
+            f"{BACKEND_URL}/settings/system",
+            headers=self.get_headers()
+        )
+        
+        if response.status_code != 200:
+            print(f"❌ Failed to get current settings: {response.status_code} - {response.text}")
+            return False
+            
+        current_settings = response.json()
+        print(f"✅ Current settings: {json.dumps(current_settings, indent=2)}")
+        
+        # Step 2: Update settings with test data
+        print("\n📝 Step 2: Updating settings with test data...")
+        
+        # Test data as specified in the review request
+        test_settings = {
+            "ai_provider": "openai",
+            "openai_api_key": "sk-test-key-12345",
+            "internet_access": "allowed"
+        }
+        
+        response = await self.client.put(
+            f"{BACKEND_URL}/settings/system",
+            headers=self.get_headers(),
+            data=test_settings  # Use form data
+        )
+        
+        if response.status_code != 200:
+            print(f"❌ Failed to update settings: {response.status_code} - {response.text}")
+            return False
+            
+        update_result = response.json()
+        print(f"✅ Settings update response: {json.dumps(update_result, indent=2)}")
+        
+        # Step 3: Verify settings were SAVED (not empty!)
+        print("\n🔍 Step 3: Verifying settings were saved...")
+        
+        response = await self.client.get(
+            f"{BACKEND_URL}/settings/system",
+            headers=self.get_headers()
+        )
+        
+        if response.status_code != 200:
+            print(f"❌ Failed to get updated settings: {response.status_code} - {response.text}")
+            return False
+            
+        saved_settings = response.json()
+        print(f"✅ Saved settings: {json.dumps(saved_settings, indent=2)}")
+        
+        # Verify the settings were actually saved
+        if not saved_settings:
+            print("❌ CRITICAL ISSUE: Settings are empty! The upsert fix may not be working.")
+            return False
+            
+        # Check specific values
+        if saved_settings.get("ai_provider") != "openai":
+            print(f"❌ ai_provider not saved correctly. Expected: 'openai', Got: '{saved_settings.get('ai_provider')}'")
+            return False
+            
+        # API key should be masked in response
+        if saved_settings.get("openai_api_key") != "***configured***":
+            print(f"❌ openai_api_key not masked correctly. Expected: '***configured***', Got: '{saved_settings.get('openai_api_key')}'")
+            return False
+            
+        if saved_settings.get("internet_access") != "allowed":
+            print(f"❌ internet_access not saved correctly. Expected: 'allowed', Got: '{saved_settings.get('internet_access')}'")
+            return False
+            
+        print("✅ All settings saved correctly!")
+        print("✅ API key properly masked in response!")
+        print("✅ SETTINGS PERSISTENCE FIX WORKING!")
+        
+        return True
+        
+    async def test_ai_status(self):
+        """Test AI status endpoint to check if OpenAI shows available=true"""
+        print("\n🤖 Testing AI Status...")
+        
+        response = await self.client.get(
+            f"{BACKEND_URL}/ai/status",
+            headers=self.get_headers()
+        )
+        
+        if response.status_code != 200:
+            print(f"❌ Failed to get AI status: {response.status_code} - {response.text}")
+            return False
+            
+        ai_status = response.json()
+        print(f"✅ AI Status: {json.dumps(ai_status, indent=2)}")
+        
+        # Check if OpenAI shows as available
+        openai_status = ai_status.get("openai", {})
+        if openai_status.get("available") == True:
+            print("✅ OpenAI shows as available=true")
+        else:
+            print(f"⚠️  OpenAI available status: {openai_status.get('available')} (may be expected if no real API key)")
+            
+        # Check configured provider
+        configured_provider = ai_status.get("configured_provider")
+        if configured_provider == "openai":
+            print("✅ Configured provider is 'openai'")
+        else:
+            print(f"⚠️  Configured provider: {configured_provider}")
+            
+        return True
+        
+    async def run_all_tests(self):
+        """Run all tests"""
+        print("🚀 Starting CaseDesk AI Backend Testing - Settings Persistence Fix")
+        print(f"🌐 Backend URL: {BACKEND_URL}")
+        print(f"👤 Test User: {TEST_EMAIL}")
+        print("=" * 80)
         
         try:
-            response = self.session.post(
-                f"{BACKEND_URL}/auth/login",
-                data={
-                    "email": TEST_EMAIL,
-                    "password": TEST_PASSWORD
-                }
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                if "access_token" in data:
-                    self.auth_token = data["access_token"]
-                    self.user_id = data.get("user", {}).get("id")
-                    self.session.headers.update({
-                        "Authorization": f"Bearer {self.auth_token}"
-                    })
-                    self.log_test("Login", True, f"Token received, User ID: {self.user_id}")
-                    return True
-                else:
-                    self.log_test("Login", False, "No access_token in response")
-                    return False
-            else:
-                self.log_test("Login", False, f"HTTP {response.status_code}: {response.text}")
+            # Login first
+            if not await self.login():
                 return False
                 
-        except Exception as e:
-            self.log_test("Login", False, f"Exception: {str(e)}")
-            return False
-    
-    def test_get_tasks_empty(self):
-        """Test 2: GET /api/tasks - should return empty array initially"""
-        print("=== Testing GET /api/tasks (empty) ===")
-        
-        try:
-            response = self.session.get(f"{BACKEND_URL}/tasks")
-            
-            if response.status_code == 200:
-                tasks = response.json()
-                if isinstance(tasks, list) and len(tasks) == 0:
-                    self.log_test("GET /api/tasks (empty)", True, "Returned empty array as expected")
-                    return True
-                else:
-                    self.log_test("GET /api/tasks (empty)", False, f"Expected empty array, got: {tasks}")
-                    return False
-            else:
-                self.log_test("GET /api/tasks (empty)", False, f"HTTP {response.status_code}: {response.text}")
+            # Test settings persistence fix
+            if not await self.test_settings_persistence_fix():
                 return False
                 
-        except Exception as e:
-            self.log_test("GET /api/tasks (empty)", False, f"Exception: {str(e)}")
-            return False
-    
-    def test_create_task(self):
-        """Test 3: POST /api/tasks - create a new task with title 'Test Aufgabe'"""
-        print("=== Testing POST /api/tasks ===")
-        
-        try:
-            task_data = {
-                "title": "Test Aufgabe",
-                "description": "Eine Testaufgabe erstellt durch automatisierte Tests",
-                "priority": "medium",
-                "status": "todo"
-            }
-            
-            response = self.session.post(
-                f"{BACKEND_URL}/tasks",
-                json=task_data,
-                headers={"Content-Type": "application/json"}
-            )
-            
-            if response.status_code == 200:
-                created_task = response.json()
-                
-                # Verify required fields
-                required_fields = ["id", "title", "user_id", "created_at"]
-                missing_fields = [field for field in required_fields if field not in created_task]
-                
-                if not missing_fields and created_task["title"] == "Test Aufgabe":
-                    self.created_task_id = created_task["id"]
-                    self.log_test("POST /api/tasks", True, f"Task created with ID: {self.created_task_id}")
-                    return True
-                else:
-                    self.log_test("POST /api/tasks", False, f"Missing fields: {missing_fields} or wrong title")
-                    return False
-            else:
-                self.log_test("POST /api/tasks", False, f"HTTP {response.status_code}: {response.text}")
+            # Test AI status
+            if not await self.test_ai_status():
                 return False
                 
-        except Exception as e:
-            self.log_test("POST /api/tasks", False, f"Exception: {str(e)}")
-            return False
-    
-    def test_get_tasks_with_data(self):
-        """Test 4: GET /api/tasks again - should now return the created task"""
-        print("=== Testing GET /api/tasks (with data) ===")
-        
-        try:
-            response = self.session.get(f"{BACKEND_URL}/tasks")
+            print("\n" + "=" * 80)
+            print("🎉 ALL TESTS PASSED!")
+            print("✅ Settings persistence fix is working correctly")
+            print("✅ Settings are being saved to database with upsert=True")
+            print("✅ API keys are properly masked in responses")
+            return True
             
-            if response.status_code == 200:
-                tasks = response.json()
-                
-                if isinstance(tasks, list) and len(tasks) > 0:
-                    # Find our created task
-                    test_task = None
-                    for task in tasks:
-                        if task.get("title") == "Test Aufgabe":
-                            test_task = task
-                            break
-                    
-                    if test_task:
-                        self.log_test("GET /api/tasks (with data)", True, f"Found created task: {test_task['id']}")
-                        return True
-                    else:
-                        self.log_test("GET /api/tasks (with data)", False, "Created task not found in list")
-                        return False
-                else:
-                    self.log_test("GET /api/tasks (with data)", False, f"Expected non-empty array, got: {tasks}")
-                    return False
-            else:
-                self.log_test("GET /api/tasks (with data)", False, f"HTTP {response.status_code}: {response.text}")
-                return False
-                
         except Exception as e:
-            self.log_test("GET /api/tasks (with data)", False, f"Exception: {str(e)}")
+            print(f"\n❌ Test execution failed: {e}")
+            import traceback
+            traceback.print_exc()
             return False
-    
-    def test_ai_status(self):
-        """Test 5: GET /api/ai/status - test the AI status endpoint"""
-        print("=== Testing GET /api/ai/status ===")
-        
-        try:
-            response = self.session.get(f"{BACKEND_URL}/ai/status")
-            
-            if response.status_code == 200:
-                status = response.json()
-                
-                # Check for expected fields
-                expected_fields = ["ollama", "openai"]
-                has_expected_fields = all(field in status for field in expected_fields)
-                
-                if has_expected_fields:
-                    self.log_test("GET /api/ai/status", True, f"AI status: {json.dumps(status, indent=2)}")
-                    return True
-                else:
-                    self.log_test("GET /api/ai/status", False, f"Missing expected fields. Got: {status}")
-                    return False
-            else:
-                self.log_test("GET /api/ai/status", False, f"HTTP {response.status_code}: {response.text}")
-                return False
-                
-        except Exception as e:
-            self.log_test("GET /api/ai/status", False, f"Exception: {str(e)}")
-            return False
-    
-    def cleanup_test_data(self):
-        """Clean up: Delete the test task we created"""
-        print("=== Cleanup: Deleting test task ===")
-        
-        if hasattr(self, 'created_task_id'):
-            try:
-                response = self.session.delete(f"{BACKEND_URL}/tasks/{self.created_task_id}")
-                
-                if response.status_code == 200:
-                    self.log_test("Cleanup - Delete test task", True, "Test task deleted successfully")
-                else:
-                    self.log_test("Cleanup - Delete test task", False, f"HTTP {response.status_code}: {response.text}")
-                    
-            except Exception as e:
-                self.log_test("Cleanup - Delete test task", False, f"Exception: {str(e)}")
-    
-    def run_all_tests(self):
-        """Run all tests in sequence"""
-        print("🚀 Starting CaseDesk AI Tasks API Testing")
-        print(f"Backend URL: {BACKEND_URL}")
-        print(f"Test Credentials: {TEST_EMAIL}")
-        print("=" * 60)
-        
-        # Test sequence as requested
-        tests = [
-            self.test_login,
-            self.test_get_tasks_empty,
-            self.test_create_task,
-            self.test_get_tasks_with_data,
-            self.test_ai_status
-        ]
-        
-        success_count = 0
-        for test in tests:
-            if test():
-                success_count += 1
-            else:
-                # If login fails, stop testing
-                if test == self.test_login:
-                    print("❌ Login failed - stopping tests")
-                    break
-        
-        # Cleanup
-        self.cleanup_test_data()
-        
-        # Summary
-        print("=" * 60)
-        print("📊 TEST SUMMARY")
-        print("=" * 60)
-        
-        total_tests = len(self.test_results)
-        passed_tests = sum(1 for result in self.test_results if result["success"])
-        
-        print(f"Total Tests: {total_tests}")
-        print(f"Passed: {passed_tests}")
-        print(f"Failed: {total_tests - passed_tests}")
-        print(f"Success Rate: {(passed_tests/total_tests)*100:.1f}%")
-        
-        print("\nDetailed Results:")
-        for result in self.test_results:
-            status = "✅" if result["success"] else "❌"
-            print(f"{status} {result['test']}")
-            if result["details"] and not result["success"]:
-                print(f"   Error: {result['details']}")
-        
-        return passed_tests == total_tests
+        finally:
+            await self.close()
 
-
-def main():
+async def main():
     """Main test execution"""
-    tester = TasksAPITester()
-    success = tester.run_all_tests()
-    
-    if success:
-        print("\n🎉 All tests passed!")
-        sys.exit(0)
-    else:
-        print("\n💥 Some tests failed!")
-        sys.exit(1)
-
+    tester = BackendTester()
+    success = await tester.run_all_tests()
+    sys.exit(0 if success else 1)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

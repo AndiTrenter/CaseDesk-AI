@@ -159,7 +159,9 @@ async def update_system_settings(
     default_language: str = Form(None),
     user: dict = Depends(require_admin)
 ):
-    update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    import uuid
+    now = datetime.now(timezone.utc).isoformat()
+    update_data = {"updated_at": now}
     
     if ai_provider is not None:
         update_data["ai_provider"] = ai_provider
@@ -171,7 +173,20 @@ async def update_system_settings(
     if default_language is not None:
         update_data["default_language"] = default_language
     
-    await db.system_settings.update_one({}, {"$set": update_data})
+    # CRITICAL FIX: Use upsert=True to create settings if they don't exist
+    # Also set default values on insert
+    await db.system_settings.update_one(
+        {}, 
+        {
+            "$set": update_data,
+            "$setOnInsert": {
+                "id": str(uuid.uuid4()),
+                "organization_name": "CaseDesk",
+                "created_at": now
+            }
+        },
+        upsert=True
+    )
     await log_action(user["id"], "update_settings", "system")
     return {"success": True, "message": "Settings updated"}
 
@@ -240,6 +255,7 @@ async def update_storage_settings(
     user: dict = Depends(require_admin)
 ):
     """Update global storage limit settings"""
+    import uuid
     settings = await db.system_settings.find_one({}, {"_id": 0})
     current_limits = settings.get("storage_limits", DEFAULT_STORAGE_LIMITS) if settings else DEFAULT_STORAGE_LIMITS
     
@@ -256,9 +272,19 @@ async def update_storage_settings(
     if max_ollama_models_gb is not None:
         current_limits["max_ollama_models_gb"] = max_ollama_models_gb
     
+    now = datetime.now(timezone.utc).isoformat()
+    # CRITICAL FIX: Use upsert=True to create settings if they don't exist
     await db.system_settings.update_one(
         {}, 
-        {"$set": {"storage_limits": current_limits, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        {
+            "$set": {"storage_limits": current_limits, "updated_at": now},
+            "$setOnInsert": {
+                "id": str(uuid.uuid4()),
+                "organization_name": "CaseDesk",
+                "created_at": now
+            }
+        },
+        upsert=True
     )
     await log_action(user["id"], "update_storage_settings", "system")
     return {"success": True, "limits": current_limits}
