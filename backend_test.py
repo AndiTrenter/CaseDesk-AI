@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 
 # Backend URL from environment
-BACKEND_URL = "https://kai-organizer.preview.emergentagent.com/api"
+BACKEND_URL = "https://task-portal-fix.preview.emergentagent.com/api"
 
 # Test credentials
 TEST_EMAIL = "andi.trenter@gmail.com"
