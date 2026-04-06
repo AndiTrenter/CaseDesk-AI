@@ -687,10 +687,58 @@ frontend:
         agent: "testing"
         comment: "✅ TESTED v1.0.8: Authentication system working perfectly. POST /api/auth/login with form data (email/password) returns valid JWT access token. Token authentication works correctly for all protected endpoints. User data returned correctly in login response. All subsequent API calls authenticated successfully."
 
+  - task: "Document Download Token System v1.0.9"
+    implemented: true
+    working: true
+    file: "routers/documents.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.0.9: Document Download Token System working perfectly! GET /api/documents/{id}/download-token generates JWT tokens with 5-minute expiration (300 seconds). GET /api/documents/{id}/view?token={token} allows document access without auth headers using valid tokens. Token-based document viewing fully functional and secure."
+
+  - task: "ZIP Download Endpoint v1.0.9"
+    implemented: true
+    working: true
+    file: "routers/cases.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.0.9: NEW ZIP Download Endpoint working perfectly! GET /api/cases/{case_id}/documents-zip returns proper ZIP file with Content-Type: application/zip. Creates ZIP archive containing all case documents with unique filenames. Proper Content-Disposition headers for download. ZIP file generation and streaming working correctly."
+
+  - task: "Tasks API v1.0.9"
+    implemented: true
+    working: true
+    file: "routers/tasks.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.0.9: Tasks API working perfectly - 'Failed to load tasks' issue resolved! GET /api/tasks returns 200 with proper array structure. POST /api/tasks creates tasks successfully with correct data structure. Created tasks appear correctly in subsequent GET requests. All CRUD operations verified and fully functional."
+
+  - task: "Events API v1.0.9"
+    implemented: true
+    working: true
+    file: "routers/events.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.0.9: Events API working perfectly! GET /api/events returns 200 with proper array structure. POST /api/events creates events successfully with correct data structure (title, start_time, end_time). Created events appear correctly in subsequent GET requests. All CRUD operations verified and fully functional."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 10
+  test_sequence: 11
   run_ui: false
 
 test_plan:
@@ -713,3 +761,5 @@ agent_communication:
     message: "✅ SETTINGS PERSISTENCE FIX TESTING COMPLETE: CRITICAL FIX verified working perfectly! The upsert=True fix successfully resolves the settings persistence issue. Comprehensive testing performed: 1) Login with admin credentials (andi.trenter@gmail.com/admin123) ✅ 2) PUT /api/settings/system with ai_provider='openai', openai_api_key='sk-test-key-12345', internet_access='allowed' ✅ 3) GET /api/settings/system returns saved settings (not empty!) with proper masking ✅ 4) GET /api/ai/status shows configured_provider='openai' ✅. Settings now persist correctly across requests. Database upsert functionality working as expected. Bug fix confirmed successful."
   - agent: "testing"
     message: "✅ v1.0.8 BACKEND TESTING COMPLETE: Comprehensive testing of CaseDesk AI v1.0.8 backend successful with 100% pass rate (9/9 tests passed). ✅ Authentication system working perfectly with JWT tokens. ✅ NEW Documents Suggest for Case endpoint (GET /api/documents/suggest-for-case/{case_id}) working correctly - fixed response structure bug. ✅ Tasks API (GET/POST /api/tasks) fully functional with proper CRUD operations. ✅ Events API (GET/POST /api/events) fully functional with proper CRUD operations. All endpoints tested with real data, proper cleanup performed. Backend services running correctly. Fixed minor bug in suggest-for-case endpoint response structure. All requested v1.0.8 features operational and ready for production use."
+  - agent: "testing"
+    message: "✅ v1.0.9 BACKEND TESTING COMPLETE: Comprehensive testing of CaseDesk AI v1.0.9 NEW features successful with 100% pass rate (5/5 tests passed). ✅ Authentication system working perfectly with test credentials (andi.trenter@gmail.com/admin123). ✅ Document Download Token System fully functional - generates 5-minute JWT tokens and allows token-based document viewing without auth headers. ✅ NEW ZIP Download Endpoint working perfectly - GET /api/cases/{case_id}/documents-zip returns proper ZIP files with application/zip content-type. ✅ Tasks API verified working - 'Failed to load tasks' issue resolved, all CRUD operations functional. ✅ Events API verified working - all CRUD operations functional. All requested v1.0.9 features tested and operational. Backend services running correctly on https://task-portal-fix.preview.emergentagent.com."

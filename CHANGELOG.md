@@ -13,6 +13,31 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 
 ---
 
+## [1.0.9] - 2026-04-06
+
+### Neu hinzugefügt
+- 📦 **ZIP-Download für alle Fall-Dokumente**
+  - Neuer Button "Alle als ZIP" bei Falldetails → Dokumente
+  - Lädt alle Dokumente eines Falls in einem ZIP-Archiv herunter
+  - Perfekt zum schnellen Zusammenstellen von Unterlagen
+
+- 🔐 **Token-basierte Dokumenten-Vorschau**
+  - Dokumente werden jetzt mit temporärem Token angezeigt
+  - Behebt "Unauthorized" Fehler bei Dokumenten-Preview
+  - Funktioniert für Bilder, PDFs und andere Dateitypen
+
+### Verbessert
+- 📄 **Dokumenten-Dialog** komplett überarbeitet
+  - Ladeanimation während Vorschau geladen wird
+  - Bessere Fehlerbehandlung
+  - Download-Button mit Fortschrittsanzeige
+
+### Behoben
+- 🔧 **Dokumenten-Preview "Unauthorized"** - Jetzt mit Token-Auth
+- 🔧 **Download-Funktion** - Verwendet jetzt Token statt direktem Auth-Header
+
+---
+
 ## [1.0.8] - 2026-04-06
 
 ### Neu hinzugefügt

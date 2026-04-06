@@ -426,6 +426,40 @@ export const documentUpdateAPI = {
   downloadUrl: (id) => `${API_URL}/api/documents/${id}/download`,
   getDownloadToken: (id) => api.get(`/documents/${id}/download-token`),
   viewUrl: (id, token) => `${API_URL}/api/documents/${id}/view?token=${token}`,
+  
+  // Download document with automatic token handling
+  downloadWithToken: async (id, filename) => {
+    try {
+      const tokenRes = await api.get(`/documents/${id}/download-token`);
+      const token = tokenRes.data.token;
+      const url = `${API_URL}/api/documents/${id}/view?token=${token}`;
+      
+      // Create a temporary link and trigger download
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename || 'document';
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      return { success: true };
+    } catch (error) {
+      console.error('Download error:', error);
+      throw error;
+    }
+  },
+  
+  // Get view URL with token (for preview/iframe)
+  getViewUrlWithToken: async (id) => {
+    const tokenRes = await api.get(`/documents/${id}/download-token`);
+    return `${API_URL}/api/documents/${id}/view?token=${tokenRes.data.token}`;
+  },
+  
+  // Download multiple documents as ZIP
+  downloadCaseZip: (caseId) => api.get(`/cases/${caseId}/documents-zip`, { 
+    responseType: 'blob',
+    timeout: 120000 
+  }),
 };
 
 // Health

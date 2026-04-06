@@ -37,6 +37,148 @@ const STATUS_COLORS = {
   closed: 'bg-gray-500/10 text-gray-400 border-gray-500/20'
 };
 
+// Document Viewer Component with token-based preview
+function DocumentViewerContent({ document, onClose }) {
+  const [viewUrl, setViewUrl] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    loadViewUrl();
+  }, [document.id]);
+
+  const loadViewUrl = async () => {
+    try {
+      const url = await documentUpdateAPI.getViewUrlWithToken(document.id);
+      setViewUrl(url);
+    } catch (error) {
+      console.error('Failed to get view URL:', error);
+      toast.error('Vorschau konnte nicht geladen werden');
+    }
+    setLoading(false);
+  };
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      await documentUpdateAPI.downloadWithToken(
+        document.id, 
+        document.display_name || document.original_filename
+      );
+      toast.success('Download gestartet');
+    } catch (error) {
+      toast.error('Download fehlgeschlagen');
+    }
+    setDownloading(false);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+        <span className="ml-3 text-gray-400">Lade Vorschau...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Document info */}
+      <div className="grid grid-cols-3 gap-4 p-4 bg-white/5 rounded-lg text-sm">
+        {document.sender && (
+          <div>
+            <span className="text-gray-500">Absender</span>
+            <p className="text-white">{document.sender}</p>
+          </div>
+        )}
+        {document.document_date && (
+          <div>
+            <span className="text-gray-500">Datum</span>
+            <p className="text-white">{document.document_date}</p>
+          </div>
+        )}
+        <div>
+          <span className="text-gray-500">Typ</span>
+          <p className="text-white capitalize">{document.document_type}</p>
+        </div>
+      </div>
+      
+      {document.ai_summary && (
+        <div>
+          <span className="text-gray-500 text-sm">Zusammenfassung</span>
+          <p className="text-white mt-1">{document.ai_summary}</p>
+        </div>
+      )}
+      
+      {/* Preview */}
+      {viewUrl ? (
+        document.mime_type?.startsWith('image/') ? (
+          <div className="flex justify-center bg-black/20 rounded-lg p-4">
+            <img
+              src={viewUrl}
+              alt={document.display_name}
+              className="max-h-96 rounded-lg"
+              onError={() => toast.error('Bild konnte nicht geladen werden')}
+            />
+          </div>
+        ) : document.mime_type === 'application/pdf' ? (
+          <iframe
+            src={viewUrl}
+            className="w-full h-96 rounded-lg border border-white/10 bg-white"
+            title="PDF Viewer"
+          />
+        ) : document.ocr_text ? (
+          <div>
+            <span className="text-gray-500 text-sm">Extrahierter Text</span>
+            <pre className="mt-2 p-4 bg-black/30 rounded-lg text-gray-300 text-sm whitespace-pre-wrap font-sans max-h-64 overflow-y-auto">
+              {document.ocr_text}
+            </pre>
+          </div>
+        ) : (
+          <div className="text-center py-8 bg-black/20 rounded-lg">
+            <FileText className="w-16 h-16 text-gray-600 mx-auto mb-3" />
+            <p className="text-gray-500">Keine Vorschau verfügbar für diesen Dateityp</p>
+            <p className="text-gray-600 text-sm mt-1">Klicken Sie auf "Herunterladen" um die Datei zu öffnen</p>
+          </div>
+        )
+      ) : (
+        <div className="text-center py-8 text-gray-500">
+          Vorschau nicht verfügbar
+        </div>
+      )}
+      
+      {/* Tags */}
+      {document.tags?.length > 0 && (
+        <div>
+          <span className="text-gray-500 text-sm">Tags</span>
+          <div className="flex flex-wrap gap-1 mt-2">
+            {document.tags.map((tag, i) => (
+              <span key={i} className="px-2 py-1 bg-blue-500/10 text-blue-400 text-xs rounded border border-blue-500/20">
+                {tag}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+        <Button
+          onClick={handleDownload}
+          disabled={downloading}
+          className="btn-primary"
+        >
+          {downloading ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <Download className="w-4 h-4 mr-2" />
+          )}
+          Herunterladen
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function CaseDetail() {
   const { t } = useTranslation();
   const { caseId } = useParams();
@@ -64,6 +206,7 @@ export default function CaseDetail() {
   const [suggestingDocs, setSuggestingDocs] = useState(false);
   const [suggestedDocs, setSuggestedDocs] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [downloadingZip, setDownloadingZip] = useState(false);
   const fileInputRef = useRef(null);
   
   // Dialog states
@@ -186,6 +329,37 @@ export default function CaseDetail() {
         ? prev.filter(id => id !== docId)
         : [...prev, docId]
     );
+  };
+  
+  const handleDownloadAllAsZip = async () => {
+    if (documents.length === 0) {
+      toast.error('Keine Dokumente zum Herunterladen');
+      return;
+    }
+    
+    setDownloadingZip(true);
+    toast.info('ZIP-Archiv wird erstellt...', { id: 'zip-download' });
+    
+    try {
+      const response = await documentUpdateAPI.downloadCaseZip(caseId);
+      
+      // Create download link from blob
+      const blob = new Blob([response.data], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Dokumente_${caseData?.title?.replace(/\s/g, '_') || 'Fall'}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('ZIP-Download gestartet', { id: 'zip-download' });
+    } catch (error) {
+      console.error('ZIP download error:', error);
+      toast.error('ZIP-Download fehlgeschlagen', { id: 'zip-download' });
+    }
+    setDownloadingZip(false);
   };
   
   const handleRemoveDocument = async (docId) => {
@@ -720,6 +894,22 @@ export default function CaseDetail() {
                 )}
                 KI Vorschläge
               </Button>
+              
+              {/* ZIP Download Button */}
+              {documents.length > 0 && (
+                <Button
+                  onClick={handleDownloadAllAsZip}
+                  disabled={downloadingZip}
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                >
+                  {downloadingZip ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4 mr-2" />
+                  )}
+                  Alle als ZIP
+                </Button>
+              )}
             </div>
             
             {/* AI Suggestions Panel */}
@@ -1356,88 +1546,10 @@ export default function CaseDetail() {
           </DialogHeader>
           
           {documentViewerOpen && (
-            <div className="space-y-4">
-              {/* Document info */}
-              <div className="grid grid-cols-3 gap-4 p-4 bg-white/5 rounded-lg text-sm">
-                {documentViewerOpen.sender && (
-                  <div>
-                    <span className="text-gray-500">Absender</span>
-                    <p className="text-white">{documentViewerOpen.sender}</p>
-                  </div>
-                )}
-                {documentViewerOpen.document_date && (
-                  <div>
-                    <span className="text-gray-500">Datum</span>
-                    <p className="text-white">{documentViewerOpen.document_date}</p>
-                  </div>
-                )}
-                <div>
-                  <span className="text-gray-500">Typ</span>
-                  <p className="text-white capitalize">{documentViewerOpen.document_type}</p>
-                </div>
-              </div>
-              
-              {documentViewerOpen.ai_summary && (
-                <div>
-                  <span className="text-gray-500 text-sm">Zusammenfassung</span>
-                  <p className="text-white mt-1">{documentViewerOpen.ai_summary}</p>
-                </div>
-              )}
-              
-              {/* Preview or OCR text */}
-              {documentViewerOpen.mime_type?.startsWith('image/') ? (
-                <div className="flex justify-center">
-                  <img
-                    src={documentUpdateAPI.downloadUrl(documentViewerOpen.id)}
-                    alt={documentViewerOpen.display_name}
-                    className="max-h-96 rounded-lg"
-                  />
-                </div>
-              ) : documentViewerOpen.mime_type === 'application/pdf' ? (
-                <iframe
-                  src={documentUpdateAPI.downloadUrl(documentViewerOpen.id)}
-                  className="w-full h-96 rounded-lg border border-white/10"
-                  title="PDF Viewer"
-                />
-              ) : documentViewerOpen.ocr_text ? (
-                <div>
-                  <span className="text-gray-500 text-sm">Extrahierter Text</span>
-                  <pre className="mt-2 p-4 bg-black/30 rounded-lg text-gray-300 text-sm whitespace-pre-wrap font-sans max-h-64 overflow-y-auto">
-                    {documentViewerOpen.ocr_text}
-                  </pre>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  Keine Vorschau verfügbar
-                </div>
-              )}
-              
-              {/* Tags */}
-              {documentViewerOpen.tags?.length > 0 && (
-                <div>
-                  <span className="text-gray-500 text-sm">Tags</span>
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {documentViewerOpen.tags.map((tag, i) => (
-                      <span key={i} className="px-2 py-1 bg-blue-500/10 text-blue-400 text-xs rounded border border-blue-500/20">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-                <a
-                  href={documentUpdateAPI.downloadUrl(documentViewerOpen.id)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Button className="btn-primary">
-                    <Download className="w-4 h-4 mr-2" /> Herunterladen
-                  </Button>
-                </a>
-              </div>
-            </div>
+            <DocumentViewerContent 
+              document={documentViewerOpen} 
+              onClose={() => setDocumentViewerOpen(null)}
+            />
           )}
         </DialogContent>
       </Dialog>

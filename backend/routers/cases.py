@@ -106,3 +106,58 @@ async def get_case_history(case_id: str, user: dict = Depends(require_auth)):
     ).sort("created_at", -1).to_list(100)
     
     return {"correspondence": correspondence, "audit_logs": audit_logs}
+
+
+@router.get("/cases/{case_id}/documents-zip")
+async def download_case_documents_zip(case_id: str, user: dict = Depends(require_auth)):
+    """Download all documents of a case as a ZIP archive"""
+    import zipfile
+    import io
+    import os
+    from fastapi.responses import StreamingResponse
+    
+    case = await db.cases.find_one({"id": case_id, "user_id": user["id"]}, {"_id": 0})
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    
+    documents = await db.documents.find(
+        {"case_id": case_id, "user_id": user["id"]}, {"_id": 0}
+    ).to_list(500)
+    
+    if not documents:
+        raise HTTPException(status_code=404, detail="No documents found for this case")
+    
+    # Create ZIP in memory
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for doc in documents:
+            file_path = doc.get("storage_path")
+            if file_path and os.path.exists(file_path):
+                filename = doc.get("display_name", doc.get("original_filename", "document"))
+                # Ensure unique filenames in ZIP
+                base_name = os.path.splitext(filename)[0]
+                extension = os.path.splitext(filename)[1]
+                counter = 1
+                final_name = filename
+                existing_names = [info.filename for info in zip_file.filelist]
+                while final_name in existing_names:
+                    final_name = f"{base_name}_{counter}{extension}"
+                    counter += 1
+                
+                zip_file.write(file_path, final_name)
+    
+    zip_buffer.seek(0)
+    
+    # Create safe filename for ZIP
+    case_title = case.get("title", "Fall").replace(" ", "_").replace("/", "-")[:50]
+    zip_filename = f"Dokumente_{case_title}.zip"
+    
+    await log_action(user["id"], "download_case_zip", "case", case_id, {"document_count": len(documents)})
+    
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{zip_filename}"'
+        }
+    )

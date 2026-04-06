@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """
-CaseDesk AI v1.0.8 Backend Testing Script
-Tests the specific endpoints requested in the review.
+CaseDesk AI v1.0.9 Backend Testing
+Testing NEW features as requested in review
 """
-
 import requests
 import json
-import sys
-from datetime import datetime, timedelta
+import time
+import os
+from datetime import datetime, timezone
 
 # Configuration
-BACKEND_URL = "https://task-portal-fix.preview.emergentagent.com/api"
+BACKEND_URL = "https://task-portal-fix.preview.emergentagent.com"
+API_BASE = f"{BACKEND_URL}/api"
+
+# Test credentials
 TEST_EMAIL = "andi.trenter@gmail.com"
 TEST_PASSWORD = "admin123"
 
@@ -18,322 +21,348 @@ class BackendTester:
     def __init__(self):
         self.session = requests.Session()
         self.auth_token = None
-        self.test_results = []
+        self.user_id = None
+        self.test_case_id = None
+        self.test_document_id = None
         
-    def log_test(self, test_name, success, details=""):
-        """Log test result"""
-        status = "✅ PASS" if success else "❌ FAIL"
-        self.test_results.append({
-            "test": test_name,
-            "success": success,
-            "details": details
-        })
-        print(f"{status}: {test_name}")
-        if details:
-            print(f"   Details: {details}")
-        print()
-    
+    def log(self, message):
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] {message}")
+        
     def test_login(self):
         """Test 1: Login and get auth token"""
-        print("=== Test 1: Login and Authentication ===")
+        self.log("🔐 Testing login...")
         
-        try:
-            # Test login with form data (as per existing working tests)
-            login_data = {
-                "email": TEST_EMAIL,
-                "password": TEST_PASSWORD
-            }
+        # Use form data for login as per backend implementation
+        login_data = {
+            "email": TEST_EMAIL,
+            "password": TEST_PASSWORD
+        }
+        
+        response = self.session.post(f"{API_BASE}/auth/login", data=login_data)
+        
+        if response.status_code == 200:
+            data = response.json()
+            self.auth_token = data.get("access_token")
+            self.user_id = data.get("user", {}).get("id")
             
-            response = self.session.post(
-                f"{BACKEND_URL}/auth/login",
-                data=login_data,
-                headers={"Content-Type": "application/x-www-form-urlencoded"}
-            )
+            # Set auth header for future requests
+            self.session.headers.update({
+                "Authorization": f"Bearer {self.auth_token}"
+            })
             
-            if response.status_code == 200:
-                data = response.json()
-                if "access_token" in data:
-                    self.auth_token = data["access_token"]
-                    self.session.headers.update({
-                        "Authorization": f"Bearer {self.auth_token}"
-                    })
-                    self.log_test("Login Authentication", True, 
-                                f"Token received, user: {data.get('user', {}).get('email', 'unknown')}")
-                    return True
-                else:
-                    self.log_test("Login Authentication", False, 
-                                f"No access_token in response: {data}")
-                    return False
-            else:
-                self.log_test("Login Authentication", False, 
-                            f"HTTP {response.status_code}: {response.text}")
-                return False
-                
-        except Exception as e:
-            self.log_test("Login Authentication", False, f"Exception: {str(e)}")
+            self.log(f"✅ Login successful! User ID: {self.user_id}")
+            return True
+        else:
+            self.log(f"❌ Login failed: {response.status_code} - {response.text}")
             return False
     
-    def test_suggest_for_case_endpoint(self):
-        """Test 2: NEW endpoint - GET /api/documents/suggest-for-case/{case_id}"""
-        print("=== Test 2: Documents Suggest for Case Endpoint ===")
+    def test_document_download_token_system(self):
+        """Test 2: Document Download Token System"""
+        self.log("📄 Testing Document Download Token System...")
         
-        if not self.auth_token:
-            self.log_test("Suggest Documents - Auth Check", False, "No auth token available")
+        # First, create a test document if none exists
+        test_doc_created = False
+        
+        # Check if we have any documents
+        response = self.session.get(f"{API_BASE}/documents")
+        if response.status_code == 200:
+            documents = response.json()
+            if documents:
+                self.test_document_id = documents[0]["id"]
+                self.log(f"📄 Using existing document: {self.test_document_id}")
+            else:
+                # Create a test document
+                self.log("📄 No documents found, creating test document...")
+                test_content = b"Test document content for token testing"
+                files = {
+                    'file': ('test_document.txt', test_content, 'text/plain')
+                }
+                data = {
+                    'document_type': 'other'
+                }
+                
+                response = self.session.post(f"{API_BASE}/documents/upload", files=files, data=data)
+                if response.status_code == 200:
+                    doc_data = response.json()
+                    self.test_document_id = doc_data["document"]["id"]
+                    test_doc_created = True
+                    self.log(f"✅ Test document created: {self.test_document_id}")
+                else:
+                    self.log(f"❌ Failed to create test document: {response.status_code} - {response.text}")
+                    return False
+        else:
+            self.log(f"❌ Failed to list documents: {response.status_code} - {response.text}")
             return False
         
-        # First, create a test case
-        try:
-            case_data = {
-                "title": "Mietrechtsstreit",
-                "description": "Probleme mit dem Vermieter",
-                "reference_number": "TEST-2026-001"
-            }
+        # Test download token generation
+        self.log("🔑 Testing download token generation...")
+        response = self.session.get(f"{API_BASE}/documents/{self.test_document_id}/download-token")
+        
+        if response.status_code == 200:
+            token_data = response.json()
+            token = token_data.get("token")
+            expires_in = token_data.get("expires_in")
             
-            response = self.session.post(
-                f"{BACKEND_URL}/cases",
-                json=case_data
-            )
-            
-            if response.status_code == 200:
-                case = response.json()
-                case_id = case["id"]
-                self.log_test("Create Test Case", True, f"Case created with ID: {case_id}")
+            if token and expires_in == 300:
+                self.log(f"✅ Download token generated successfully (expires in {expires_in}s)")
                 
-                # Now test the suggest endpoint
-                response = self.session.get(f"{BACKEND_URL}/documents/suggest-for-case/{case_id}")
+                # Test document view with token
+                self.log("👁️ Testing document view with token...")
+                view_response = requests.get(f"{API_BASE}/documents/{self.test_document_id}/view?token={token}")
                 
-                if response.status_code == 200:
-                    data = response.json()
-                    expected_fields = ["suggestions", "total_available", "ai_powered"]
+                if view_response.status_code == 200:
+                    self.log("✅ Document view with token successful!")
                     
-                    if all(field in data for field in expected_fields):
-                        self.log_test("Suggest Documents Endpoint", True, 
-                                    f"Response structure correct: suggestions={len(data['suggestions'])}, "
-                                    f"total_available={data['total_available']}, ai_powered={data['ai_powered']}")
-                        
-                        # Clean up: delete test case
-                        self.session.delete(f"{BACKEND_URL}/cases/{case_id}")
-                        return True
-                    else:
-                        missing = [f for f in expected_fields if f not in data]
-                        self.log_test("Suggest Documents Endpoint", False, 
-                                    f"Missing fields: {missing}. Response: {data}")
-                        return False
+                    # Clean up test document if we created it
+                    if test_doc_created:
+                        self.session.delete(f"{API_BASE}/documents/{self.test_document_id}")
+                        self.log("🧹 Test document cleaned up")
+                    
+                    return True
                 else:
-                    self.log_test("Suggest Documents Endpoint", False, 
-                                f"HTTP {response.status_code}: {response.text}")
+                    self.log(f"❌ Document view with token failed: {view_response.status_code}")
                     return False
             else:
-                self.log_test("Create Test Case", False, 
-                            f"HTTP {response.status_code}: {response.text}")
+                self.log(f"❌ Invalid token response: {token_data}")
                 return False
+        else:
+            self.log(f"❌ Download token generation failed: {response.status_code} - {response.text}")
+            return False
+    
+    def test_zip_download_endpoint(self):
+        """Test 3: NEW ZIP Download Endpoint for cases"""
+        self.log("📦 Testing NEW ZIP Download Endpoint...")
+        
+        # First create a test case
+        self.log("📁 Creating test case...")
+        case_data = {
+            "title": "Test Case for ZIP Download",
+            "description": "Test case to verify ZIP download functionality",
+            "reference_number": "TEST-ZIP-001"
+        }
+        
+        response = self.session.post(f"{API_BASE}/cases", json=case_data)
+        if response.status_code == 200:
+            case = response.json()
+            self.test_case_id = case["id"]
+            self.log(f"✅ Test case created: {self.test_case_id}")
+        else:
+            self.log(f"❌ Failed to create test case: {response.status_code} - {response.text}")
+            return False
+        
+        # Create and assign a test document to the case
+        self.log("📄 Creating and assigning test document to case...")
+        test_content = b"Test document content for ZIP download testing"
+        files = {
+            'file': ('zip_test_document.txt', test_content, 'text/plain')
+        }
+        data = {
+            'case_id': self.test_case_id,
+            'document_type': 'other'
+        }
+        
+        response = self.session.post(f"{API_BASE}/documents/upload", files=files, data=data)
+        if response.status_code == 200:
+            doc_data = response.json()
+            test_doc_id = doc_data["document"]["id"]
+            self.log(f"✅ Test document assigned to case: {test_doc_id}")
+        else:
+            self.log(f"❌ Failed to create/assign document: {response.status_code} - {response.text}")
+            return False
+        
+        # Test ZIP download endpoint
+        self.log("📦 Testing ZIP download endpoint...")
+        response = self.session.get(f"{API_BASE}/cases/{self.test_case_id}/documents-zip")
+        
+        if response.status_code == 200:
+            content_type = response.headers.get('content-type', '')
+            content_disposition = response.headers.get('content-disposition', '')
+            
+            if content_type == 'application/zip':
+                self.log("✅ ZIP download successful! Content-Type: application/zip")
+                self.log(f"📦 Content-Disposition: {content_disposition}")
                 
-        except Exception as e:
-            self.log_test("Suggest Documents Endpoint", False, f"Exception: {str(e)}")
+                # Verify ZIP content size
+                zip_size = len(response.content)
+                self.log(f"📦 ZIP file size: {zip_size} bytes")
+                
+                # Clean up
+                self.session.delete(f"{API_BASE}/documents/{test_doc_id}")
+                self.session.delete(f"{API_BASE}/cases/{self.test_case_id}")
+                self.log("🧹 Test case and document cleaned up")
+                
+                return True
+            else:
+                self.log(f"❌ Wrong content type: {content_type} (expected: application/zip)")
+                return False
+        else:
+            self.log(f"❌ ZIP download failed: {response.status_code} - {response.text}")
             return False
     
     def test_tasks_api(self):
-        """Test 3: Tasks API - GET and POST /api/tasks"""
-        print("=== Test 3: Tasks API ===")
+        """Test 4: Tasks API (verify "Failed to load tasks" issue)"""
+        self.log("📋 Testing Tasks API...")
         
-        if not self.auth_token:
-            self.log_test("Tasks API - Auth Check", False, "No auth token available")
-            return False
+        # Test GET /api/tasks - must return 200 with array
+        self.log("📋 Testing GET /api/tasks...")
+        response = self.session.get(f"{API_BASE}/tasks")
         
-        try:
-            # Test GET /api/tasks
-            response = self.session.get(f"{BACKEND_URL}/tasks")
-            
-            if response.status_code == 200:
-                tasks = response.json()
-                self.log_test("GET /api/tasks", True, 
-                            f"Retrieved {len(tasks)} tasks")
+        if response.status_code == 200:
+            tasks = response.json()
+            if isinstance(tasks, list):
+                self.log(f"✅ GET /api/tasks successful! Returned {len(tasks)} tasks")
                 
-                # Test POST /api/tasks
+                # Test POST /api/tasks - create a task
+                self.log("📋 Testing POST /api/tasks...")
                 task_data = {
-                    "title": "Testaufgabe",
-                    "description": "Test task created by backend testing",
+                    "title": "Test Task for API Verification",
+                    "description": "Testing task creation to verify API functionality",
                     "priority": "medium",
                     "status": "todo"
                 }
                 
-                response = self.session.post(
-                    f"{BACKEND_URL}/tasks",
-                    json=task_data
-                )
-                
+                response = self.session.post(f"{API_BASE}/tasks", json=task_data)
                 if response.status_code == 200:
                     created_task = response.json()
                     task_id = created_task.get("id")
+                    self.log(f"✅ Task created successfully: {task_id}")
                     
-                    if task_id and created_task.get("title") == "Testaufgabe":
-                        self.log_test("POST /api/tasks", True, 
-                                    f"Task created with ID: {task_id}")
-                        
-                        # Verify task appears in GET request
-                        response = self.session.get(f"{BACKEND_URL}/tasks")
-                        if response.status_code == 200:
-                            updated_tasks = response.json()
-                            task_found = any(t.get("id") == task_id for t in updated_tasks)
+                    # Test GET /api/tasks again to verify the created task appears
+                    self.log("📋 Verifying task appears in GET /api/tasks...")
+                    response = self.session.get(f"{API_BASE}/tasks")
+                    if response.status_code == 200:
+                        tasks = response.json()
+                        task_found = any(task.get("id") == task_id for task in tasks)
+                        if task_found:
+                            self.log("✅ Created task found in task list!")
                             
-                            if task_found:
-                                self.log_test("Verify Task Creation", True, 
-                                            f"Created task found in task list")
-                                
-                                # Clean up: delete test task
-                                self.session.delete(f"{BACKEND_URL}/tasks/{task_id}")
-                                return True
-                            else:
-                                self.log_test("Verify Task Creation", False, 
-                                            "Created task not found in task list")
-                                return False
+                            # Clean up
+                            self.session.delete(f"{API_BASE}/tasks/{task_id}")
+                            self.log("🧹 Test task cleaned up")
+                            return True
                         else:
-                            self.log_test("Verify Task Creation", False, 
-                                        f"Failed to retrieve tasks: HTTP {response.status_code}")
+                            self.log("❌ Created task not found in task list")
                             return False
                     else:
-                        self.log_test("POST /api/tasks", False, 
-                                    f"Invalid task response: {created_task}")
+                        self.log(f"❌ Failed to verify task list: {response.status_code}")
                         return False
                 else:
-                    self.log_test("POST /api/tasks", False, 
-                                f"HTTP {response.status_code}: {response.text}")
+                    self.log(f"❌ Task creation failed: {response.status_code} - {response.text}")
                     return False
             else:
-                self.log_test("GET /api/tasks", False, 
-                            f"HTTP {response.status_code}: {response.text}")
+                self.log(f"❌ GET /api/tasks returned non-array: {type(tasks)}")
                 return False
-                
-        except Exception as e:
-            self.log_test("Tasks API", False, f"Exception: {str(e)}")
+        else:
+            self.log(f"❌ GET /api/tasks failed: {response.status_code} - {response.text}")
             return False
     
     def test_events_api(self):
-        """Test 4: Events API - GET and POST /api/events"""
-        print("=== Test 4: Events API ===")
+        """Test 5: Events API"""
+        self.log("📅 Testing Events API...")
         
-        if not self.auth_token:
-            self.log_test("Events API - Auth Check", False, "No auth token available")
-            return False
+        # Test GET /api/events - must return 200
+        self.log("📅 Testing GET /api/events...")
+        response = self.session.get(f"{API_BASE}/events")
         
-        try:
-            # Test GET /api/events
-            response = self.session.get(f"{BACKEND_URL}/events")
-            
-            if response.status_code == 200:
-                events = response.json()
-                self.log_test("GET /api/events", True, 
-                            f"Retrieved {len(events)} events")
+        if response.status_code == 200:
+            events = response.json()
+            if isinstance(events, list):
+                self.log(f"✅ GET /api/events successful! Returned {len(events)} events")
                 
-                # Test POST /api/events
-                start_time = datetime.now() + timedelta(days=1)
-                end_time = start_time + timedelta(hours=1)
-                
+                # Test POST /api/events - create an event
+                self.log("📅 Testing POST /api/events...")
                 event_data = {
-                    "title": "Testtermin",
-                    "description": "Test event created by backend testing",
-                    "start_time": start_time.isoformat(),
-                    "end_time": end_time.isoformat(),
+                    "title": "Test Event for API Verification",
+                    "description": "Testing event creation to verify API functionality",
+                    "start_time": "2024-12-31T10:00:00",
+                    "end_time": "2024-12-31T11:00:00",
                     "all_day": False
                 }
                 
-                response = self.session.post(
-                    f"{BACKEND_URL}/events",
-                    json=event_data
-                )
-                
+                response = self.session.post(f"{API_BASE}/events", json=event_data)
                 if response.status_code == 200:
                     created_event = response.json()
                     event_id = created_event.get("id")
+                    self.log(f"✅ Event created successfully: {event_id}")
                     
-                    if event_id and created_event.get("title") == "Testtermin":
-                        self.log_test("POST /api/events", True, 
-                                    f"Event created with ID: {event_id}")
-                        
-                        # Verify event appears in GET request
-                        response = self.session.get(f"{BACKEND_URL}/events")
-                        if response.status_code == 200:
-                            updated_events = response.json()
-                            event_found = any(e.get("id") == event_id for e in updated_events)
+                    # Test GET /api/events again to verify the created event appears
+                    self.log("📅 Verifying event appears in GET /api/events...")
+                    response = self.session.get(f"{API_BASE}/events")
+                    if response.status_code == 200:
+                        events = response.json()
+                        event_found = any(event.get("id") == event_id for event in events)
+                        if event_found:
+                            self.log("✅ Created event found in event list!")
                             
-                            if event_found:
-                                self.log_test("Verify Event Creation", True, 
-                                            f"Created event found in event list")
-                                
-                                # Clean up: delete test event
-                                self.session.delete(f"{BACKEND_URL}/events/{event_id}")
-                                return True
-                            else:
-                                self.log_test("Verify Event Creation", False, 
-                                            "Created event not found in event list")
-                                return False
+                            # Clean up
+                            self.session.delete(f"{API_BASE}/events/{event_id}")
+                            self.log("🧹 Test event cleaned up")
+                            return True
                         else:
-                            self.log_test("Verify Event Creation", False, 
-                                        f"Failed to retrieve events: HTTP {response.status_code}")
+                            self.log("❌ Created event not found in event list")
                             return False
                     else:
-                        self.log_test("POST /api/events", False, 
-                                    f"Invalid event response: {created_event}")
+                        self.log(f"❌ Failed to verify event list: {response.status_code}")
                         return False
                 else:
-                    self.log_test("POST /api/events", False, 
-                                f"HTTP {response.status_code}: {response.text}")
+                    self.log(f"❌ Event creation failed: {response.status_code} - {response.text}")
                     return False
             else:
-                self.log_test("GET /api/events", False, 
-                            f"HTTP {response.status_code}: {response.text}")
+                self.log(f"❌ GET /api/events returned non-array: {type(events)}")
                 return False
-                
-        except Exception as e:
-            self.log_test("Events API", False, f"Exception: {str(e)}")
+        else:
+            self.log(f"❌ GET /api/events failed: {response.status_code} - {response.text}")
             return False
     
     def run_all_tests(self):
-        """Run all tests in sequence"""
-        print("🚀 Starting CaseDesk AI v1.0.8 Backend Testing")
-        print(f"Backend URL: {BACKEND_URL}")
-        print(f"Test Credentials: {TEST_EMAIL}")
-        print("=" * 60)
+        """Run all backend tests"""
+        self.log("🚀 Starting CaseDesk AI v1.0.9 Backend Testing...")
+        self.log(f"🌐 Backend URL: {BACKEND_URL}")
+        self.log(f"👤 Test User: {TEST_EMAIL}")
         
-        # Run tests in order
-        tests = [
-            self.test_login,
-            self.test_suggest_for_case_endpoint,
-            self.test_tasks_api,
-            self.test_events_api
-        ]
+        results = {}
         
-        for test in tests:
-            test()
+        # Test 1: Login
+        results["login"] = self.test_login()
+        if not results["login"]:
+            self.log("❌ Login failed - cannot continue with other tests")
+            return results
+        
+        # Test 2: Document Download Token System
+        results["document_download_token"] = self.test_document_download_token_system()
+        
+        # Test 3: ZIP Download Endpoint
+        results["zip_download"] = self.test_zip_download_endpoint()
+        
+        # Test 4: Tasks API
+        results["tasks_api"] = self.test_tasks_api()
+        
+        # Test 5: Events API
+        results["events_api"] = self.test_events_api()
         
         # Summary
-        print("=" * 60)
-        print("📊 TEST SUMMARY")
-        print("=" * 60)
+        self.log("\n" + "="*60)
+        self.log("📊 TEST RESULTS SUMMARY")
+        self.log("="*60)
         
-        passed = sum(1 for result in self.test_results if result["success"])
-        total = len(self.test_results)
+        passed = 0
+        total = len(results)
         
-        for result in self.test_results:
-            status = "✅" if result["success"] else "❌"
-            print(f"{status} {result['test']}")
-            if result["details"] and not result["success"]:
-                print(f"   Error: {result['details']}")
+        for test_name, result in results.items():
+            status = "✅ PASS" if result else "❌ FAIL"
+            self.log(f"{test_name.replace('_', ' ').title()}: {status}")
+            if result:
+                passed += 1
         
-        print(f"\nResults: {passed}/{total} tests passed ({passed/total*100:.1f}%)")
+        self.log(f"\n🎯 Overall: {passed}/{total} tests passed ({(passed/total)*100:.1f}%)")
         
         if passed == total:
-            print("🎉 All tests passed!")
-            return True
+            self.log("🎉 ALL TESTS PASSED! CaseDesk AI v1.0.9 backend is working correctly.")
         else:
-            print("⚠️  Some tests failed!")
-            return False
-
-def main():
-    """Main function"""
-    tester = BackendTester()
-    success = tester.run_all_tests()
-    sys.exit(0 if success else 1)
+            self.log("⚠️ Some tests failed. Please check the issues above.")
+        
+        return results
 
 if __name__ == "__main__":
-    main()
+    tester = BackendTester()
+    results = tester.run_all_tests()
