@@ -1,6 +1,6 @@
 {
-  "version": "1.0.9",
+  "version": "1.1.0",
   "release_date": "2026-04-06",
-  "release_notes": "Dokumenten-Preview mit Token-Auth, ZIP-Download für alle Fall-Dokumente, KI Dokumentenvorschläge",
+  "release_notes": "KRITISCH: Backend-URL Fix für lokale Installationen, Dokumenten-Preview/Download behoben, ZIP-Download",
   "changelog_url": "https://raw.githubusercontent.com/AndiTrenter/CaseDesk-AI/main/CHANGELOG.md"
 }

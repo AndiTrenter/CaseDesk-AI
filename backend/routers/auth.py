@@ -17,7 +17,7 @@ router = APIRouter()
 
 @router.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "casedesk-backend", "version": "1.0.9"}
+    return {"status": "healthy", "service": "casedesk-backend", "version": "1.1.0"}
 
 
 @router.get("/setup/status", response_model=SetupStatus)
@@ -28,7 +28,7 @@ async def get_setup_status():
     return SetupStatus(
         is_configured=admin_count > 0,
         has_admin=admin_count > 0,
-        version="1.0.9"
+        version="1.1.0"
     )
 
 

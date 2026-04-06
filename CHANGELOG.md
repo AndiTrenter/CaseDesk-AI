@@ -13,6 +13,35 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 
 ---
 
+## [1.1.0] - 2026-04-06
+
+### 🔴 KRITISCHER FIX
+
+- 🔧 **Backend-URL für lokale Installationen korrigiert**
+  - `REACT_APP_BACKEND_URL` ist jetzt standardmäßig leer
+  - Frontend verwendet automatisch relative URLs (nginx proxy)
+  - Behebt: "Authentication required", "Failed to load tasks"
+  - Behebt: Dokument-Download/Preview funktioniert nicht
+
+### Neu hinzugefügt (aus v1.0.8-1.0.9)
+- 📦 **ZIP-Download** - Alle Dokumente eines Falls mit einem Klick herunterladen
+- 🤖 **KI-Dokumentenvorschläge** - KI schlägt passende Dokumente für Fälle vor
+- ✅ **Mehrfachauswahl** - Mehrere Dokumente auf einmal zu Fall hinzufügen
+- 🔐 **Token-basierte Downloads** - Sichere temporäre Tokens für Dokument-Zugriff
+
+### Behoben
+- 🔧 **"Failed to load tasks"** - Funktioniert jetzt auf lokalen Installationen
+- 🔧 **"Authentication required"** bei Downloads - Behoben
+- 🔧 **Dokumenten-Vorschau** - Zeigt jetzt PDFs und Bilder korrekt an
+- 🔧 **Settings-Persistence** - Einstellungen werden korrekt gespeichert
+
+### Upgrade-Hinweis
+Nach dem Update sollte alles automatisch funktionieren. Falls nicht:
+1. Container/Dienste neu starten
+2. Browser-Cache leeren (Strg+Shift+R)
+
+---
+
 ## [1.0.9] - 2026-04-06
 
 ### Neu hinzugefügt
