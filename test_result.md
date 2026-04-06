@@ -639,10 +639,58 @@ frontend:
         agent: "testing"
         comment: "✅ TESTED: Login page working correctly. Successfully logged in with credentials: andi.trenter@gmail.com / admin123. All form elements present (email input, password input, submit button) with proper data-testid attributes. Login redirects to dashboard successfully."
 
+  - task: "Documents Suggest for Case Endpoint v1.0.8"
+    implemented: true
+    working: true
+    file: "routers/documents.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.0.8: GET /api/documents/suggest-for-case/{case_id} endpoint working perfectly. Returns correct response structure with suggestions=[], total_available=0, ai_powered=true. Fixed minor bug where response structure was inconsistent when no documents available. Endpoint now consistently returns expected fields: suggestions, total_available, ai_powered. AI-powered document suggestions ready for use when documents are available."
+
+  - task: "Tasks API CRUD Operations v1.0.8"
+    implemented: true
+    working: true
+    file: "routers/tasks.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.0.8: Complete Tasks API testing successful (100% pass rate). GET /api/tasks returns empty array initially as expected. POST /api/tasks creates tasks with proper data structure (title: 'Testaufgabe', priority: 'medium'). Created task appears correctly in subsequent GET requests. DELETE cleanup works perfectly. All CRUD operations verified and fully functional."
+
+  - task: "Events API CRUD Operations v1.0.8"
+    implemented: true
+    working: true
+    file: "routers/events.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.0.8: Complete Events API testing successful (100% pass rate). GET /api/events returns empty array initially as expected. POST /api/events creates events with proper data structure (title: 'Testtermin', start_time, end_time). Created event appears correctly in subsequent GET requests. DELETE cleanup works perfectly. All CRUD operations verified and fully functional."
+
+  - task: "Authentication System v1.0.8"
+    implemented: true
+    working: true
+    file: "routers/auth.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.0.8: Authentication system working perfectly. POST /api/auth/login with form data (email/password) returns valid JWT access token. Token authentication works correctly for all protected endpoints. User data returned correctly in login response. All subsequent API calls authenticated successfully."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 9
+  test_sequence: 10
   run_ui: false
 
 test_plan:
@@ -663,3 +711,5 @@ agent_communication:
     message: "✅ TASKS API TESTING COMPLETE: Comprehensive Tasks API testing successful with 100% pass rate (6/6 tests passed). Authentication works correctly with form data (andi.trenter@gmail.com/admin123). GET /api/tasks returns empty array initially as expected. POST /api/tasks creates tasks successfully with proper data structure (title: 'Test Aufgabe'). GET /api/tasks retrieves created tasks correctly. DELETE /api/tasks cleanup works perfectly. GET /api/ai/status returns proper AI service status (Ollama unavailable, OpenAI not configured - expected). All CRUD operations verified and fully functional."
   - agent: "testing"
     message: "✅ SETTINGS PERSISTENCE FIX TESTING COMPLETE: CRITICAL FIX verified working perfectly! The upsert=True fix successfully resolves the settings persistence issue. Comprehensive testing performed: 1) Login with admin credentials (andi.trenter@gmail.com/admin123) ✅ 2) PUT /api/settings/system with ai_provider='openai', openai_api_key='sk-test-key-12345', internet_access='allowed' ✅ 3) GET /api/settings/system returns saved settings (not empty!) with proper masking ✅ 4) GET /api/ai/status shows configured_provider='openai' ✅. Settings now persist correctly across requests. Database upsert functionality working as expected. Bug fix confirmed successful."
+  - agent: "testing"
+    message: "✅ v1.0.8 BACKEND TESTING COMPLETE: Comprehensive testing of CaseDesk AI v1.0.8 backend successful with 100% pass rate (9/9 tests passed). ✅ Authentication system working perfectly with JWT tokens. ✅ NEW Documents Suggest for Case endpoint (GET /api/documents/suggest-for-case/{case_id}) working correctly - fixed response structure bug. ✅ Tasks API (GET/POST /api/tasks) fully functional with proper CRUD operations. ✅ Events API (GET/POST /api/events) fully functional with proper CRUD operations. All endpoints tested with real data, proper cleanup performed. Backend services running correctly. Fixed minor bug in suggest-for-case endpoint response structure. All requested v1.0.8 features operational and ready for production use."

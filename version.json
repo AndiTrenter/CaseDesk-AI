@@ -1,6 +1,6 @@
 {
-  "version": "1.0.7",
+  "version": "1.0.8",
   "release_date": "2026-04-06",
-  "release_notes": "KRITISCH: Settings-Speicherung repariert - OpenAI API-Key und KI-Einstellungen werden jetzt korrekt gespeichert",
+  "release_notes": "KI Dokumentenvorschläge für Fälle, verbesserte Mehrfachauswahl, Settings-Persistence Fix",
   "changelog_url": "https://raw.githubusercontent.com/AndiTrenter/CaseDesk-AI/main/CHANGELOG.md"
 }

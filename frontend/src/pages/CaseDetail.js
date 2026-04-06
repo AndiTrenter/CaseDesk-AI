@@ -60,6 +60,10 @@ export default function CaseDetail() {
   const [allDocuments, setAllDocuments] = useState([]);
   const [addDocDialogOpen, setAddDocDialogOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [selectedDocIds, setSelectedDocIds] = useState([]);
+  const [suggestingDocs, setSuggestingDocs] = useState(false);
+  const [suggestedDocs, setSuggestedDocs] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const fileInputRef = useRef(null);
   
   // Dialog states
@@ -138,17 +142,50 @@ export default function CaseDetail() {
     }
   };
   
-  const handleAddDocuments = async (docIds) => {
+  const handleSuggestDocuments = async () => {
+    setSuggestingDocs(true);
+    setShowSuggestions(true);
     try {
-      for (const docId of docIds) {
-        await documentUpdateAPI.update(docId, { case_id: caseId });
+      const response = await documentsAPI.suggestForCase(caseId);
+      if (response.data.suggestions) {
+        setSuggestedDocs(response.data.suggestions);
+        if (response.data.suggestions.length === 0) {
+          toast.info('Keine passenden Dokumente gefunden');
+        } else {
+          toast.success(`${response.data.suggestions.length} passende Dokumente gefunden`);
+        }
       }
+    } catch (error) {
+      console.error('Failed to suggest documents:', error);
+      toast.error('KI-Vorschläge konnten nicht geladen werden');
+    }
+    setSuggestingDocs(false);
+  };
+  
+  const handleAddDocuments = async (docIds) => {
+    if (!docIds || docIds.length === 0) {
+      toast.error('Bitte wählen Sie mindestens ein Dokument aus');
+      return;
+    }
+    try {
+      await documentsAPI.assignToCase(docIds, caseId);
       toast.success(`${docIds.length} Dokument(e) hinzugefügt`);
       setAddDocDialogOpen(false);
+      setShowSuggestions(false);
+      setSelectedDocIds([]);
+      setSuggestedDocs([]);
       loadCaseData();
     } catch (error) {
       toast.error('Hinzufügen fehlgeschlagen');
     }
+  };
+  
+  const toggleDocSelection = (docId) => {
+    setSelectedDocIds(prev => 
+      prev.includes(docId) 
+        ? prev.filter(id => id !== docId)
+        : [...prev, docId]
+    );
   };
   
   const handleRemoveDocument = async (docId) => {
@@ -639,7 +676,7 @@ export default function CaseDetail() {
         <TabsContent value="documents">
           <div className="space-y-4">
             {/* Document Actions */}
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <input
                 type="file"
                 ref={fileInputRef}
@@ -663,6 +700,7 @@ export default function CaseDetail() {
               <Button
                 onClick={() => {
                   loadAllDocuments();
+                  setSelectedDocIds([]);
                   setAddDocDialogOpen(true);
                 }}
                 className="btn-secondary"
@@ -670,7 +708,104 @@ export default function CaseDetail() {
                 <Link className="w-4 h-4 mr-2" />
                 Vorhandenes verknüpfen
               </Button>
+              <Button
+                onClick={handleSuggestDocuments}
+                disabled={suggestingDocs}
+                className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white"
+              >
+                {suggestingDocs ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4 mr-2" />
+                )}
+                KI Vorschläge
+              </Button>
             </div>
+            
+            {/* AI Suggestions Panel */}
+            {showSuggestions && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-gradient-to-br from-purple-500/10 to-indigo-500/10 border border-purple-500/20 rounded-xl p-4"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-white font-medium flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-purple-400" />
+                    KI-Dokumentenvorschläge
+                  </h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setShowSuggestions(false);
+                      setSuggestedDocs([]);
+                      setSelectedDocIds([]);
+                    }}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+                
+                {suggestingDocs ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+                    <span className="ml-3 text-gray-400">KI analysiert Dokumente...</span>
+                  </div>
+                ) : suggestedDocs.length === 0 ? (
+                  <p className="text-gray-500 text-center py-4">Keine passenden Dokumente gefunden</p>
+                ) : (
+                  <>
+                    <div className="space-y-2 max-h-64 overflow-y-auto mb-3">
+                      {suggestedDocs.map((doc) => (
+                        <label
+                          key={doc.id}
+                          className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                            selectedDocIds.includes(doc.id)
+                              ? 'border-purple-500 bg-purple-500/10'
+                              : 'border-white/10 hover:border-white/20'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedDocIds.includes(doc.id)}
+                            onChange={() => toggleDocSelection(doc.id)}
+                            className="mt-1 accent-purple-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white font-medium truncate">{doc.display_name}</p>
+                            {doc.reason && (
+                              <p className="text-purple-300 text-sm mt-1 flex items-center gap-1">
+                                <Lightbulb className="w-3 h-3" />
+                                {doc.reason}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                              {doc.sender && <span>Von: {doc.sender}</span>}
+                              {doc.document_date && <span>{doc.document_date}</span>}
+                            </div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="flex justify-between items-center pt-3 border-t border-white/10">
+                      <span className="text-sm text-gray-400">
+                        {selectedDocIds.length} von {suggestedDocs.length} ausgewählt
+                      </span>
+                      <Button
+                        onClick={() => handleAddDocuments(selectedDocIds)}
+                        disabled={selectedDocIds.length === 0}
+                        className="btn-primary"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Ausgewählte hinzufügen
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </motion.div>
+            )}
             
             {/* Documents List */}
             <div className="space-y-3">
@@ -1308,7 +1443,10 @@ export default function CaseDetail() {
       </Dialog>
 
       {/* Add Document Dialog */}
-      <Dialog open={addDocDialogOpen} onOpenChange={setAddDocDialogOpen}>
+      <Dialog open={addDocDialogOpen} onOpenChange={(open) => {
+        setAddDocDialogOpen(open);
+        if (!open) setSelectedDocIds([]);
+      }}>
         <DialogContent className="bg-[#121212] border-white/10 text-white max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Dokumente zum Fall hinzufügen</DialogTitle>
@@ -1323,21 +1461,38 @@ export default function CaseDetail() {
               </div>
             ) : (
               <>
-                <p className="text-gray-400 text-sm">Wählen Sie Dokumente aus, die zu diesem Fall hinzugefügt werden sollen:</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-gray-400 text-sm">Wählen Sie Dokumente aus, die zu diesem Fall hinzugefügt werden sollen:</p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      if (selectedDocIds.length === allDocuments.length) {
+                        setSelectedDocIds([]);
+                      } else {
+                        setSelectedDocIds(allDocuments.map(d => d.id));
+                      }
+                    }}
+                    className="text-gray-400 hover:text-white text-xs"
+                  >
+                    {selectedDocIds.length === allDocuments.length ? 'Alle abwählen' : 'Alle auswählen'}
+                  </Button>
+                </div>
                 <div className="space-y-2 max-h-96 overflow-y-auto">
                   {allDocuments.map((doc) => (
                     <label
                       key={doc.id}
-                      className="flex items-start gap-3 p-3 rounded-lg border border-white/10 hover:border-white/20 cursor-pointer transition-colors"
+                      className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                        selectedDocIds.includes(doc.id)
+                          ? 'border-blue-500 bg-blue-500/10'
+                          : 'border-white/10 hover:border-white/20'
+                      }`}
                     >
                       <input
                         type="checkbox"
-                        className="mt-1"
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            handleAddDocuments([doc.id]);
-                          }
-                        }}
+                        checked={selectedDocIds.includes(doc.id)}
+                        onChange={() => toggleDocSelection(doc.id)}
+                        className="mt-1 accent-blue-500"
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-white font-medium truncate">
@@ -1357,10 +1512,23 @@ export default function CaseDetail() {
               </>
             )}
             
-            <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-              <Button variant="ghost" onClick={() => setAddDocDialogOpen(false)} className="text-gray-400">
-                Schließen
-              </Button>
+            <div className="flex justify-between items-center pt-4 border-t border-white/5">
+              <span className="text-sm text-gray-400">
+                {selectedDocIds.length > 0 && `${selectedDocIds.length} ausgewählt`}
+              </span>
+              <div className="flex gap-3">
+                <Button variant="ghost" onClick={() => setAddDocDialogOpen(false)} className="text-gray-400">
+                  Abbrechen
+                </Button>
+                <Button 
+                  onClick={() => handleAddDocuments(selectedDocIds)}
+                  disabled={selectedDocIds.length === 0}
+                  className="btn-primary"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  {selectedDocIds.length} Dokument(e) hinzufügen
+                </Button>
+              </div>
             </div>
           </div>
         </DialogContent>

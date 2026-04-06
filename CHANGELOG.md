@@ -13,6 +13,27 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 
 ---
 
+## [1.0.8] - 2026-04-06
+
+### Neu hinzugefügt
+- 🤖 **KI-Dokumentenvorschläge für Fälle**
+  - Neuer Button "KI Vorschläge" bei Falldetails → Dokumente
+  - KI analysiert den Fall und schlägt passende unverknüpfte Dokumente vor
+  - Zeigt Begründung warum das Dokument relevant sein könnte
+  - Neuer API-Endpoint: `GET /api/documents/suggest-for-case/{case_id}`
+
+- ✅ **Verbesserte Mehrfachauswahl bei Dokumenten**
+  - Dokumente können nun gesammelt und dann alle auf einmal hinzugefügt werden
+  - "Alle auswählen" / "Alle abwählen" Button
+  - Anzeige wie viele Dokumente ausgewählt sind
+  - Bestätigungsbutton um alle ausgewählten Dokumente hinzuzufügen
+
+### Verbessert
+- 📄 Dialog "Vorhandenes verknüpfen" mit echter Mehrfachauswahl
+- 🎨 Visuelle Hervorhebung ausgewählter Dokumente
+
+---
+
 ## [1.0.7] - 2026-04-06
 
 ### 🔴 KRITISCHER BUGFIX

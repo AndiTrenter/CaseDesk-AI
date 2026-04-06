@@ -130,6 +130,15 @@ export const documentsAPI = {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
+  suggestForCase: (caseId) => api.get(`/documents/suggest-for-case/${caseId}`, { timeout: 60000 }),
+  assignToCase: (documentIds, caseId) => {
+    const formData = new FormData();
+    formData.append('document_ids', JSON.stringify(documentIds));
+    formData.append('case_id', caseId);
+    return api.post('/documents/assign-case', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
 };
 
 // Tasks

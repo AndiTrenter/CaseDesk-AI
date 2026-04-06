@@ -599,3 +599,163 @@ async def assign_documents_to_case(
     
     await log_action(user["id"], "assign_documents", "case", case_id, {"count": updated})
     return {"success": True, "updated": updated}
+
+
+@router.get("/documents/suggest-for-case/{case_id}")
+async def suggest_documents_for_case(
+    case_id: str,
+    user: dict = Depends(require_auth)
+):
+    """KI-basierte Suche nach passenden Dokumenten für einen Fall"""
+    case = await db.cases.find_one({"id": case_id, "user_id": user["id"]})
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    
+    # Get all user's documents that are NOT in this case
+    all_docs = await db.documents.find({
+        "user_id": user["id"],
+        "$or": [{"case_id": {"$exists": False}}, {"case_id": ""}, {"case_id": None}]
+    }).to_list(500)
+    
+    if not all_docs:
+        # Get AI settings for consistent response structure
+        settings = await db.system_settings.find_one({}, {"_id": 0})
+        ai_provider = settings.get("ai_provider", "ollama") if settings else "ollama"
+        openai_key = settings.get("openai_api_key") if settings else None
+        
+        return {
+            "suggestions": [], 
+            "total_available": 0,
+            "ai_powered": ai_provider == "openai" and openai_key is not None,
+            "message": "Keine weiteren Dokumente verfügbar"
+        }
+    
+    # Get case documents for context
+    case_docs = await db.documents.find({"case_id": case_id}).to_list(100)
+    
+    # Build case context
+    case_context = f"Fall: {case.get('title', 'Unbekannt')}\n"
+    case_context += f"Beschreibung: {case.get('description', '')}\n"
+    case_context += f"Typ: {case.get('type', '')}\n"
+    
+    if case_docs:
+        case_context += "\nBereits verknüpfte Dokumente:\n"
+        for doc in case_docs[:5]:
+            case_context += f"- {doc.get('display_name', doc.get('original_filename', ''))} "
+            if doc.get('sender'):
+                case_context += f"(Von: {doc['sender']}) "
+            if doc.get('ai_summary'):
+                case_context += f"- {doc['ai_summary'][:100]}"
+            case_context += "\n"
+    
+    # Try to use AI for smart matching
+    settings = await db.system_settings.find_one({}, {"_id": 0})
+    ai_provider = settings.get("ai_provider", "ollama") if settings else "ollama"
+    openai_key = settings.get("openai_api_key") if settings else None
+    
+    suggestions = []
+    
+    if ai_provider == "openai" and openai_key:
+        try:
+            import openai
+            client = openai.OpenAI(api_key=openai_key)
+            
+            # Build document list for AI
+            doc_list = []
+            for i, doc in enumerate(all_docs[:50]):  # Limit to 50 docs
+                doc_info = {
+                    "index": i,
+                    "id": doc["id"],
+                    "name": doc.get("display_name", doc.get("original_filename", "")),
+                    "sender": doc.get("sender", ""),
+                    "date": doc.get("document_date", ""),
+                    "summary": doc.get("ai_summary", "")[:200] if doc.get("ai_summary") else "",
+                    "keywords": doc.get("keywords", [])[:5]
+                }
+                doc_list.append(doc_info)
+            
+            prompt = f"""Analysiere den folgenden Fall und die verfügbaren Dokumente. 
+Identifiziere welche Dokumente zu diesem Fall passen könnten.
+
+FALL-KONTEXT:
+{case_context}
+
+VERFÜGBARE DOKUMENTE:
+{json.dumps(doc_list, ensure_ascii=False, indent=2)}
+
+Antworte NUR mit einem JSON-Array der passenden Dokument-IDs und einer kurzen Begründung.
+Format: [{{"id": "...", "reason": "..."}}]
+Wähle maximal 10 Dokumente aus, die am relevantesten sind.
+Wenn keine passenden Dokumente gefunden werden, antworte mit: []"""
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "Du bist ein Dokumenten-Analyst für Rechtsfälle. Antworte nur mit validem JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=1500,
+                temperature=0.3
+            )
+            
+            ai_response = response.choices[0].message.content.strip()
+            # Clean up response
+            if ai_response.startswith("```"):
+                ai_response = ai_response.split("\n", 1)[1].rsplit("```", 1)[0]
+            
+            suggested_ids = json.loads(ai_response)
+            
+            for suggestion in suggested_ids:
+                doc = next((d for d in all_docs if d["id"] == suggestion.get("id")), None)
+                if doc:
+                    suggestions.append({
+                        "id": doc["id"],
+                        "display_name": doc.get("display_name", doc.get("original_filename", "")),
+                        "sender": doc.get("sender"),
+                        "document_date": doc.get("document_date"),
+                        "ai_summary": doc.get("ai_summary"),
+                        "reason": suggestion.get("reason", "Möglicherweise relevant")
+                    })
+                    
+        except Exception as e:
+            logger.error(f"AI document suggestion error: {e}")
+            # Fallback to keyword matching
+    
+    # Fallback: Simple keyword matching if AI fails or not available
+    if not suggestions:
+        case_keywords = case.get("title", "").lower().split() + case.get("description", "").lower().split()
+        case_keywords = [k for k in case_keywords if len(k) > 3]
+        
+        for doc in all_docs:
+            score = 0
+            doc_text = (
+                (doc.get("display_name", "") or "") + " " +
+                (doc.get("ai_summary", "") or "") + " " +
+                (doc.get("sender", "") or "") + " " +
+                " ".join(doc.get("keywords", []) or [])
+            ).lower()
+            
+            for keyword in case_keywords:
+                if keyword in doc_text:
+                    score += 1
+            
+            if score > 0:
+                suggestions.append({
+                    "id": doc["id"],
+                    "display_name": doc.get("display_name", doc.get("original_filename", "")),
+                    "sender": doc.get("sender"),
+                    "document_date": doc.get("document_date"),
+                    "ai_summary": doc.get("ai_summary"),
+                    "reason": f"Übereinstimmende Begriffe: {score}",
+                    "score": score
+                })
+        
+        # Sort by score
+        suggestions.sort(key=lambda x: x.get("score", 0), reverse=True)
+        suggestions = suggestions[:10]
+    
+    return {
+        "suggestions": suggestions,
+        "total_available": len(all_docs),
+        "ai_powered": ai_provider == "openai" and openai_key is not None
+    }
