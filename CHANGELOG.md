@@ -13,6 +13,35 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 
 ---
 
+## [1.0.7] - 2026-04-06
+
+### 🔴 KRITISCHER BUGFIX
+
+- 🔧 **Settings werden jetzt korrekt gespeichert**
+  - OpenAI API-Key wird nicht mehr "vergessen"
+  - KI-Provider Einstellungen werden persistent gespeichert
+  - Problem: Bei frischer Installation wurden Einstellungen nicht in DB geschrieben
+  - Lösung: `upsert=True` zu MongoDB update_one() hinzugefügt
+
+### Behoben
+- ⚙️ **PUT /api/settings/system** - Einstellungen werden jetzt mit upsert=True gespeichert
+- ⚙️ **PUT /api/settings/storage** - Speicherlimits werden jetzt mit upsert=True gespeichert
+- 🤖 **KI-Service Aktivierung** - Nach dem Speichern ist der KI-Service sofort verfügbar
+
+### Was jetzt funktioniert
+- ✅ OpenAI API-Key speichern und verwenden
+- ✅ KI-Assistent kann Termine und Aufgaben aus dem Chat erstellen
+- ✅ Automatische Frist-/Termin-Erkennung aus hochgeladenen Dokumenten
+- ✅ Dokumente werden automatisch analysiert
+
+### Upgrade-Hinweis
+Nach dem Update müssen Sie Ihre KI-Einstellungen **einmal neu speichern**:
+1. Einstellungen → KI-Konfiguration
+2. OpenAI auswählen + API-Key eingeben
+3. "Speichern" klicken
+
+---
+
 ## [1.0.4] - 2025-07-26
 
 ### Hinzugefügt

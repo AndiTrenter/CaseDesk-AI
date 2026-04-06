@@ -1,6 +1,6 @@
 {
-  "version": "1.0.6",
-  "release_date": "2025-07-29",
-  "release_notes": "Tasks-Bug behoben (500-Fehler), KI kombinierte Aktionen, Kalender-Erinnerungen, Dokument-Vorschau",
+  "version": "1.0.7",
+  "release_date": "2026-04-06",
+  "release_notes": "KRITISCH: Settings-Speicherung repariert - OpenAI API-Key und KI-Einstellungen werden jetzt korrekt gespeichert",
   "changelog_url": "https://raw.githubusercontent.com/AndiTrenter/CaseDesk-AI/main/CHANGELOG.md"
 }
