@@ -13,6 +13,44 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 
 ---
 
+## [1.1.4] - 2026-04-07
+
+### Neu hinzugefügt
+
+- 📊 **Excel-Formate lesen**
+  - `.xlsx` (Excel 2007+) - Vollständige Textextraktion mit Tabellen
+  - `.xls` (Excel 97-2003) - Legacy Excel-Dateien
+  - `.ods` (OpenDocument Spreadsheet) - LibreOffice Calc
+
+- 📝 **Word-Dokumente erstellen**
+  - Neuer API-Endpoint: `POST /api/documents/generate-word`
+  - **Brief-Vorlage**: Formeller Brief mit Absender, Empfänger, Datum, Betreff
+  - **Bericht-Vorlage**: Einfaches Dokument mit Titel und Inhalt
+  - **Vertrag-Vorlage**: Dokument mit Parteien und Unterschriftsbereich
+  - Generierte Dokumente werden automatisch in der Dokumentenbibliothek gespeichert
+
+### Unterstützte Dokumentformate (komplett)
+
+| Kategorie | Format | Dateiendung | Lesen | Erstellen |
+|-----------|--------|-------------|-------|-----------|
+| **Text** | Word 2007+ | .docx | ✅ | ✅ |
+| | Word Legacy | .doc | ✅ | ❌ |
+| | OpenDocument | .odt | ✅ | ❌ |
+| | Rich Text | .rtf | ✅ | ❌ |
+| | Plain Text | .txt, .md | ✅ | ❌ |
+| **Tabellen** | Excel 2007+ | .xlsx | ✅ | ❌ |
+| | Excel Legacy | .xls | ✅ | ❌ |
+| | OpenDocument | .ods | ✅ | ❌ |
+| **Bilder** | PNG/JPG/TIFF | .png, .jpg | ✅ (OCR) | ❌ |
+| **PDF** | PDF | .pdf | ✅ (OCR) | ❌ |
+
+### Neue Python-Abhängigkeiten
+- `openpyxl` - Excel 2007+ Unterstützung
+- `xlrd` - Excel 97-2003 Unterstützung
+- `odfpy` - OpenDocument Unterstützung
+
+---
+
 ## [1.1.3] - 2026-04-07
 
 ### Neu hinzugefügt

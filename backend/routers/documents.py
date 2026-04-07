@@ -106,6 +106,77 @@ def extract_text_from_txt(content: bytes) -> str:
     return ""
 
 
+
+def extract_text_from_xlsx(content: bytes) -> str:
+    """Extract text from .xlsx (Excel 2007+) files"""
+    try:
+        from openpyxl import load_workbook
+        wb = load_workbook(io.BytesIO(content), data_only=True)
+        
+        text_parts = []
+        for sheet_name in wb.sheetnames:
+            sheet = wb[sheet_name]
+            text_parts.append(f"=== Tabelle: {sheet_name} ===")
+            
+            for row in sheet.iter_rows():
+                row_text = []
+                for cell in row:
+                    if cell.value is not None:
+                        row_text.append(str(cell.value))
+                if row_text:
+                    text_parts.append(" | ".join(row_text))
+        
+        return "\n".join(text_parts)
+    except Exception as e:
+        logger.warning(f"XLSX extraction failed: {e}")
+    return ""
+
+
+def extract_text_from_xls(content: bytes) -> str:
+    """Extract text from .xls (Excel 97-2003) files"""
+    try:
+        import xlrd
+        wb = xlrd.open_workbook(file_contents=content)
+        
+        text_parts = []
+        for sheet_name in wb.sheet_names():
+            sheet = wb.sheet_by_name(sheet_name)
+            text_parts.append(f"=== Tabelle: {sheet_name} ===")
+            
+            for row_idx in range(sheet.nrows):
+                row_text = []
+                for col_idx in range(sheet.ncols):
+                    cell_value = sheet.cell_value(row_idx, col_idx)
+                    if cell_value:
+                        row_text.append(str(cell_value))
+                if row_text:
+                    text_parts.append(" | ".join(row_text))
+        
+        return "\n".join(text_parts)
+    except Exception as e:
+        logger.warning(f"XLS extraction failed: {e}")
+    return ""
+
+
+def extract_text_from_ods(content: bytes) -> str:
+    """Extract text from .ods (OpenDocument Spreadsheet) files"""
+    try:
+        from odf import text as odf_text
+        from odf.opendocument import load
+        
+        doc = load(io.BytesIO(content))
+        text_parts = []
+        
+        # Extract all text from the spreadsheet
+        for element in doc.getElementsByType(odf_text.P):
+            if element.firstChild:
+                text_parts.append(str(element))
+        
+        return "\n".join(text_parts)
+    except Exception as e:
+        logger.warning(f"ODS extraction failed: {e}")
+    return ""
+
 def extract_text_from_pdf(content: bytes) -> str:
     """Fallback: Extract text directly from PDF, with OCR for scanned pages"""
     text_parts = []
@@ -197,6 +268,27 @@ async def try_ocr_or_fallback(filename: str, content: bytes, mime_type: str) -> 
     if mime_type.startswith("text/") or file_ext in [".txt", ".csv", ".md", ".log"]:
         logger.info(f"Extracting text from TXT: {filename}")
         ocr_text = extract_text_from_txt(content)
+        if ocr_text:
+            return ocr_text
+    
+    # Handle Excel files (.xlsx)
+    if mime_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" or file_ext == ".xlsx":
+        logger.info(f"Extracting text from XLSX: {filename}")
+        ocr_text = extract_text_from_xlsx(content)
+        if ocr_text:
+            return ocr_text
+    
+    # Handle older Excel files (.xls)
+    if mime_type == "application/vnd.ms-excel" or file_ext == ".xls":
+        logger.info(f"Extracting text from XLS: {filename}")
+        ocr_text = extract_text_from_xls(content)
+        if ocr_text:
+            return ocr_text
+    
+    # Handle OpenDocument Spreadsheet (.ods)
+    if mime_type == "application/vnd.oasis.opendocument.spreadsheet" or file_ext == ".ods":
+        logger.info(f"Extracting text from ODS: {filename}")
+        ocr_text = extract_text_from_ods(content)
         if ocr_text:
             return ocr_text
 
@@ -920,4 +1012,194 @@ Wenn keine passenden Dokumente gefunden werden, antworte mit: []"""
         "suggestions": suggestions,
         "total_available": len(all_docs),
         "ai_powered": ai_provider == "openai" and openai_key is not None
+    }
+
+
+@router.post("/documents/generate-word")
+async def generate_word_document(
+    title: str = Form(...),
+    content: str = Form(...),
+    template: str = Form("letter"),  # letter, report, contract
+    recipient_name: str = Form(None),
+    recipient_address: str = Form(None),
+    sender_name: str = Form(None),
+    sender_address: str = Form(None),
+    date_str: str = Form(None),
+    subject: str = Form(None),
+    case_id: str = Form(None),
+    user: dict = Depends(require_auth)
+):
+    """Generate a Word document from content
+    
+    Templates:
+    - letter: Formal letter with sender, recipient, date, subject
+    - report: Simple document with title and content
+    - contract: Document with parties and terms
+    """
+    from docx import Document
+    from docx.shared import Pt, Inches
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    
+    doc = Document()
+    
+    # Set default font
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'Arial'
+    font.size = Pt(11)
+    
+    if template == "letter":
+        # === LETTER TEMPLATE ===
+        
+        # Sender (top right)
+        if sender_name or sender_address:
+            sender_para = doc.add_paragraph()
+            sender_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            if sender_name:
+                sender_para.add_run(sender_name + "\n")
+            if sender_address:
+                for line in sender_address.split("\n"):
+                    sender_para.add_run(line + "\n")
+            doc.add_paragraph()
+        
+        # Recipient (left)
+        if recipient_name or recipient_address:
+            recipient_para = doc.add_paragraph()
+            if recipient_name:
+                recipient_para.add_run(recipient_name + "\n")
+            if recipient_address:
+                for line in recipient_address.split("\n"):
+                    recipient_para.add_run(line + "\n")
+            doc.add_paragraph()
+        
+        # Date (right)
+        date_para = doc.add_paragraph()
+        date_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        date_para.add_run(date_str or datetime.now().strftime("%d.%m.%Y"))
+        doc.add_paragraph()
+        
+        # Subject (bold)
+        if subject:
+            subject_para = doc.add_paragraph()
+            subject_run = subject_para.add_run(subject)
+            subject_run.bold = True
+            doc.add_paragraph()
+        
+        # Content
+        for paragraph in content.split("\n\n"):
+            if paragraph.strip():
+                doc.add_paragraph(paragraph.strip())
+        
+        # Signature area
+        doc.add_paragraph()
+        doc.add_paragraph()
+        doc.add_paragraph("Mit freundlichen Grüßen")
+        doc.add_paragraph()
+        doc.add_paragraph()
+        if sender_name:
+            doc.add_paragraph(sender_name)
+    
+    elif template == "report":
+        # === REPORT TEMPLATE ===
+        
+        # Title
+        title_para = doc.add_heading(title, 0)
+        title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # Date
+        date_para = doc.add_paragraph()
+        date_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        date_para.add_run(date_str or datetime.now().strftime("%d.%m.%Y"))
+        doc.add_paragraph()
+        
+        # Content
+        for paragraph in content.split("\n\n"):
+            if paragraph.strip():
+                doc.add_paragraph(paragraph.strip())
+    
+    else:  # contract or default
+        # === CONTRACT/DEFAULT TEMPLATE ===
+        
+        # Title
+        title_para = doc.add_heading(title, 0)
+        title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        doc.add_paragraph()
+        
+        # Parties
+        if sender_name and recipient_name:
+            parties_para = doc.add_paragraph()
+            parties_para.add_run("Zwischen:\n").bold = True
+            parties_para.add_run(f"{sender_name}\n")
+            if sender_address:
+                parties_para.add_run(f"{sender_address}\n")
+            parties_para.add_run("\nund\n\n").bold = True
+            parties_para.add_run(f"{recipient_name}\n")
+            if recipient_address:
+                parties_para.add_run(f"{recipient_address}\n")
+            doc.add_paragraph()
+        
+        # Content
+        for paragraph in content.split("\n\n"):
+            if paragraph.strip():
+                doc.add_paragraph(paragraph.strip())
+        
+        # Signature area
+        doc.add_paragraph()
+        doc.add_paragraph()
+        sig_table = doc.add_table(rows=3, cols=2)
+        sig_table.cell(0, 0).text = "Ort, Datum"
+        sig_table.cell(0, 1).text = "Ort, Datum"
+        sig_table.cell(2, 0).text = sender_name or "_______________"
+        sig_table.cell(2, 1).text = recipient_name or "_______________"
+    
+    # Save to bytes
+    doc_buffer = io.BytesIO()
+    doc.save(doc_buffer)
+    doc_buffer.seek(0)
+    
+    # Save to file system
+    doc_id = str(uuid.uuid4())
+    safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip()[:50]
+    filename = f"{safe_title}_{datetime.now().strftime('%Y%m%d')}.docx"
+    storage_filename = f"{doc_id}.docx"
+    storage_path = os.path.join(UPLOAD_DIR, storage_filename)
+    
+    async with aiofiles.open(storage_path, 'wb') as f:
+        await f.write(doc_buffer.getvalue())
+    
+    # Create document record
+    document = {
+        "id": doc_id,
+        "user_id": user["id"],
+        "original_filename": filename,
+        "display_name": filename,
+        "storage_path": storage_path,
+        "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "file_size": len(doc_buffer.getvalue()),
+        "document_type": template,
+        "ocr_text": content,  # Store the content as OCR text for searchability
+        "ocr_processed": True,
+        "ai_analyzed": False,
+        "tags": ["generiert", template],
+        "case_id": case_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.documents.insert_one(document)
+    await log_action(user["id"], "generate_document", "document", doc_id, {"filename": filename, "template": template})
+    
+    # If case_id, link to case
+    if case_id:
+        await db.cases.update_one(
+            {"id": case_id},
+            {"$addToSet": {"document_ids": doc_id}}
+        )
+    
+    return {
+        "success": True,
+        "document_id": doc_id,
+        "filename": filename,
+        "message": f"Dokument '{filename}' wurde erstellt"
     }

@@ -166,6 +166,17 @@ export const documentsAPI = {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
+  generateWord: (data) => {
+    const formData = new FormData();
+    Object.keys(data).forEach(key => {
+      if (data[key] !== null && data[key] !== undefined) {
+        formData.append(key, data[key]);
+      }
+    });
+    return api.post('/documents/generate-word', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
 };
 
 // Tasks
