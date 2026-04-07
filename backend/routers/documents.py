@@ -419,41 +419,57 @@ async def reprocess_document(document_id: str, force: bool = False, user: dict =
             logger.warning(f"OCR reprocess error: {e}")
     
     if ocr_text:
-        from ai_service import get_ai_service, DocumentAnalyzer
-        ai_service = await get_ai_service(db)
-        analyzer = DocumentAnalyzer(ai_service)
+        # Always save the extracted text first
+        update_data = {
+            "ocr_text": ocr_text,
+            "ocr_processed": True,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
         
-        analysis = await analyzer.analyze_document(ocr_text, document["original_filename"])
+        # Try AI analysis (may fail if AI service not available)
+        try:
+            from ai_service import get_ai_service, DocumentAnalyzer
+            ai_service = await get_ai_service(db)
+            analyzer = DocumentAnalyzer(ai_service)
+            
+            analysis = await analyzer.analyze_document(ocr_text, document["original_filename"])
+            
+            if analysis.get("success"):
+                metadata = analysis.get("metadata", {})
+                new_display_name = analysis.get("new_filename", document["display_name"])
+                
+                update_data.update({
+                    "ai_analyzed": True,
+                    "display_name": new_display_name,
+                    "tags": metadata.get("tags", []),
+                    "ai_summary": metadata.get("zusammenfassung"),
+                    "sender": metadata.get("absender"),
+                    "deadlines": metadata.get("fristen", []),
+                    "metadata": metadata,
+                })
+                
+                if metadata.get("datum") and metadata["datum"] != "null":
+                    update_data["document_date"] = metadata["datum"]
+                
+                # Create events from deadlines
+                from routers.events import create_events_from_deadlines
+                await create_events_from_deadlines(
+                    user["id"], metadata.get("fristen", []),
+                    new_display_name, document.get("case_id"), document_id
+                )
+        except Exception as e:
+            logger.warning(f"AI analysis failed, but text extraction succeeded: {e}")
         
-        if analysis.get("success"):
-            metadata = analysis.get("metadata", {})
-            new_display_name = analysis.get("new_filename", document["display_name"])
-            
-            update_data = {
-                "ocr_text": ocr_text,
-                "ocr_processed": True,
-                "ai_analyzed": True,
-                "display_name": new_display_name,
-                "tags": metadata.get("tags", []),
-                "ai_summary": metadata.get("zusammenfassung"),
-                "sender": metadata.get("absender"),
-                "deadlines": metadata.get("fristen", []),
-                "metadata": metadata,
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }
-            
-            if metadata.get("datum") and metadata["datum"] != "null":
-                update_data["document_date"] = metadata["datum"]
-            
-            await db.documents.update_one({"id": document_id}, {"$set": update_data})
-            
-            from routers.events import create_events_from_deadlines
-            await create_events_from_deadlines(
-                user["id"], metadata.get("fristen", []),
-                new_display_name, document.get("case_id"), document_id
-            )
-            
-            return {"success": True, "message": "Document reprocessed", "display_name": new_display_name}
+        # Update document with extracted text (and AI analysis if successful)
+        await db.documents.update_one({"id": document_id}, {"$set": update_data})
+        
+        return {
+            "success": True, 
+            "message": "Document reprocessed", 
+            "display_name": update_data.get("display_name", document["display_name"]),
+            "text_extracted": len(ocr_text),
+            "ai_analyzed": update_data.get("ai_analyzed", False)
+        }
     
     return {"success": False, "error": "No text to process"}
 
