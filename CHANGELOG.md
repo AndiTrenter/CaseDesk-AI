@@ -13,6 +13,46 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 
 ---
 
+## [1.1.5] - 2026-04-07
+
+### 🔴 KRITISCHER FIX - Tasks & Kalender für lokale Installationen
+
+- 🔧 **API-URL Erkennung komplett überarbeitet**
+  - Lokale Installationen (IP-Adressen wie 192.168.x.x, 10.x.x.x, localhost) verwenden IMMER relative URLs
+  - Preview-Umgebungen verwenden IMMER die konfigurierte URL
+  - **Behebt endgültig:**
+    - "Failed to load tasks"
+    - Kalendereinträge nicht sichtbar
+    - Alle API-Fehler auf lokalen Installationen
+
+### Technische Details
+```javascript
+// Neue robuste Erkennung in api.js:
+const isLocalInstallation = 
+  currentHostname === 'localhost' ||
+  currentHostname.startsWith('192.168.') ||
+  currentHostname.startsWith('10.') ||
+  /^\d+\.\d+\.\d+\.\d+$/.test(currentHostname);
+
+if (isLocalInstallation) {
+  return '';  // Relative URLs -> nginx proxy
+}
+```
+
+### ⚠️ WICHTIG für Updates
+Nach dem Update müssen Sie die **Docker-Images neu bauen**:
+```bash
+# Auf Ihrem Unraid/Server:
+cd /path/to/casedesk
+docker compose down
+docker compose build --no-cache frontend
+docker compose up -d
+```
+
+Oder über Portainer: Container stoppen → Image löschen → Neu erstellen
+
+---
+
 ## [1.1.4] - 2026-04-07
 
 ### Neu hinzugefügt

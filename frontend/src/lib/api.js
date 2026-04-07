@@ -1,31 +1,36 @@
 import axios from 'axios';
 
 // Determine the correct API URL
-// - If REACT_APP_BACKEND_URL is set and we're on that domain, use it
-// - Otherwise use relative URLs (for local installations with nginx proxy)
+// CRITICAL: For local installations (IP addresses, localhost), ALWAYS use relative URLs
+// Only use REACT_APP_BACKEND_URL when actually on the preview domain
 const getApiUrl = () => {
-  const envUrl = process.env.REACT_APP_BACKEND_URL;
+  const currentHostname = window.location.hostname;
+  const currentPort = window.location.port;
   
-  // If no env URL or we're not on the preview domain, use relative URLs
-  if (!envUrl) {
+  // Check if this is a local installation (IP address or localhost)
+  const isLocalInstallation = 
+    currentHostname === 'localhost' ||
+    currentHostname === '127.0.0.1' ||
+    currentHostname.startsWith('192.168.') ||
+    currentHostname.startsWith('10.') ||
+    currentHostname.startsWith('172.') ||
+    /^\d+\.\d+\.\d+\.\d+$/.test(currentHostname);  // Any IP address
+  
+  // For local installations, ALWAYS use relative URLs (nginx proxy handles routing)
+  if (isLocalInstallation) {
+    console.log('[API] Local installation detected, using relative URLs');
     return '';
   }
   
-  // Check if we're actually on the preview domain
-  try {
-    const envHostname = new URL(envUrl).hostname;
-    const currentHostname = window.location.hostname;
-    
-    // If we're on the preview domain, use the env URL
-    if (currentHostname === envHostname || 
-        currentHostname.includes('preview.emergentagent.com')) {
-      return envUrl;
-    }
-  } catch (e) {
-    // URL parsing failed, use relative
+  // Only use env URL on actual preview/production domains
+  const envUrl = process.env.REACT_APP_BACKEND_URL;
+  if (envUrl && currentHostname.includes('emergentagent.com')) {
+    console.log('[API] Preview environment, using:', envUrl);
+    return envUrl;
   }
   
-  // For local installations (IP addresses, localhost, etc.), use relative URLs
+  // Default to relative URLs for any other case
+  console.log('[API] Using relative URLs');
   return '';
 };
 

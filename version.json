@@ -1,6 +1,6 @@
 {
-  "version": "1.1.4",
+  "version": "1.1.5",
   "release_date": "2026-04-07",
-  "release_notes": "Excel-Formate lesen (.xlsx, .xls, .ods) + Word-Dokumente erstellen (Briefe, Berichte, Verträge)",
+  "release_notes": "KRITISCH: API-URL Fix für lokale Installationen - Tasks und Kalender funktionieren jetzt",
   "changelog_url": "https://raw.githubusercontent.com/AndiTrenter/CaseDesk-AI/main/CHANGELOG.md"
 }
