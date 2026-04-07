@@ -4,43 +4,50 @@ import axios from 'axios';
 // CRITICAL: For local installations (IP addresses, localhost), ALWAYS use relative URLs
 // Only use REACT_APP_BACKEND_URL when actually on the preview domain
 const getApiUrl = () => {
-  const currentHostname = window.location.hostname;
-  const currentPort = window.location.port;
+  const currentHostname = window.location.hostname || '';
+  const currentPort = window.location.port || '';
+  
+  // Debug logging for troubleshooting
+  console.log('[CaseDesk API] Current hostname:', currentHostname);
+  console.log('[CaseDesk API] Current port:', currentPort);
   
   // Check if this is a local installation (IP address or localhost)
   const isLocalInstallation = 
+    !currentHostname ||
     currentHostname === 'localhost' ||
     currentHostname === '127.0.0.1' ||
     currentHostname.startsWith('192.168.') ||
     currentHostname.startsWith('10.') ||
     currentHostname.startsWith('172.') ||
-    /^\d+\.\d+\.\d+\.\d+$/.test(currentHostname);  // Any IP address
+    /^(\d{1,3}\.){3}\d{1,3}$/.test(currentHostname);  // Any IPv4 address
   
   // For local installations, ALWAYS use relative URLs (nginx proxy handles routing)
   if (isLocalInstallation) {
-    console.log('[API] Local installation detected, using relative URLs');
+    console.log('[CaseDesk API] ✅ Local installation - using relative URLs');
     return '';
   }
   
   // Only use env URL on actual preview/production domains
   const envUrl = process.env.REACT_APP_BACKEND_URL;
   if (envUrl && currentHostname.includes('emergentagent.com')) {
-    console.log('[API] Preview environment, using:', envUrl);
+    console.log('[CaseDesk API] ☁️ Preview environment - using:', envUrl);
     return envUrl;
   }
   
   // Default to relative URLs for any other case
-  console.log('[API] Using relative URLs');
+  console.log('[CaseDesk API] 🔄 Fallback - using relative URLs');
   return '';
 };
 
 const API_URL = getApiUrl();
+console.log('[CaseDesk API] Final baseURL:', `${API_URL}/api` || '/api (relative)');
 
 const api = axios.create({
   baseURL: `${API_URL}/api`,
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 30000,
 });
 
 // Request interceptor - add auth token

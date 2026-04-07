@@ -1,6 +1,6 @@
 {
-  "version": "1.1.5",
+  "version": "1.1.6",
   "release_date": "2026-04-07",
-  "release_notes": "KRITISCH: API-URL Fix für lokale Installationen - Tasks und Kalender funktionieren jetzt",
+  "release_notes": "Setup-Fix: Verbesserte API-URL Erkennung mit Debug-Logging",
   "changelog_url": "https://raw.githubusercontent.com/AndiTrenter/CaseDesk-AI/main/CHANGELOG.md"
 }
