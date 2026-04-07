@@ -11,12 +11,99 @@ import httpx
 import aiofiles
 import logging
 import io
+import zipfile
+import xml.etree.ElementTree as ET
 
 from deps import db, require_auth, log_action, UPLOAD_DIR, OCR_SERVICE_URL, create_download_token, verify_download_token
 from models import Document
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def extract_text_from_docx(content: bytes) -> str:
+    """Extract text from .docx (Word 2007+) files"""
+    try:
+        # .docx is a ZIP file containing XML
+        with zipfile.ZipFile(io.BytesIO(content)) as zf:
+            # Main document content is in word/document.xml
+            if 'word/document.xml' in zf.namelist():
+                xml_content = zf.read('word/document.xml')
+                tree = ET.fromstring(xml_content)
+                
+                # Extract all text from paragraphs
+                # Word XML namespace
+                word_ns = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+                
+                text_parts = []
+                for para in tree.iter(f'{word_ns}p'):
+                    para_text = []
+                    for text_elem in para.iter(f'{word_ns}t'):
+                        if text_elem.text:
+                            para_text.append(text_elem.text)
+                    if para_text:
+                        text_parts.append(''.join(para_text))
+                
+                return '\n'.join(text_parts)
+    except Exception as e:
+        logger.warning(f"DOCX extraction failed: {e}")
+    return ""
+
+
+def extract_text_from_odt(content: bytes) -> str:
+    """Extract text from .odt (OpenDocument) files"""
+    try:
+        # .odt is a ZIP file containing XML
+        with zipfile.ZipFile(io.BytesIO(content)) as zf:
+            # Main document content is in content.xml
+            if 'content.xml' in zf.namelist():
+                xml_content = zf.read('content.xml')
+                tree = ET.fromstring(xml_content)
+                
+                # Extract all text elements
+                text_parts = []
+                for elem in tree.iter():
+                    if elem.text and elem.text.strip():
+                        text_parts.append(elem.text.strip())
+                    if elem.tail and elem.tail.strip():
+                        text_parts.append(elem.tail.strip())
+                
+                return ' '.join(text_parts)
+    except Exception as e:
+        logger.warning(f"ODT extraction failed: {e}")
+    return ""
+
+
+def extract_text_from_rtf(content: bytes) -> str:
+    """Extract text from .rtf (Rich Text Format) files"""
+    try:
+        text = content.decode('latin-1', errors='ignore')
+        # Simple RTF text extraction - remove control words
+        import re
+        # Remove RTF control words
+        text = re.sub(r'\\[a-z]+\d*\s?', '', text)
+        # Remove braces
+        text = re.sub(r'[{}]', '', text)
+        # Clean up whitespace
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
+    except Exception as e:
+        logger.warning(f"RTF extraction failed: {e}")
+    return ""
+
+
+def extract_text_from_txt(content: bytes) -> str:
+    """Extract text from plain text files"""
+    try:
+        # Try UTF-8 first, then fallback encodings
+        for encoding in ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']:
+            try:
+                return content.decode(encoding)
+            except UnicodeDecodeError:
+                continue
+    except Exception as e:
+        logger.warning(f"TXT extraction failed: {e}")
+    return ""
 
 
 def extract_text_from_pdf(content: bytes) -> str:
@@ -58,11 +145,63 @@ def extract_text_from_pdf(content: bytes) -> str:
 
 
 async def try_ocr_or_fallback(filename: str, content: bytes, mime_type: str) -> str:
-    """Try OCR service first, fall back to direct PDF text extraction"""
+    """Try OCR service first, fall back to direct text extraction for various formats"""
     ocr_text = ""
+    file_ext = os.path.splitext(filename.lower())[1]
+    
+    # Handle Word documents (.docx)
+    if mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" or file_ext == ".docx":
+        logger.info(f"Extracting text from DOCX: {filename}")
+        ocr_text = extract_text_from_docx(content)
+        if ocr_text:
+            return ocr_text
+    
+    # Handle older Word documents (.doc) - try python-docx fallback
+    if mime_type == "application/msword" or file_ext == ".doc":
+        logger.info(f"Extracting text from DOC: {filename}")
+        # .doc files are binary, try to extract what we can
+        try:
+            # First try: if it's actually a .docx renamed to .doc
+            ocr_text = extract_text_from_docx(content)
+            if ocr_text:
+                return ocr_text
+        except Exception:
+            pass
+        # Fallback: extract readable strings
+        try:
+            text = content.decode('latin-1', errors='ignore')
+            import re
+            # Extract readable text strings
+            readable = re.findall(r'[\x20-\x7E\xC0-\xFF]{10,}', text)
+            ocr_text = ' '.join(readable)
+            if ocr_text:
+                return ocr_text
+        except Exception as e:
+            logger.warning(f"DOC extraction failed: {e}")
+    
+    # Handle OpenDocument (.odt)
+    if mime_type == "application/vnd.oasis.opendocument.text" or file_ext == ".odt":
+        logger.info(f"Extracting text from ODT: {filename}")
+        ocr_text = extract_text_from_odt(content)
+        if ocr_text:
+            return ocr_text
+    
+    # Handle RTF files
+    if mime_type == "application/rtf" or mime_type == "text/rtf" or file_ext == ".rtf":
+        logger.info(f"Extracting text from RTF: {filename}")
+        ocr_text = extract_text_from_rtf(content)
+        if ocr_text:
+            return ocr_text
+    
+    # Handle plain text files
+    if mime_type.startswith("text/") or file_ext in [".txt", ".csv", ".md", ".log"]:
+        logger.info(f"Extracting text from TXT: {filename}")
+        ocr_text = extract_text_from_txt(content)
+        if ocr_text:
+            return ocr_text
 
-    # Try OCR service
-    if mime_type in ["application/pdf", "image/png", "image/jpeg", "image/tiff"]:
+    # Try OCR service for PDFs and images
+    if mime_type in ["application/pdf", "image/png", "image/jpeg", "image/tiff", "image/gif", "image/webp"]:
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 ocr_response = await client.post(
@@ -252,7 +391,12 @@ async def upload_document(
 
 
 @router.post("/documents/{document_id}/reprocess")
-async def reprocess_document(document_id: str, user: dict = Depends(require_auth)):
+async def reprocess_document(document_id: str, force: bool = False, user: dict = Depends(require_auth)):
+    """Reprocess document - extracts text and analyzes with AI
+    
+    Args:
+        force: If True, reprocess even if ocr_text already exists
+    """
     document = await db.documents.find_one(
         {"id": document_id, "user_id": user["id"]}, {"_id": 0}
     )
@@ -261,7 +405,8 @@ async def reprocess_document(document_id: str, user: dict = Depends(require_auth
     
     ocr_text = document.get("ocr_text")
     
-    if not ocr_text and document.get("storage_path") and os.path.exists(document["storage_path"]):
+    # Reprocess if no text OR if force flag is set
+    if (not ocr_text or force) and document.get("storage_path") and os.path.exists(document["storage_path"]):
         try:
             async with aiofiles.open(document["storage_path"], 'rb') as f:
                 content = await f.read()
@@ -269,6 +414,7 @@ async def reprocess_document(document_id: str, user: dict = Depends(require_auth
             ocr_text = await try_ocr_or_fallback(
                 document["original_filename"], content, document["mime_type"]
             )
+            logger.info(f"Extracted {len(ocr_text) if ocr_text else 0} chars from {document['original_filename']}")
         except Exception as e:
             logger.warning(f"OCR reprocess error: {e}")
     

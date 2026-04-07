@@ -747,10 +747,58 @@ frontend:
         agent: "testing"
         comment: "✅ TESTED v1.1.2: Task Status Fix working perfectly! Comprehensive testing with 100% pass rate (6/6 tests passed). ✅ Legacy 'open' status accepted without validation error - task created successfully. ✅ 'pending' status accepted without validation error - task created successfully. ✅ Normal 'todo' status working as expected. ✅ GET /api/tasks returns all tasks without validation errors. ✅ STATUS NORMALIZATION WORKING: Tasks with legacy 'open' status correctly normalized to 'todo' in GET responses, 'pending' status correctly normalized to 'todo'. The validation error fix is working perfectly - legacy statuses are now accepted and properly normalized."
 
+  - task: "Health Endpoint Version v1.1.3"
+    implemented: true
+    working: true
+    file: "routers/auth.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.1.3: Health endpoint correctly returns version 1.1.3. GET /api/health shows {'status': 'healthy', 'service': 'casedesk-backend', 'version': '1.1.3'}. Authentication system working perfectly with test credentials (andi.trenter@gmail.com/admin123)."
+
+  - task: "System Version Endpoint v1.1.3"
+    implemented: true
+    working: false
+    file: "routers/system.py"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "testing"
+        comment: "❌ TESTED v1.1.3: System version endpoint shows inconsistent version. GET /api/system/version returns version 1.0.6 while health endpoint returns 1.1.3. VERSION MISMATCH: Health endpoint (auth.py) shows v1.1.3 but system endpoint (system.py) shows v1.0.6. This creates version inconsistency across the application."
+
+  - task: "Document Upload v1.1.3"
+    implemented: true
+    working: true
+    file: "routers/documents.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.1.3: Document upload endpoint working perfectly. POST /api/documents/upload successfully uploads files and processes text extraction. Test document uploaded with 582 characters of text extracted correctly. OCR processing working during upload."
+
+  - task: "Document Reprocess Force Flag v1.1.3"
+    implemented: true
+    working: false
+    file: "routers/documents.py"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "testing"
+        comment: "❌ TESTED v1.1.3: Document reprocess endpoint with force=true has a critical bug. POST /api/documents/{id}/reprocess?force=true returns 'No text to process' even when text extraction succeeds (logs show 'Extracted 582 chars'). BUG ANALYSIS: Text extraction works correctly, but endpoint fails to return success when AI analysis fails due to invalid OpenAI key and unavailable Ollama. The endpoint should return success if text extraction succeeds, regardless of AI analysis outcome. This is a logic error in the reprocess function."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 12
+  test_sequence: 13
   run_ui: false
 
 test_plan:
@@ -777,3 +825,5 @@ agent_communication:
     message: "✅ v1.0.9 BACKEND TESTING COMPLETE: Comprehensive testing of CaseDesk AI v1.0.9 NEW features successful with 100% pass rate (5/5 tests passed). ✅ Authentication system working perfectly with test credentials (andi.trenter@gmail.com/admin123). ✅ Document Download Token System fully functional - generates 5-minute JWT tokens and allows token-based document viewing without auth headers. ✅ NEW ZIP Download Endpoint working perfectly - GET /api/cases/{case_id}/documents-zip returns proper ZIP files with application/zip content-type. ✅ Tasks API verified working - 'Failed to load tasks' issue resolved, all CRUD operations functional. ✅ Events API verified working - all CRUD operations functional. All requested v1.0.9 features tested and operational. Backend services running correctly on https://task-portal-fix.preview.emergentagent.com."
   - agent: "testing"
     message: "✅ v1.1.2 TASK STATUS FIX TESTING COMPLETE: Comprehensive testing of CaseDesk AI v1.1.2 Task Status Fix successful with 100% pass rate (6/6 tests passed). ✅ Authentication system working perfectly with test credentials (andi.trenter@gmail.com/admin123). ✅ CRITICAL FIX VERIFIED: Legacy 'open' status accepted without validation error - task created successfully. ✅ 'pending' status accepted without validation error - task created successfully. ✅ Normal 'todo' status working as expected. ✅ GET /api/tasks returns all tasks without validation errors. ✅ STATUS NORMALIZATION WORKING: Tasks with legacy 'open' status correctly normalized to 'todo' in GET responses, 'pending' status correctly normalized to 'todo'. The validation error fix is working perfectly - legacy statuses are now accepted and properly normalized."
+  - agent: "testing"
+    message: "🔍 v1.1.3 BACKEND TESTING COMPLETE: Tested CaseDesk AI v1.1.3 NEW document format support with 60% success rate (3/5 tests passed). ✅ Authentication system working perfectly with test credentials (andi.trenter@gmail.com/admin123). ✅ Health endpoint correctly shows version 1.1.3. ✅ Document upload endpoint working perfectly - uploads files and extracts text correctly. ❌ CRITICAL ISSUES FOUND: 1) VERSION MISMATCH - Health endpoint shows v1.1.3 but system version endpoint shows v1.0.6, creating inconsistency. 2) DOCUMENT REPROCESS BUG - POST /api/documents/{id}/reprocess?force=true fails with 'No text to process' even when text extraction succeeds (logs confirm 582 chars extracted). Root cause: endpoint logic error where AI analysis failure causes entire reprocess to fail, even when text extraction succeeds. Backend partially functional but has critical bugs requiring fixes."

@@ -1,273 +1,329 @@
 #!/usr/bin/env python3
 """
-CaseDesk AI v1.1.2 Backend Testing - Task Status Fix
-Testing the validation error fix for legacy task statuses
+CaseDesk AI v1.1.3 Backend Testing
+Testing specific v1.1.3 features as requested:
+1. Login and get auth token
+2. Test document reprocess endpoint with force flag
+3. Verify health endpoint shows version 1.1.3
+4. Test document upload endpoint
 """
 
 import requests
 import json
-import sys
-from datetime import datetime, timezone
+import os
+import tempfile
+from datetime import datetime
 
-# Configuration
-BACKEND_URL = "https://task-portal-fix.preview.emergentagent.com/api"
+# Backend URL from environment
+BACKEND_URL = "https://task-portal-fix.preview.emergentagent.com"
+API_BASE = f"{BACKEND_URL}/api"
+
+# Test credentials
 TEST_EMAIL = "andi.trenter@gmail.com"
 TEST_PASSWORD = "admin123"
 
-class TaskStatusTester:
+class CaseDeskTester:
     def __init__(self):
         self.session = requests.Session()
         self.auth_token = None
-        self.created_task_ids = []
+        self.test_results = []
         
-    def login(self):
-        """Login and get auth token"""
-        print("🔐 Testing login...")
-        
-        login_data = {
-            "email": TEST_EMAIL,
-            "password": TEST_PASSWORD
+    def log_result(self, test_name, success, message, details=None):
+        """Log test result"""
+        result = {
+            "test": test_name,
+            "success": success,
+            "message": message,
+            "details": details or {},
+            "timestamp": datetime.now().isoformat()
         }
-        
-        response = self.session.post(
-            f"{BACKEND_URL}/auth/login",
-            data=login_data,  # Using form data as per previous tests
-            headers={"Content-Type": "application/x-www-form-urlencoded"}
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            self.auth_token = data.get("access_token")
-            self.session.headers.update({"Authorization": f"Bearer {self.auth_token}"})
-            print(f"✅ Login successful - Token: {self.auth_token[:20]}...")
-            return True
-        else:
-            print(f"❌ Login failed: {response.status_code} - {response.text}")
+        self.test_results.append(result)
+        status = "✅" if success else "❌"
+        print(f"{status} {test_name}: {message}")
+        if details:
+            print(f"   Details: {details}")
+    
+    def test_login(self):
+        """Test 1: Login and get auth token"""
+        try:
+            # Test login with form data (as per previous tests)
+            login_data = {
+                "email": TEST_EMAIL,
+                "password": TEST_PASSWORD
+            }
+            
+            response = self.session.post(
+                f"{API_BASE}/auth/login",
+                data=login_data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "access_token" in data:
+                    self.auth_token = data["access_token"]
+                    self.session.headers.update({
+                        "Authorization": f"Bearer {self.auth_token}"
+                    })
+                    self.log_result(
+                        "Login Authentication", 
+                        True, 
+                        "Successfully logged in and obtained auth token",
+                        {"user_id": data.get("user", {}).get("id"), "token_type": data.get("token_type")}
+                    )
+                    return True
+                else:
+                    self.log_result("Login Authentication", False, "No access token in response", data)
+                    return False
+            else:
+                self.log_result("Login Authentication", False, f"Login failed with status {response.status_code}", response.text)
+                return False
+                
+        except Exception as e:
+            self.log_result("Login Authentication", False, f"Login error: {str(e)}")
             return False
     
-    def test_create_task_with_legacy_open_status(self):
-        """Test creating task with legacy 'open' status - should NOT throw validation error"""
-        print("\n📝 Testing task creation with legacy 'open' status...")
-        
-        task_data = {
-            "title": "Test mit open status",
-            "status": "open",
-            "description": "Testing legacy open status",
-            "priority": "medium"
-        }
-        
-        response = self.session.post(
-            f"{BACKEND_URL}/tasks",
-            json=task_data,
-            headers={"Content-Type": "application/json"}
-        )
-        
-        if response.status_code == 200:
-            task = response.json()
-            self.created_task_ids.append(task["id"])
-            print(f"✅ Task created with 'open' status successfully")
-            print(f"   Task ID: {task['id']}")
-            print(f"   Status in response: {task.get('status')}")
-            return True, task
-        else:
-            print(f"❌ Failed to create task with 'open' status: {response.status_code}")
-            print(f"   Response: {response.text}")
-            return False, None
-    
-    def test_create_task_with_pending_status(self):
-        """Test creating task with 'pending' status - should NOT throw validation error"""
-        print("\n📝 Testing task creation with 'pending' status...")
-        
-        task_data = {
-            "title": "Test mit pending status",
-            "status": "pending",
-            "description": "Testing pending status",
-            "priority": "high"
-        }
-        
-        response = self.session.post(
-            f"{BACKEND_URL}/tasks",
-            json=task_data,
-            headers={"Content-Type": "application/json"}
-        )
-        
-        if response.status_code == 200:
-            task = response.json()
-            self.created_task_ids.append(task["id"])
-            print(f"✅ Task created with 'pending' status successfully")
-            print(f"   Task ID: {task['id']}")
-            print(f"   Status in response: {task.get('status')}")
-            return True, task
-        else:
-            print(f"❌ Failed to create task with 'pending' status: {response.status_code}")
-            print(f"   Response: {response.text}")
-            return False, None
-    
-    def test_create_task_with_todo_status(self):
-        """Test creating task with normal 'todo' status"""
-        print("\n📝 Testing task creation with normal 'todo' status...")
-        
-        task_data = {
-            "title": "Normale Aufgabe",
-            "status": "todo",
-            "description": "Testing normal todo status",
-            "priority": "low"
-        }
-        
-        response = self.session.post(
-            f"{BACKEND_URL}/tasks",
-            json=task_data,
-            headers={"Content-Type": "application/json"}
-        )
-        
-        if response.status_code == 200:
-            task = response.json()
-            self.created_task_ids.append(task["id"])
-            print(f"✅ Task created with 'todo' status successfully")
-            print(f"   Task ID: {task['id']}")
-            print(f"   Status in response: {task.get('status')}")
-            return True, task
-        else:
-            print(f"❌ Failed to create task with 'todo' status: {response.status_code}")
-            print(f"   Response: {response.text}")
-            return False, None
-    
-    def test_get_tasks_status_normalization(self):
-        """Test GET /api/tasks - should return tasks without validation errors and normalize 'open' to 'todo'"""
-        print("\n📋 Testing GET /api/tasks with status normalization...")
-        
-        response = self.session.get(f"{BACKEND_URL}/tasks")
-        
-        if response.status_code == 200:
-            tasks = response.json()
-            print(f"✅ GET /api/tasks successful - Retrieved {len(tasks)} tasks")
+    def test_health_version(self):
+        """Test 2: Verify health endpoint shows version 1.1.3"""
+        try:
+            # Test the main health endpoint
+            response = self.session.get(f"{API_BASE}/health")
             
-            # Check for status normalization
-            open_tasks_normalized = []
-            pending_tasks_normalized = []
-            
-            for task in tasks:
-                print(f"   Task: {task.get('title')} - Status: {task.get('status')}")
-                
-                if "open status" in task.get('title', ''):
-                    open_tasks_normalized.append(task)
-                elif "pending status" in task.get('title', ''):
-                    pending_tasks_normalized.append(task)
-            
-            # Verify normalization
-            normalization_success = True
-            for task in open_tasks_normalized:
-                if task.get('status') != 'todo':
-                    print(f"❌ Status normalization failed: 'open' task has status '{task.get('status')}', expected 'todo'")
-                    normalization_success = False
-                else:
-                    print(f"✅ Status normalization working: 'open' task normalized to 'todo'")
-            
-            for task in pending_tasks_normalized:
-                if task.get('status') != 'todo':
-                    print(f"❌ Status normalization failed: 'pending' task has status '{task.get('status')}', expected 'todo'")
-                    normalization_success = False
-                else:
-                    print(f"✅ Status normalization working: 'pending' task normalized to 'todo'")
-            
-            return True, normalization_success
-        else:
-            print(f"❌ GET /api/tasks failed: {response.status_code}")
-            print(f"   Response: {response.text}")
-            return False, False
-    
-    def cleanup_test_tasks(self):
-        """Clean up created test tasks"""
-        print("\n🧹 Cleaning up test tasks...")
-        
-        for task_id in self.created_task_ids:
-            response = self.session.delete(f"{BACKEND_URL}/tasks/{task_id}")
             if response.status_code == 200:
-                print(f"✅ Deleted task {task_id}")
+                data = response.json()
+                version = data.get("version")
+                
+                if version == "1.1.3":
+                    self.log_result(
+                        "Health Version Check", 
+                        True, 
+                        f"Health endpoint correctly shows version {version}",
+                        data
+                    )
+                    return True
+                else:
+                    self.log_result(
+                        "Health Version Check", 
+                        False, 
+                        f"Expected version 1.1.3, got {version}",
+                        data
+                    )
+                    return False
             else:
-                print(f"⚠️ Failed to delete task {task_id}: {response.status_code}")
+                self.log_result("Health Version Check", False, f"Health endpoint failed with status {response.status_code}", response.text)
+                return False
+                
+        except Exception as e:
+            self.log_result("Health Version Check", False, f"Health check error: {str(e)}")
+            return False
+    
+    def test_system_version(self):
+        """Test 2b: Also check system version endpoint"""
+        try:
+            response = self.session.get(f"{API_BASE}/system/version")
+            
+            if response.status_code == 200:
+                data = response.json()
+                version = data.get("version")
+                
+                if version == "1.1.3":
+                    self.log_result(
+                        "System Version Check", 
+                        True, 
+                        f"System endpoint correctly shows version {version}",
+                        data
+                    )
+                    return True
+                else:
+                    self.log_result(
+                        "System Version Check", 
+                        False, 
+                        f"Expected version 1.1.3, got {version}",
+                        data
+                    )
+                    return False
+            else:
+                self.log_result("System Version Check", False, f"System version endpoint failed with status {response.status_code}", response.text)
+                return False
+                
+        except Exception as e:
+            self.log_result("System Version Check", False, f"System version error: {str(e)}")
+            return False
+    
+    def test_document_upload(self):
+        """Test 3: Test document upload endpoint still works"""
+        try:
+            # Create a test file
+            test_content = "This is a test document for CaseDesk AI v1.1.3 testing.\nDocument upload functionality verification."
+            
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+                f.write(test_content)
+                temp_file_path = f.name
+            
+            try:
+                # Upload the document
+                with open(temp_file_path, 'rb') as f:
+                    files = {
+                        'file': ('test_document_v113.txt', f, 'text/plain')
+                    }
+                    data = {
+                        'document_type': 'other'
+                    }
+                    
+                    response = self.session.post(
+                        f"{API_BASE}/documents/upload",
+                        files=files,
+                        data=data
+                    )
+                
+                if response.status_code == 200:
+                    result_data = response.json()
+                    if result_data.get("success"):
+                        document_id = result_data.get("document", {}).get("id")
+                        self.log_result(
+                            "Document Upload", 
+                            True, 
+                            "Document upload successful",
+                            {"document_id": document_id, "filename": "test_document_v113.txt"}
+                        )
+                        return document_id
+                    else:
+                        self.log_result("Document Upload", False, "Upload returned success=false", result_data)
+                        return None
+                else:
+                    self.log_result("Document Upload", False, f"Upload failed with status {response.status_code}", response.text)
+                    return None
+                    
+            finally:
+                # Clean up temp file
+                if os.path.exists(temp_file_path):
+                    os.unlink(temp_file_path)
+                    
+        except Exception as e:
+            self.log_result("Document Upload", False, f"Upload error: {str(e)}")
+            return None
+    
+    def test_document_reprocess_force(self, document_id):
+        """Test 4: Test document reprocess endpoint with force flag"""
+        if not document_id:
+            self.log_result("Document Reprocess Force", False, "No document ID available for testing")
+            return False
+            
+        try:
+            # Test the reprocess endpoint with force=true
+            response = self.session.post(
+                f"{API_BASE}/documents/{document_id}/reprocess?force=true"
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("success"):
+                    self.log_result(
+                        "Document Reprocess Force", 
+                        True, 
+                        "Document reprocess with force=true successful",
+                        {"document_id": document_id, "message": data.get("message")}
+                    )
+                    return True
+                else:
+                    self.log_result(
+                        "Document Reprocess Force", 
+                        False, 
+                        f"Reprocess returned success=false: {data.get('error', 'Unknown error')}",
+                        data
+                    )
+                    return False
+            else:
+                self.log_result("Document Reprocess Force", False, f"Reprocess failed with status {response.status_code}", response.text)
+                return False
+                
+        except Exception as e:
+            self.log_result("Document Reprocess Force", False, f"Reprocess error: {str(e)}")
+            return False
+    
+    def cleanup_test_document(self, document_id):
+        """Clean up test document"""
+        if not document_id:
+            return
+            
+        try:
+            response = self.session.delete(f"{API_BASE}/documents/{document_id}")
+            if response.status_code == 200:
+                print(f"✅ Cleaned up test document {document_id}")
+            else:
+                print(f"⚠️  Failed to clean up test document {document_id}")
+        except Exception as e:
+            print(f"⚠️  Cleanup error: {e}")
     
     def run_all_tests(self):
-        """Run all task status fix tests"""
-        print("🚀 Starting CaseDesk AI v1.1.2 Task Status Fix Testing")
+        """Run all v1.1.3 tests"""
         print("=" * 60)
+        print("CaseDesk AI v1.1.3 Backend Testing")
+        print("=" * 60)
+        print(f"Backend URL: {BACKEND_URL}")
+        print(f"Test Credentials: {TEST_EMAIL}")
+        print()
         
-        # Test results tracking
-        test_results = {
-            "login": False,
-            "create_open_task": False,
-            "create_pending_task": False,
-            "create_todo_task": False,
-            "get_tasks": False,
-            "status_normalization": False
-        }
+        # Test 1: Login
+        if not self.test_login():
+            print("❌ Cannot proceed without authentication")
+            return self.get_summary()
         
-        # 1. Login
-        if not self.login():
-            print("\n❌ CRITICAL: Login failed - cannot proceed with tests")
-            return test_results
-        test_results["login"] = True
+        # Test 2: Health version check
+        self.test_health_version()
         
-        # 2. Test creating task with legacy 'open' status
-        success, _ = self.test_create_task_with_legacy_open_status()
-        test_results["create_open_task"] = success
+        # Test 2b: System version check
+        self.test_system_version()
         
-        # 3. Test creating task with 'pending' status
-        success, _ = self.test_create_task_with_pending_status()
-        test_results["create_pending_task"] = success
+        # Test 3: Document upload
+        document_id = self.test_document_upload()
         
-        # 4. Test creating task with normal 'todo' status
-        success, _ = self.test_create_task_with_todo_status()
-        test_results["create_todo_task"] = success
-        
-        # 5. Test GET /api/tasks with status normalization
-        get_success, norm_success = self.test_get_tasks_status_normalization()
-        test_results["get_tasks"] = get_success
-        test_results["status_normalization"] = norm_success
+        # Test 4: Document reprocess with force
+        self.test_document_reprocess_force(document_id)
         
         # Cleanup
-        self.cleanup_test_tasks()
+        if document_id:
+            self.cleanup_test_document(document_id)
         
-        # Summary
-        print("\n" + "=" * 60)
-        print("📊 TASK STATUS FIX TEST RESULTS")
-        print("=" * 60)
-        
-        passed_tests = sum(test_results.values())
-        total_tests = len(test_results)
-        
-        for test_name, result in test_results.items():
-            status = "✅ PASS" if result else "❌ FAIL"
-            print(f"{test_name.replace('_', ' ').title()}: {status}")
-        
-        print(f"\nOverall: {passed_tests}/{total_tests} tests passed")
-        
-        if test_results["create_open_task"] and test_results["create_pending_task"] and test_results["status_normalization"]:
-            print("\n🎉 TASK STATUS FIX VERIFICATION: SUCCESS")
-            print("✅ Legacy 'open' status accepted without validation error")
-            print("✅ 'pending' status accepted without validation error") 
-            print("✅ Status normalization working correctly")
-        else:
-            print("\n⚠️ TASK STATUS FIX VERIFICATION: ISSUES FOUND")
-            if not test_results["create_open_task"]:
-                print("❌ Legacy 'open' status still causing validation errors")
-            if not test_results["create_pending_task"]:
-                print("❌ 'pending' status causing validation errors")
-            if not test_results["status_normalization"]:
-                print("❌ Status normalization not working correctly")
-        
-        return test_results
-
-def main():
-    """Main test execution"""
-    tester = TaskStatusTester()
-    results = tester.run_all_tests()
+        return self.get_summary()
     
-    # Exit with appropriate code
-    if all(results.values()):
-        sys.exit(0)
-    else:
-        sys.exit(1)
+    def get_summary(self):
+        """Get test summary"""
+        total_tests = len(self.test_results)
+        passed_tests = sum(1 for r in self.test_results if r["success"])
+        failed_tests = total_tests - passed_tests
+        
+        print()
+        print("=" * 60)
+        print("TEST SUMMARY")
+        print("=" * 60)
+        print(f"Total Tests: {total_tests}")
+        print(f"Passed: {passed_tests}")
+        print(f"Failed: {failed_tests}")
+        print(f"Success Rate: {(passed_tests/total_tests*100):.1f}%" if total_tests > 0 else "0%")
+        print()
+        
+        if failed_tests > 0:
+            print("FAILED TESTS:")
+            for result in self.test_results:
+                if not result["success"]:
+                    print(f"❌ {result['test']}: {result['message']}")
+            print()
+        
+        return {
+            "total": total_tests,
+            "passed": passed_tests,
+            "failed": failed_tests,
+            "success_rate": (passed_tests/total_tests*100) if total_tests > 0 else 0,
+            "results": self.test_results
+        }
 
 if __name__ == "__main__":
-    main()
+    tester = CaseDeskTester()
+    summary = tester.run_all_tests()
+    
+    # Exit with error code if tests failed
+    if summary["failed"] > 0:
+        exit(1)
+    else:
+        exit(0)

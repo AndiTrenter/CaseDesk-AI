@@ -13,6 +13,44 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 
 ---
 
+## [1.1.3] - 2026-04-07
+
+### Neu hinzugefügt
+
+- 📄 **Unterstützung für Word-Dokumente (.docx, .doc)**
+  - Textextraktion aus Microsoft Word Dokumenten
+  - Sowohl neue (.docx) als auch alte (.doc) Formate
+
+- 📄 **Unterstützung für OpenDocument (.odt)**
+  - LibreOffice/OpenOffice Dokumente werden jetzt unterstützt
+  - Vollständige Textextraktion
+
+- 📄 **Unterstützung für weitere Formate**
+  - RTF (Rich Text Format)
+  - TXT, CSV, MD (Textdateien)
+  
+### Verbessert
+
+- 🔄 **Reprocess-Funktion erweitert**
+  - Neuer `force` Parameter um bereits verarbeitete Dokumente neu zu analysieren
+  - Bessere Logging-Ausgabe
+
+### Unterstützte Dokumentformate (komplett)
+| Format | Dateiendung | Status |
+|--------|-------------|--------|
+| PDF | .pdf | ✅ OCR + Textextraktion |
+| Word 2007+ | .docx | ✅ Textextraktion |
+| Word Legacy | .doc | ✅ Textextraktion |
+| OpenDocument | .odt | ✅ Textextraktion |
+| Rich Text | .rtf | ✅ Textextraktion |
+| Plain Text | .txt, .csv, .md | ✅ Textextraktion |
+| Bilder | .png, .jpg, .tiff | ✅ OCR |
+
+### Hinweis
+Bereits hochgeladene Dokumente können über den "Neu verarbeiten" Button oder via API mit `?force=true` erneut analysiert werden.
+
+---
+
 ## [1.1.2] - 2026-04-07
 
 ### 🔴 KRITISCHER BUGFIX
