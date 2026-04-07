@@ -42,6 +42,9 @@ class TaskStatus(str, Enum):
     TODO = "todo"
     IN_PROGRESS = "in_progress"
     DONE = "done"
+    OPEN = "open"  # Legacy status - mapped to todo
+    PENDING = "pending"  # Legacy status - mapped to todo
+    COMPLETED = "completed"  # Legacy status - mapped to done
 
 
 class DocumentType(str, Enum):
@@ -244,12 +247,17 @@ class Attachment(BaseDocument):
 class TaskBase(BaseDocument):
     title: str
     description: Optional[str] = None
-    priority: TaskPriority = TaskPriority.MEDIUM
-    status: TaskStatus = TaskStatus.TODO
+    priority: str = "medium"  # More flexible - accepts any string
+    status: str = "todo"  # More flexible - accepts any string
     due_date: Optional[datetime] = None
 
 
-class TaskCreate(TaskBase):
+class TaskCreate(BaseDocument):
+    title: str
+    description: Optional[str] = None
+    priority: str = "medium"
+    status: str = "todo"
+    due_date: Optional[datetime] = None
     case_id: Optional[str] = None
 
 

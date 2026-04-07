@@ -25,13 +25,24 @@ async def list_tasks(
     if status:
         query["status"] = status
     
+    # Status normalization mapping
+    status_map = {
+        "open": "todo",
+        "pending": "todo",
+        "completed": "done",
+        "closed": "done"
+    }
+    
     try:
         tasks = await db.tasks.find(query, {"_id": 0}).sort("due_date", 1).to_list(1000)
-        # Ensure all tasks have required fields for frontend
+        # Ensure all tasks have required fields and normalize status
         for task in tasks:
             if "priority" not in task:
                 task["priority"] = "medium"
-            if "status" not in task:
+            # Normalize legacy status values
+            current_status = task.get("status", "todo")
+            task["status"] = status_map.get(current_status, current_status)
+            if task["status"] not in ["todo", "in_progress", "done"]:
                 task["status"] = "todo"
         return tasks
     except Exception as e:

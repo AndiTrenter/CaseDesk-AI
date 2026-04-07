@@ -13,6 +13,27 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 
 ---
 
+## [1.1.2] - 2026-04-07
+
+### 🔴 KRITISCHER BUGFIX
+
+- 🔧 **Task Status Validation Error behoben**
+  - Fehler: `"Input should be 'todo', 'in_progress' or 'done'" - input: 'open'`
+  - Tasks mit Status `open`, `pending`, `completed` werden jetzt akzeptiert
+  - Automatische Normalisierung: `open` → `todo`, `completed` → `done`
+  - Task-Modell ist jetzt flexibler (akzeptiert alle String-Werte)
+
+### Behoben
+- 🔧 **"Failed to load tasks"** - Verursacht durch Pydantic Validation Error
+- 🔧 **26 Validation Errors** in der Response wurden behoben
+- 🔧 **Legacy Status-Werte** werden jetzt automatisch gemappt
+
+### Technische Details
+- `/app/backend/models.py` - Task-Modelle verwenden jetzt `str` statt Enum
+- `/app/backend/routers/tasks.py` - Status-Normalisierung hinzugefügt
+
+---
+
 ## [1.1.1] - 2026-04-06
 
 ### 🔴 KRITISCHER FIX

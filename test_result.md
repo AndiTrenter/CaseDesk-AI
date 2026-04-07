@@ -735,10 +735,22 @@ frontend:
         agent: "testing"
         comment: "✅ TESTED v1.0.9: Events API working perfectly! GET /api/events returns 200 with proper array structure. POST /api/events creates events successfully with correct data structure (title, start_time, end_time). Created events appear correctly in subsequent GET requests. All CRUD operations verified and fully functional."
 
+  - task: "Task Status Fix v1.1.2"
+    implemented: true
+    working: true
+    file: "routers/tasks.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.1.2: Task Status Fix working perfectly! Comprehensive testing with 100% pass rate (6/6 tests passed). ✅ Legacy 'open' status accepted without validation error - task created successfully. ✅ 'pending' status accepted without validation error - task created successfully. ✅ Normal 'todo' status working as expected. ✅ GET /api/tasks returns all tasks without validation errors. ✅ STATUS NORMALIZATION WORKING: Tasks with legacy 'open' status correctly normalized to 'todo' in GET responses, 'pending' status correctly normalized to 'todo'. The validation error fix is working perfectly - legacy statuses are now accepted and properly normalized."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 11
+  test_sequence: 12
   run_ui: false
 
 test_plan:
@@ -763,3 +775,5 @@ agent_communication:
     message: "✅ v1.0.8 BACKEND TESTING COMPLETE: Comprehensive testing of CaseDesk AI v1.0.8 backend successful with 100% pass rate (9/9 tests passed). ✅ Authentication system working perfectly with JWT tokens. ✅ NEW Documents Suggest for Case endpoint (GET /api/documents/suggest-for-case/{case_id}) working correctly - fixed response structure bug. ✅ Tasks API (GET/POST /api/tasks) fully functional with proper CRUD operations. ✅ Events API (GET/POST /api/events) fully functional with proper CRUD operations. All endpoints tested with real data, proper cleanup performed. Backend services running correctly. Fixed minor bug in suggest-for-case endpoint response structure. All requested v1.0.8 features operational and ready for production use."
   - agent: "testing"
     message: "✅ v1.0.9 BACKEND TESTING COMPLETE: Comprehensive testing of CaseDesk AI v1.0.9 NEW features successful with 100% pass rate (5/5 tests passed). ✅ Authentication system working perfectly with test credentials (andi.trenter@gmail.com/admin123). ✅ Document Download Token System fully functional - generates 5-minute JWT tokens and allows token-based document viewing without auth headers. ✅ NEW ZIP Download Endpoint working perfectly - GET /api/cases/{case_id}/documents-zip returns proper ZIP files with application/zip content-type. ✅ Tasks API verified working - 'Failed to load tasks' issue resolved, all CRUD operations functional. ✅ Events API verified working - all CRUD operations functional. All requested v1.0.9 features tested and operational. Backend services running correctly on https://task-portal-fix.preview.emergentagent.com."
+  - agent: "testing"
+    message: "✅ v1.1.2 TASK STATUS FIX TESTING COMPLETE: Comprehensive testing of CaseDesk AI v1.1.2 Task Status Fix successful with 100% pass rate (6/6 tests passed). ✅ Authentication system working perfectly with test credentials (andi.trenter@gmail.com/admin123). ✅ CRITICAL FIX VERIFIED: Legacy 'open' status accepted without validation error - task created successfully. ✅ 'pending' status accepted without validation error - task created successfully. ✅ Normal 'todo' status working as expected. ✅ GET /api/tasks returns all tasks without validation errors. ✅ STATUS NORMALIZATION WORKING: Tasks with legacy 'open' status correctly normalized to 'todo' in GET responses, 'pending' status correctly normalized to 'todo'. The validation error fix is working perfectly - legacy statuses are now accepted and properly normalized."
