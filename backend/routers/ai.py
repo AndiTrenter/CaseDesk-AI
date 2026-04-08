@@ -254,12 +254,21 @@ async def ai_chat(
     try:
         ai_service = await get_ai_service(db)
         
-        # Check if AI service is actually available
-        if not ai_service or not ai_service.available:
+        # Check if AI service is actually available (backwards compatible)
+        if not ai_service:
             return {
                 "success": False,
                 "error": "KI-Service nicht verfügbar. Bitte konfigurieren Sie einen OpenAI API-Key in den Einstellungen oder richten Sie Ollama ein.",
                 "response": "Ich kann Ihnen leider nicht helfen, da die KI-Integration nicht konfiguriert ist. Bitte gehen Sie zu Einstellungen → KI und konfigurieren Sie einen API-Key.",
+                "action_preview": None
+            }
+        
+        # Check if available property exists and is False
+        if hasattr(ai_service, 'available') and not ai_service.available:
+            return {
+                "success": False,
+                "error": "KI-Service nicht konfiguriert. API-Key fehlt oder ist ungültig.",
+                "response": "Die KI-Integration ist nicht richtig konfiguriert. Bitte gehen Sie zu Einstellungen → KI und konfigurieren Sie einen gültigen OpenAI API-Key.",
                 "action_preview": None
             }
         
