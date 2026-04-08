@@ -1,6 +1,6 @@
 {
-  "version": "1.1.8",
+  "version": "1.1.9",
   "release_date": "2026-04-08",
-  "release_notes": "Ollama-Entkopplung: Ollama aus CaseDesk entfernt für externe Installation via Unraid",
+  "release_notes": "Dokument-Vorschau & E-Mail-Integration: Fixes für Preview-URLs + KI hat jetzt Zugriff auf E-Mail-Inhalte",
   "changelog_url": "https://raw.githubusercontent.com/AndiTrenter/CaseDesk-AI/main/CHANGELOG.md"
 }

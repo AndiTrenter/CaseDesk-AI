@@ -203,8 +203,16 @@ async def ai_chat(
         {"_id": 0, "id": 1, "title": 1, "description": 1, "status": 1, "reference_number": 1}
     ).to_list(50)
     
+    # ADDED: Load recent emails for AI context (body_text for content)
+    all_emails = await db.emails.find(
+        {"user_id": user["id"]},
+        {"_id": 0, "id": 1, "subject": 1, "from_address": 1, "from_name": 1,
+         "body_text": 1, "body_html": 1, "received_at": 1, "case_id": 1, "read": 1}
+    ).sort("received_at", -1).to_list(50)
+    
     context["all_documents"] = all_docs
     context["all_cases"] = all_cases
+    context["all_emails"] = all_emails  # ADDED: Emails now available to AI
     
     # Focused document context
     if document_id:

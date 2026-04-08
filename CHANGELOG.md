@@ -13,6 +13,32 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 
 ---
 
+## [1.1.9] - 2026-04-08
+
+### 🔧 BUGFIX - Dokument-Vorschau & E-Mail-Integration
+
+#### Dokument-Vorschau-Fix (`api.js`)
+- ✅ **FIXED:** `viewUrl` und `downloadUrl` verwenden jetzt `window.location.origin`
+- ✅ **Behebt:** Relative URLs funktionieren nicht in `<iframe>` und `<img>` src-Attributen
+- ✅ **Ergebnis:** Dokument-Vorschau funktioniert jetzt korrekt auf lokalen Installationen
+
+#### KI-Assistent: E-Mail-Inhalte-Integration (`ai.py`, `ai_service.py`)
+- 📧 **Neu:** KI-Assistent hat jetzt vollständigen Zugriff auf E-Mail-Inhalte (nicht nur Anhänge)
+- 📧 **E-Mail-Body:** `body_text` wird in den KI-Kontext geladen
+- 📧 **Fähigkeiten erweitert:**
+  - E-Mail-Inhalte durchsuchen
+  - Informationen aus E-Mails extrahieren
+  - Termine/Aufgaben aus E-Mails identifizieren
+  - Verbindungen zwischen E-Mails und Fällen herstellen
+- 🇩🇪🇬🇧🇫🇷🇪🇸 **Mehrsprachig:** System-Prompts für DE/EN/FR/ES aktualisiert
+
+#### Technische Details
+- **Frontend:** `documentUpdateAPI.viewUrl()` nutzt absolute URLs
+- **Backend:** `all_emails` Collection wird in Chat-Kontext geladen
+- **AI Service:** E-Mail-Wissen in System-Prompt dokumentiert
+
+---
+
 ## [1.1.8] - 2026-04-08
 
 ### 🔄 ARCHITEKTUR-ÄNDERUNG - Ollama-Entkopplung

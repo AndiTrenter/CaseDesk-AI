@@ -292,6 +292,13 @@ KEINE englischen Wörter oder Sätze verwenden!""",
                 "Aus Kontoauszügen, Versicherungspolicen, Verträgen etc. konkrete Zahlen und Fakten ableiten",
                 "Budgetpläne, Übersichten und Analysen auf Basis der realen Dokumentendaten erstellen"
             ],
+            "email_knowledge": "**E-Mail-Wissen**: Du hast Zugriff auf ALLE E-Mails mit vollständigem Inhalt (Betreff + Body) und kannst:",
+            "email_abilities": [
+                "E-Mail-Inhalte durchsuchen und relevante Nachrichten finden",
+                "Informationen aus E-Mails extrahieren",
+                "Termine und Aufgaben aus E-Mails identifizieren",
+                "Verbindungen zwischen E-Mails und Fällen/Dokumenten herstellen"
+            ],
             "case_support": "**Fallunterstützung**: Du kannst:",
             "case_abilities": ["Dokumente zu passenden Fällen vorschlagen", "Querverweise herstellen", "Bei Antwortschreiben helfen"],
             "assistant": "**Persönliche Assistenz**: Du kannst:",
@@ -325,6 +332,13 @@ Every single response must be completely in English.""",
                 "Extract deadlines, amounts and important data from documents",
                 "Derive concrete numbers from bank statements, insurance policies, contracts etc.",
                 "Create budget plans, overviews and analyses based on real document data"
+            ],
+            "email_knowledge": "**Email Knowledge**: You have access to ALL emails with full content (subject + body) and can:",
+            "email_abilities": [
+                "Search email contents and find relevant messages",
+                "Extract information from emails",
+                "Identify appointments and tasks from emails",
+                "Connect emails with cases and documents"
             ],
             "case_support": "**Case Support**: You can:",
             "case_abilities": ["Suggest documents for cases", "Create cross-references", "Help with responses"],
@@ -385,10 +399,13 @@ DEBES responder SIEMPRE y EXCLUSIVAMENTE en ESPAÑOL!""",
 1. {lang['doc_knowledge']}
    - {chr(10) + '   - '.join(lang['doc_abilities'])}
 
-2. {lang['case_support']}
+2. {lang['email_knowledge']}
+   - {chr(10) + '   - '.join(lang['email_abilities'])}
+
+3. {lang['case_support']}
    - {chr(10) + '   - '.join(lang['case_abilities'])}
 
-3. {lang['assistant']}
+4. {lang['assistant']}
    - {chr(10) + '   - '.join(lang['assistant_abilities'])}
 
 {lang['rules_title']}
@@ -527,6 +544,28 @@ DEBES responder SIEMPRE y EXCLUSIVAMENTE en ESPAÑOL!""",
                 if case.get('description'):
                     case_info += f"\n  {case['description'][:150]}"
                 parts.append(case_info)
+        
+        # ADDED: All emails overview - body_text for full content
+        if context.get("all_emails"):
+            email_label = {"de": "ALLE E-MAILS", "en": "ALL EMAILS", "fr": "TOUS LES E-MAILS", "es": "TODOS LOS CORREOS"}.get(language, "ALLE E-MAILS")
+            parts.append(f"\n## {email_label}")
+            for email in context["all_emails"][:30]:  # Limit to 30 most recent
+                email_info = f"- **{email.get('subject', 'Kein Betreff')}**"
+                if email.get('from_name'):
+                    email_info += f" | {lbl['from']}: {email['from_name']}"
+                elif email.get('from_address'):
+                    email_info += f" | {lbl['from']}: {email['from_address']}"
+                if email.get('received_at'):
+                    email_info += f" | {lbl['date']}: {email['received_at'][:10]}"
+                if email.get('case_id'):
+                    for c in context.get("all_cases", []):
+                        if c["id"] == email["case_id"]:
+                            email_info += f" | {lbl['case']}: {c['title']}"
+                            break
+                # Include email body content for AI understanding
+                if email.get('body_text'):
+                    email_info += f"\n  {lbl['content']}: {email['body_text'][:1000]}"
+                parts.append(email_info)
         
         # Open tasks
         if context.get("open_tasks"):

@@ -473,16 +473,18 @@ export const documentUpdateAPI = {
     });
   },
   preview: (id) => api.get(`/documents/${id}/preview`),
-  downloadUrl: (id) => `${API_URL}/api/documents/${id}/download`,
+  
+  // FIXED: Use window.location.origin for iframe/img src URLs (relative URLs don't work in src attributes)
+  downloadUrl: (id) => `${window.location.origin}/api/documents/${id}/download`,
   getDownloadToken: (id) => api.get(`/documents/${id}/download-token`),
-  viewUrl: (id, token) => `${API_URL}/api/documents/${id}/view?token=${token}`,
+  viewUrl: (id, token) => `${window.location.origin}/api/documents/${id}/view?token=${token}`,
   
   // Download document with automatic token handling
   downloadWithToken: async (id, filename) => {
     try {
       const tokenRes = await api.get(`/documents/${id}/download-token`);
       const token = tokenRes.data.token;
-      const url = `${API_URL}/api/documents/${id}/view?token=${token}`;
+      const url = `${window.location.origin}/api/documents/${id}/view?token=${token}`;
       
       // Create a temporary link and trigger download
       const link = document.createElement('a');
@@ -502,7 +504,7 @@ export const documentUpdateAPI = {
   // Get view URL with token (for preview/iframe)
   getViewUrlWithToken: async (id) => {
     const tokenRes = await api.get(`/documents/${id}/download-token`);
-    return `${API_URL}/api/documents/${id}/view?token=${tokenRes.data.token}`;
+    return `${window.location.origin}/api/documents/${id}/view?token=${tokenRes.data.token}`;
   },
   
   // Download multiple documents as ZIP
