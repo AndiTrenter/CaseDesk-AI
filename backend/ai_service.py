@@ -29,6 +29,15 @@ class AIService:
         self.openai_model = "gpt-4o"
         self.enable_fallback = enable_fallback  # Fallback zu Ollama wenn OpenAI fehlschlägt
     
+    @property
+    def available(self) -> bool:
+        """Check if AI service is available and configured"""
+        if self.provider == "openai":
+            return bool(self.api_key and len(self.api_key) > 10)
+        elif self.provider == "ollama":
+            return bool(self.ollama_url)
+        return False
+    
     async def generate(self, prompt: str, system_prompt: str = None, max_tokens: int = 2000) -> str:
         """Generate text using configured AI provider with automatic fallback"""
         
