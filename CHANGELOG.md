@@ -13,6 +13,29 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 
 ---
 
+## [1.3.0] - 2026-04-08
+
+### 🎉 PRODUCTION-READY RELEASE
+
+#### 🔧 Fixes für lokale Installationen (Unraid)
+- ✅ **Kalender:** Events laden korrekt (keine "Failed to load events")
+- ✅ **Tasks:** Funktionieren vollständig
+- ✅ **Dokument-Vorschau:** window.location.origin für korrekte URLs
+- ✅ **E-Mail-Integration:** KI hat Zugriff auf E-Mail-Inhalte
+- ✅ **Testing:** 100% Backend-Tests bestanden (17/17)
+
+#### 📦 Deployment
+- ✅ **Lokales Bauen:** docker-compose.yml mit build-Kontext
+- ✅ **Update-Script:** Automatisches Update-Script für Unraid
+- ✅ **Dokumentation:** Gmail-Einrichtung, KI-Assistent-Anleitung, Ollama-Installation
+
+#### 🐛 Bug-Fixes
+- Fixed Document model field mismatch (filename vs original_filename)
+- Fixed Calendar.js robust error handling
+- Fixed API URL generation für lokale IPs
+
+---
+
 ## [1.2.0] - 2026-04-08
 
 ### 🔧 BUGFIX - Kalender-Events laden
