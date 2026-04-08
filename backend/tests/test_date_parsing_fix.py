@@ -164,7 +164,9 @@ class TestDateUtilsFunction:
     
     def test_safe_parse_datetime_with_valid_iso_string(self):
         """Test parsing valid ISO strings"""
-        from utils.date_utils import safe_parse_datetime
+        import sys
+        sys.path.insert(0, '/app/backend')
+        from routers.date_utils import safe_parse_datetime
         
         test_cases = [
             ("2026-04-09T10:30:00", "2026-04-09T10:30:00"),
@@ -178,7 +180,9 @@ class TestDateUtilsFunction:
     
     def test_safe_parse_datetime_with_malformed_strings(self):
         """Test parsing malformed date strings (the main bug fix)"""
-        from utils.date_utils import safe_parse_datetime
+        import sys
+        sys.path.insert(0, '/app/backend')
+        from routers.date_utils import safe_parse_datetime
         
         # These are the malformed formats that caused the original bug
         test_cases = [
@@ -194,7 +198,9 @@ class TestDateUtilsFunction:
     
     def test_safe_parse_datetime_with_none(self):
         """Test parsing None returns None"""
-        from utils.date_utils import safe_parse_datetime
+        import sys
+        sys.path.insert(0, '/app/backend')
+        from routers.date_utils import safe_parse_datetime
         
         result = safe_parse_datetime(None)
         assert result is None
@@ -202,7 +208,9 @@ class TestDateUtilsFunction:
     
     def test_safe_parse_datetime_with_empty_string(self):
         """Test parsing empty string returns None"""
-        from utils.date_utils import safe_parse_datetime
+        import sys
+        sys.path.insert(0, '/app/backend')
+        from routers.date_utils import safe_parse_datetime
         
         result = safe_parse_datetime("")
         assert result is None

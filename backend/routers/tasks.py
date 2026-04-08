@@ -7,7 +7,7 @@ import logging
 
 from deps import db, require_auth, log_action
 from models import TaskCreate
-from utils.date_utils import safe_parse_datetime
+from routers.date_utils import safe_parse_datetime
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
