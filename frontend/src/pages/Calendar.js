@@ -65,10 +65,16 @@ export default function Calendar() {
   const loadEvents = async () => {
     try {
       const response = await eventsAPI.list();
-      setEvents(response.data);
+      console.log('[Calendar] Events response:', response);
+      // Handle both direct array and {data: array} responses
+      const eventsData = Array.isArray(response) ? response : (response.data || []);
+      setEvents(eventsData);
+      console.log('[Calendar] Loaded events:', eventsData.length);
     } catch (error) {
-      console.error('Failed to load events:', error);
-      toast.error('Failed to load events');
+      console.error('[Calendar] Failed to load events:', error);
+      console.error('[Calendar] Error details:', error.response?.data || error.message);
+      toast.error(t('calendar.loadError') || 'Failed to load events');
+      setEvents([]); // Set empty array on error
     }
     setLoading(false);
   };

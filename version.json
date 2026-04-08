@@ -1,6 +1,6 @@
 {
-  "version": "1.1.9",
+  "version": "1.2.0",
   "release_date": "2026-04-08",
-  "release_notes": "Dokument-Vorschau & E-Mail-Integration: Fixes für Preview-URLs + KI hat jetzt Zugriff auf E-Mail-Inhalte",
+  "release_notes": "Kalender-Fix: Events werden jetzt korrekt geladen + Besseres Error-Handling",
   "changelog_url": "https://raw.githubusercontent.com/AndiTrenter/CaseDesk-AI/main/CHANGELOG.md"
 }

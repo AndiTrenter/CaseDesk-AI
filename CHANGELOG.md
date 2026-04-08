@@ -13,6 +13,32 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 
 ---
 
+## [1.2.0] - 2026-04-08
+
+### 🔧 BUGFIX - Kalender-Events laden
+
+#### Kalender-Fix (`Calendar.js`)
+- ✅ **FIXED:** "Failed to load events" - Besseres Error-Handling
+- ✅ **Robustheit:** Unterstützt jetzt beide Response-Formate (Array direkt oder `{data: array}`)
+- ✅ **Logging:** Detaillierte Console-Logs für Debugging
+- ✅ **Fallback:** Leeres Array bei Fehler, statt Absturz
+
+#### KI-Assistent: Event-Erstellung
+- ✅ **Backend:** `/ai/execute-action` mit `action_type='create_event'` funktioniert
+- ✅ **Automatisch:** KI kann Termine aus natürlicher Sprache erstellen
+  - Beispiel: "Erstelle einen Termin am 15. April um 14 Uhr für Zahnarzt"
+- ✅ **Erinnerungen:** Optional Reminder-Tasks erstellen
+- ✅ **Aus Dokumenten:** Automatische Termin-Extraktion aus E-Mails/Dokumenten
+
+#### Bekannte Events-Features
+- 📅 Termine manuell erstellen
+- 🔔 Erinnerungen (5 Min bis 2 Wochen vorher)
+- 📍 Orte hinzufügen
+- 🔗 Mit Fällen verknüpfen
+- 🤖 KI-gestützte Erstellung via Chat
+
+---
+
 ## [1.1.9] - 2026-04-08
 
 ### 🔧 BUGFIX - Dokument-Vorschau & E-Mail-Integration
