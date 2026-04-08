@@ -25,15 +25,28 @@ REMINDER_OPTIONS = {
 }
 
 
-@router.get("/events", response_model=List[Event])
+@router.get("/events")
 async def list_events(
     case_id: str = None,
     user: dict = Depends(require_auth)
 ):
+    from datetime import datetime
     query = {"user_id": user["id"]}
     if case_id:
         query["case_id"] = case_id
     events = await db.events.find(query, {"_id": 0}).sort("start_time", 1).to_list(1000)
+    
+    # FIXED: Convert datetime objects to ISO strings for JSON serialization
+    for event in events:
+        if isinstance(event.get("start_time"), datetime):
+            event["start_time"] = event["start_time"].isoformat()
+        if isinstance(event.get("end_time"), datetime):
+            event["end_time"] = event["end_time"].isoformat()
+        if isinstance(event.get("created_at"), datetime):
+            event["created_at"] = event["created_at"].isoformat()
+        if isinstance(event.get("updated_at"), datetime):
+            event["updated_at"] = event["updated_at"].isoformat()
+    
     return events
 
 

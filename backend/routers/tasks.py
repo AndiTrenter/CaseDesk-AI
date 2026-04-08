@@ -44,6 +44,15 @@ async def list_tasks(
             task["status"] = status_map.get(current_status, current_status)
             if task["status"] not in ["todo", "in_progress", "done"]:
                 task["status"] = "todo"
+            
+            # FIXED: Convert datetime objects to ISO strings
+            if isinstance(task.get("due_date"), datetime):
+                task["due_date"] = task["due_date"].isoformat()
+            if isinstance(task.get("created_at"), datetime):
+                task["created_at"] = task["created_at"].isoformat()
+            if isinstance(task.get("updated_at"), datetime):
+                task["updated_at"] = task["updated_at"].isoformat()
+        
         return tasks
     except Exception as e:
         logger.error(f"Error loading tasks: {e}")
