@@ -7,6 +7,7 @@ import logging
 
 from deps import db, require_auth, log_action
 from models import TaskCreate
+from utils.date_utils import safe_parse_datetime
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -45,13 +46,10 @@ async def list_tasks(
             if task["status"] not in ["todo", "in_progress", "done"]:
                 task["status"] = "todo"
             
-            # FIXED: Convert datetime objects to ISO strings
-            if isinstance(task.get("due_date"), datetime):
-                task["due_date"] = task["due_date"].isoformat()
-            if isinstance(task.get("created_at"), datetime):
-                task["created_at"] = task["created_at"].isoformat()
-            if isinstance(task.get("updated_at"), datetime):
-                task["updated_at"] = task["updated_at"].isoformat()
+            # ROBUST FIX: Handle both datetime objects AND malformed string dates from legacy DB
+            task["due_date"] = safe_parse_datetime(task.get("due_date"))
+            task["created_at"] = safe_parse_datetime(task.get("created_at"))
+            task["updated_at"] = safe_parse_datetime(task.get("updated_at"))
         
         return tasks
     except Exception as e:

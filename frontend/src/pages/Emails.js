@@ -148,14 +148,18 @@ export default function Emails() {
         toast.success('E-Mail erfolgreich gesendet!');
         setComposeOpen(false);
         resetComposeData();
-        loadData();
+        await loadData(); // Reload email list
       } else {
         toast.error(response.data.error || 'Senden fehlgeschlagen');
       }
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'E-Mail konnte nicht gesendet werden');
+      console.error('Email send error:', error);
+      const errorMsg = error.response?.data?.detail || error.message || 'E-Mail konnte nicht gesendet werden';
+      toast.error(errorMsg);
+    } finally {
+      // CRITICAL FIX: Always reset composing state to prevent black screen
+      setComposing(false);
     }
-    setComposing(false);
   };
   
   // Reset compose data

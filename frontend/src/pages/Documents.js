@@ -363,7 +363,26 @@ export default function Documents() {
 
   const getFileIcon = (mimeType) => {
     if (mimeType?.startsWith('image/')) return FileImage;
+    if (mimeType === 'application/pdf') return FileText;
+    if (mimeType?.includes('word') || mimeType?.includes('document')) return FileText;
+    if (mimeType?.includes('excel') || mimeType?.includes('spreadsheet')) return FileText;
     return File;
+  };
+  
+  const getFileIconColor = (mimeType) => {
+    if (mimeType?.startsWith('image/')) return 'text-blue-400';
+    if (mimeType === 'application/pdf') return 'text-red-400';
+    if (mimeType?.includes('word') || mimeType?.includes('document')) return 'text-blue-500';
+    if (mimeType?.includes('excel') || mimeType?.includes('spreadsheet')) return 'text-green-400';
+    return 'text-gray-600';
+  };
+  
+  const getFileTypeBadge = (mimeType) => {
+    if (mimeType?.startsWith('image/')) return 'Bild';
+    if (mimeType === 'application/pdf') return 'PDF';
+    if (mimeType?.includes('word') || mimeType?.includes('document')) return 'Word';
+    if (mimeType?.includes('excel') || mimeType?.includes('spreadsheet')) return 'Excel';
+    return 'Datei';
   };
 
   const formatFileSize = (bytes) => {
@@ -570,6 +589,8 @@ export default function Documents() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredDocuments.map((doc, index) => {
             const FileIcon = getFileIcon(doc.mime_type);
+            const fileIconColor = getFileIconColor(doc.mime_type);
+            const fileTypeBadge = getFileTypeBadge(doc.mime_type);
             const isProcessing = processing[doc.id];
             const isSelected = selectedDocIds.includes(doc.id);
             
@@ -591,7 +612,7 @@ export default function Documents() {
                 data-testid={`document-card-${index}`}
               >
                 {/* Document Preview / Icon Header */}
-                <div className="relative h-32 bg-gradient-to-br from-white/5 to-white/[0.02] flex items-center justify-center">
+                <div className="relative h-32 bg-gradient-to-br from-white/5 to-white/[0.02] flex flex-col items-center justify-center">
                   {/* Selection Checkbox */}
                   {selectionMode && (
                     <div 
@@ -607,8 +628,13 @@ export default function Documents() {
                     </div>
                   )}
                   
-                  {/* File Icon */}
-                  <FileIcon className="w-16 h-16 text-gray-600 group-hover:text-gray-500 transition-colors" />
+                  {/* File Icon with improved colors */}
+                  <FileIcon className={`w-16 h-16 ${fileIconColor} group-hover:scale-110 transition-transform`} />
+                  
+                  {/* File Type Badge */}
+                  <span className="mt-2 px-2 py-0.5 bg-white/10 text-gray-300 text-xs rounded">
+                    {fileTypeBadge}
+                  </span>
                   
                   {/* Status Badges - Top Right */}
                   <div className="absolute top-2 right-2 flex flex-col gap-1">
