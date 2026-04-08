@@ -1,6 +1,6 @@
 {
-  "version": "1.1.7",
+  "version": "1.1.8",
   "release_date": "2026-04-08",
-  "release_notes": "OpenAI API-Key Fix: Verbesserte Eingabe und Speicherung des API-Keys mit Show/Hide-Funktion",
+  "release_notes": "Ollama-Entkopplung: Ollama aus CaseDesk entfernt für externe Installation via Unraid",
   "changelog_url": "https://raw.githubusercontent.com/AndiTrenter/CaseDesk-AI/main/CHANGELOG.md"
 }

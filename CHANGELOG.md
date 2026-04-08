@@ -13,6 +13,28 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 
 ---
 
+## [1.1.8] - 2026-04-08
+
+### 🔄 ARCHITEKTUR-ÄNDERUNG - Ollama-Entkopplung
+
+#### Ollama aus CaseDesk entfernt
+- ❌ **Entfernt:** `ollama` und `ollama-init` Services aus `docker-compose.unraid.yml`
+- ✅ **Neu:** Externe Ollama-Installation via Unraid Community Apps
+- 🔗 **Backend:** Unterstützt jetzt externe Ollama-URLs (z.B. `http://192.168.1.140:11434`)
+- 📝 **Dokumentation:** Neue Anleitung `UNRAID_OLLAMA_INSTALLATION.md`
+
+#### Vorteile
+- ✅ Ollama läuft unabhängig von CaseDesk
+- ✅ Modelle bleiben bei CaseDesk-Updates erhalten
+- ✅ Open WebUI kann parallel genutzt werden
+- ✅ Einfachere Verwaltung über Unraid WebUI
+- ✅ Kann von mehreren Apps gleichzeitig genutzt werden
+
+#### Migration
+Siehe `UNRAID_OLLAMA_INSTALLATION.md` für Schritt-für-Schritt Anleitung.
+
+---
+
 ## [1.1.7] - 2026-04-08
 
 ### 🔧 BUGFIX - OpenAI API-Key Eingabe und Speicherung
