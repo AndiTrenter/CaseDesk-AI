@@ -147,8 +147,29 @@ async def admin_health_check(user: dict = Depends(require_admin)):
 async def get_system_settings(user: dict = Depends(require_admin)):
     settings = await db.system_settings.find_one({}, {"_id": 0})
     if settings and settings.get("openai_api_key"):
+        # Mask the API key but show first/last 4 chars for verification
+        key = settings.get("openai_api_key", "")
+        if len(key) > 12:
+            settings["openai_api_key_masked"] = f"{key[:7]}...{key[-4:]}"
         settings["openai_api_key"] = "***configured***"
-    return settings or {}
+        settings["has_api_key"] = True
+    else:
+        settings = settings or {}
+        settings["has_api_key"] = False
+    return settings
+
+
+@router.delete("/settings/system/api-key")
+async def delete_api_key(user: dict = Depends(require_admin)):
+    """Delete/reset the OpenAI API key"""
+    await db.system_settings.update_one(
+        {},
+        {"$unset": {"openai_api_key": ""}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=False
+    )
+    await log_action(user["id"], "delete_api_key", "system")
+    logger.info("OpenAI API key deleted by admin")
+    return {"success": True, "message": "API-Key gelöscht"}
 
 
 @router.put("/settings/system")
@@ -166,8 +187,20 @@ async def update_system_settings(
     if ai_provider is not None:
         update_data["ai_provider"] = ai_provider
         update_data["allow_external_ai"] = ai_provider == "openai"
+    
+    # FIXED: Handle API key updates properly
+    # Accept empty string to clear the key, or a new key to set it
     if openai_api_key is not None and openai_api_key != "***configured***":
-        update_data["openai_api_key"] = openai_api_key if openai_api_key else None
+        # Trim whitespace from API key
+        cleaned_key = openai_api_key.strip() if openai_api_key else ""
+        if cleaned_key:
+            update_data["openai_api_key"] = cleaned_key
+            logger.info("OpenAI API key updated (length: {})".format(len(cleaned_key)))
+        else:
+            # User explicitly cleared the key
+            update_data["openai_api_key"] = None
+            logger.info("OpenAI API key cleared")
+    
     if internet_access is not None:
         update_data["internet_access"] = internet_access
     if default_language is not None:
@@ -188,7 +221,7 @@ async def update_system_settings(
         upsert=True
     )
     await log_action(user["id"], "update_settings", "system")
-    return {"success": True, "message": "Settings updated"}
+    return {"success": True, "message": "Einstellungen gespeichert"}
 
 
 # ==================== Storage Limits Settings ====================

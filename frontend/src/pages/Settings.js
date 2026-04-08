@@ -1126,20 +1126,51 @@ export default function Settings() {
                     {/* OpenAI API Key */}
                     {systemSettings.ai_provider === 'openai' && (
                       <div>
-                        <Label className="text-white">{t('setup.apiKey')}</Label>
-                        <Input
-                          type="password"
-                          value={systemSettings.openai_api_key}
-                          onChange={(e) => setSystemSettings({ ...systemSettings, openai_api_key: e.target.value })}
-                          className="mt-1 bg-black/30 border-white/10 text-white"
-                          placeholder={t('setup.apiKeyPlaceholder')}
-                          data-testid="openai-api-key-input"
-                        />
+                        <div className="flex items-center justify-between mb-1">
+                          <Label className="text-white">{t('setup.apiKey')}</Label>
+                          {systemSettings.has_api_key && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                if (window.confirm('API-Key wirklich löschen?')) {
+                                  setSystemSettings({ ...systemSettings, openai_api_key: '', has_api_key: false });
+                                }
+                              }}
+                              className="text-red-400 hover:text-red-300 text-xs h-6"
+                            >
+                              <Trash2 className="w-3 h-3 mr-1" /> Löschen
+                            </Button>
+                          )}
+                        </div>
+                        <div className="relative">
+                          <Input
+                            type={showPassword ? "text" : "password"}
+                            value={systemSettings.openai_api_key}
+                            onChange={(e) => setSystemSettings({ ...systemSettings, openai_api_key: e.target.value })}
+                            className="mt-1 bg-black/30 border-white/10 text-white pr-10"
+                            placeholder={systemSettings.has_api_key ? "Neuen Key eingeben um zu ändern" : t('setup.apiKeyPlaceholder')}
+                            data-testid="openai-api-key-input"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                          >
+                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
                         {systemSettings.openai_api_key === '***configured***' && (
                           <p className="text-green-400 text-sm mt-1 flex items-center gap-1">
-                            <Check className="w-4 h-4" /> API key is configured
+                            <Check className="w-4 h-4" /> API-Key ist konfiguriert
+                            {systemSettings.openai_api_key_masked && (
+                              <span className="text-gray-500 ml-2">({systemSettings.openai_api_key_masked})</span>
+                            )}
                           </p>
                         )}
+                        <p className="text-gray-500 text-xs mt-1">
+                          Ihr OpenAI API-Key (beginnt mit "sk-proj-" oder "sk-")
+                        </p>
                       </div>
                     )}
                   </div>
