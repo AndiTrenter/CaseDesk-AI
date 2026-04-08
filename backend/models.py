@@ -174,11 +174,19 @@ class Case(CaseBase):
 
 # Document Models
 class DocumentBase(BaseDocument):
-    filename: str
+    # filename is optional - database uses original_filename
+    filename: Optional[str] = None
     original_filename: str
     mime_type: str
-    size: int
+    # size is optional - database uses file_size
+    size: Optional[int] = None
+    file_size: Optional[int] = None
     document_type: str = "other"
+    
+    @property
+    def actual_size(self) -> int:
+        """Get the actual file size from either field"""
+        return self.size or self.file_size or 0
 
 
 class DocumentCreate(DocumentBase):
