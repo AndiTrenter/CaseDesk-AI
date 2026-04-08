@@ -19,7 +19,7 @@ async def list_tasks(
     status: str = None,
     user: dict = Depends(require_auth)
 ):
-    """List all tasks for the current user"""
+    """List all tasks with robust date parsing for legacy DB data"""
     query = {"user_id": user["id"]}
     if case_id:
         query["case_id"] = case_id
@@ -36,10 +36,14 @@ async def list_tasks(
     
     try:
         tasks = await db.tasks.find(query, {"_id": 0}).sort("due_date", 1).to_list(1000)
-        # Ensure all tasks have required fields and normalize status
+        
+        # Clean and normalize all tasks
+        cleaned_tasks = []
         for task in tasks:
+            # Ensure priority exists
             if "priority" not in task:
                 task["priority"] = "medium"
+            
             # Normalize legacy status values
             current_status = task.get("status", "todo")
             task["status"] = status_map.get(current_status, current_status)
@@ -50,10 +54,18 @@ async def list_tasks(
             task["due_date"] = safe_parse_datetime(task.get("due_date"))
             task["created_at"] = safe_parse_datetime(task.get("created_at"))
             task["updated_at"] = safe_parse_datetime(task.get("updated_at"))
+            
+            # Parse completed_at if exists
+            if "completed_at" in task:
+                task["completed_at"] = safe_parse_datetime(task.get("completed_at"))
+            
+            # Always include tasks (even without due_date)
+            cleaned_tasks.append(task)
         
-        return tasks
+        return cleaned_tasks
     except Exception as e:
         logger.error(f"Error loading tasks: {e}")
+        # Return empty list on error instead of crashing
         return []
 
 

@@ -3,11 +3,13 @@ from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 import uuid
+import logging
 
 from deps import db, require_auth, log_action
 from models import Event, EventCreate
 from routers.date_utils import safe_parse_datetime
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Reminder time options (in minutes before event)
