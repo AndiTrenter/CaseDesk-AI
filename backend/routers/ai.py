@@ -843,7 +843,8 @@ async def execute_action(
     except json.JSONDecodeError:
         return {"success": False, "error": "Ungültige Aktionsdaten"}
     
-    now = datetime.now(timezone.utc).isoformat()
+    # FIXED: Use datetime object instead of ISO string for created_at/updated_at
+    now = datetime.now(timezone.utc)
     
     if action_type == "create_event":
         event_id = str(uuid.uuid4())
@@ -1044,9 +1045,14 @@ async def execute_action(
         event_data = data.get("event", {})
         if event_data:
             event_id = str(uuid.uuid4())
-            event_date = event_data.get("date", now[:10])
-            start_time = event_data.get("start_time", "09:00")
-            end_time = event_data.get("end_time", "10:00")
+            # FIXED: Convert now datetime to date string
+            event_date = event_data.get("date", now.strftime("%Y-%m-%d"))
+            start_time_str = event_data.get("start_time", "09:00")
+            end_time_str = event_data.get("end_time", "10:00")
+            
+            # FIXED: Convert to datetime objects
+            start_datetime = datetime.fromisoformat(f"{event_date}T{start_time_str}:00")
+            end_datetime = datetime.fromisoformat(f"{event_date}T{end_time_str}:00")
             
             # Handle reminder settings
             reminder_data = data.get("reminder", {})
@@ -1066,8 +1072,8 @@ async def execute_action(
                 "user_id": user["id"],
                 "title": event_data.get("title", "Neuer Termin"),
                 "description": event_data.get("description", ""),
-                "start_time": f"{event_date}T{start_time}:00",
-                "end_time": f"{event_date}T{end_time}:00",
+                "start_time": start_datetime,  # datetime object!
+                "end_time": end_datetime,      # datetime object!
                 "all_day": event_data.get("all_day", False),
                 "location": event_data.get("location"),
                 "reminder_enabled": reminder_enabled,
@@ -1086,15 +1092,15 @@ async def execute_action(
             # Create reminder record if enabled
             if reminder_enabled and reminder_minutes is not None:
                 try:
-                    event_dt = datetime.fromisoformat(f"{event_date}T{start_time}:00")
-                    reminder_time = event_dt - timedelta(minutes=reminder_minutes)
+                    # Use the already parsed start_datetime
+                    reminder_time = start_datetime - timedelta(minutes=reminder_minutes)
                     reminder_id = str(uuid.uuid4())
                     reminder = {
                         "id": reminder_id,
                         "user_id": user["id"],
                         "event_id": event_id,
                         "title": f"Erinnerung: {event_data.get('title', 'Termin')}",
-                        "reminder_time": reminder_time.isoformat(),
+                        "reminder_time": reminder_time,  # datetime object!
                         "channels": ["app"],
                         "sent": False,
                         "created_at": now
@@ -1117,6 +1123,19 @@ async def execute_action(
         tasks_data = data.get("tasks", [])
         for task_data in tasks_data:
             task_id = str(uuid.uuid4())
+            
+            # FIXED: Convert due_date to datetime
+            task_due_date = None
+            if task_data.get("due_date"):
+                try:
+                    due_date_str = task_data.get("due_date")
+                    if "T" in due_date_str:
+                        task_due_date = datetime.fromisoformat(due_date_str)
+                    else:
+                        task_due_date = datetime.fromisoformat(f"{due_date_str}T23:59:59")
+                except (ValueError, TypeError):
+                    task_due_date = None
+            
             task = {
                 "id": task_id,
                 "user_id": user["id"],
@@ -1124,7 +1143,7 @@ async def execute_action(
                 "description": task_data.get("description", ""),
                 "priority": task_data.get("priority", "medium"),
                 "status": "todo",
-                "due_date": task_data.get("due_date"),
+                "due_date": task_due_date,  # datetime object or None!
                 "event_id": event_id if event_data else None,
                 "source": "ai_chat",
                 "created_at": now,
