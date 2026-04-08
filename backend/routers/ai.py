@@ -920,6 +920,21 @@ async def execute_action(
     elif action_type == "create_task":
         task_id = str(uuid.uuid4())
         
+        # FIXED: Convert due_date string to datetime object if provided
+        due_date_obj = None
+        if data.get("due_date"):
+            try:
+                from datetime import datetime
+                due_date_str = data.get("due_date")
+                # Handle both "2026-04-10" and "2026-04-10T15:00:00" formats
+                if "T" in due_date_str:
+                    due_date_obj = datetime.fromisoformat(due_date_str)
+                else:
+                    due_date_obj = datetime.fromisoformat(f"{due_date_str}T23:59:59")
+            except (ValueError, TypeError) as e:
+                logger.error(f"Invalid due_date format: {data.get('due_date')} - {e}")
+                due_date_obj = None
+        
         task = {
             "id": task_id,
             "user_id": user["id"],
@@ -927,7 +942,7 @@ async def execute_action(
             "description": data.get("description", ""),
             "priority": data.get("priority", "medium"),
             "status": "todo",
-            "due_date": data.get("due_date"),
+            "due_date": due_date_obj,  # datetime object or None!
             "case_id": data.get("case_id"),
             "source": "ai_chat",
             "created_at": now,
