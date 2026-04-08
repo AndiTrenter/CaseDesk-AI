@@ -850,19 +850,21 @@ async def execute_action(
         
         # Parse date and time
         event_date = data.get("date", now[:10])
-        start_time = data.get("start_time", "09:00")
-        end_time = data.get("end_time", "10:00")
+        start_time_str = data.get("start_time", "09:00")
+        end_time_str = data.get("end_time", "10:00")
         
-        start_datetime = f"{event_date}T{start_time}:00"
-        end_datetime = f"{event_date}T{end_time}:00"
+        # FIXED: Convert to datetime objects instead of strings
+        from datetime import datetime
+        start_datetime = datetime.fromisoformat(f"{event_date}T{start_time_str}:00")
+        end_datetime = datetime.fromisoformat(f"{event_date}T{end_time_str}:00")
         
         event = {
             "id": event_id,
             "user_id": user["id"],
             "title": data.get("title", "Neuer Termin"),
             "description": data.get("description", ""),
-            "start_time": start_datetime,
-            "end_time": end_datetime,
+            "start_time": start_datetime,  # datetime object!
+            "end_time": end_datetime,      # datetime object!
             "all_day": data.get("all_day", False),
             "location": data.get("location"),
             "case_id": data.get("case_id"),
