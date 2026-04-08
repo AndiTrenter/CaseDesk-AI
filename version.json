@@ -1,6 +1,6 @@
 {
-  "version": "1.1.6",
-  "release_date": "2026-04-07",
-  "release_notes": "Setup-Fix: Verbesserte API-URL Erkennung mit Debug-Logging",
+  "version": "1.1.7",
+  "release_date": "2026-04-08",
+  "release_notes": "OpenAI API-Key Fix: Verbesserte Eingabe und Speicherung des API-Keys mit Show/Hide-Funktion",
   "changelog_url": "https://raw.githubusercontent.com/AndiTrenter/CaseDesk-AI/main/CHANGELOG.md"
 }

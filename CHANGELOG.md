@@ -13,6 +13,33 @@ und dieses Projekt verwendet [Semantische Versionierung](https://semver.org/lang
 
 ---
 
+## [1.1.7] - 2026-04-08
+
+### 🔧 BUGFIX - OpenAI API-Key Eingabe und Speicherung
+
+#### Backend-Verbesserungen (`settings.py`)
+- ✅ **Verbessertes API-Key Handling:**
+  - API-Key wird automatisch getrimmt (Leerzeichen entfernt)
+  - Besseres Logging beim Speichern des Keys
+  - Erster/Letzter Zeichenbereich wird zur Verifikation angezeigt
+  - Neuer DELETE-Endpunkt zum Zurücksetzen des API-Keys
+
+#### Frontend-Verbesserungen (`Settings.js`)
+- 👁️ **Show/Hide Button** für API-Key Eingabefeld (Passwort-Feld mit Auge-Symbol)
+- 🗑️ **"Löschen"-Button** zum Entfernen des alten API-Keys
+- ℹ️ **Besseres Feedback:**
+  - Anzeige der ersten/letzten Zeichen des gespeicherten Keys (z.B. "sk-proj-...X1Y2")
+  - Klarere Platzhalter-Texte
+  - Hinweis zum Key-Format ("beginnt mit sk-proj- oder sk-")
+- 🎨 **Verbesserte UX:** Eye/EyeOff Icons für bessere Sichtbarkeit
+
+#### Behebt:
+- ❌ API-Key wurde nicht korrekt gespeichert
+- ❌ Benutzer konnte nicht sehen, ob Key korrekt eingegeben wurde
+- ❌ Keine Möglichkeit, alten ungültigen Key zu löschen
+
+---
+
 ## [1.1.5] - 2026-04-07
 
 ### 🔴 KRITISCHER FIX - Tasks & Kalender für lokale Installationen
