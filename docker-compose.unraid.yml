@@ -47,8 +47,13 @@ services:
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
       - OCR_SERVICE_URL=http://ocr:8002
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - CASEDESK_DIR=/mnt/user/appdata/casedesk
     volumes:
       - /mnt/user/appdata/casedesk/uploads:/app/uploads
+      # Docker socket für automatische Updates (optional)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # CaseDesk Verzeichnis für Update-Script
+      - /mnt/user/appdata/casedesk:/mnt/user/appdata/casedesk:ro
     networks:
       - default
     extra_hosts:

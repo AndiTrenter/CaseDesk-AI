@@ -38,8 +38,11 @@ services:
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
       - OCR_SERVICE_URL=http://ocr:8002
       - SECRET_KEY=${SECRET_KEY:-dev-secret-change-in-production}
+      - CASEDESK_DIR=${CASEDESK_DIR:-/app}
     volumes:
       - uploads_data:/app/uploads
+      # Docker socket für automatische Updates (optional - entfernen falls nicht gewünscht)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - default
 

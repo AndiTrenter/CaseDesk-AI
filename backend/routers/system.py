@@ -25,8 +25,17 @@ GITHUB_VERSION_URL = "https://raw.githubusercontent.com/AndiTrenter/CaseDesk-AI/
 GITHUB_CHANGELOG_URL = "https://raw.githubusercontent.com/AndiTrenter/CaseDesk-AI/main/CHANGELOG.md"
 
 # Docker compose file path (for Unraid)
-DOCKER_COMPOSE_FILE = "/app/docker-compose.unraid.yml"
-DOCKER_COMPOSE_DIR = "/app"
+# Try multiple possible paths
+DOCKER_COMPOSE_FILES = [
+    "/mnt/user/appdata/casedesk/docker-compose.yml",
+    "/mnt/user/appdata/casedesk/docker-compose.unraid.yml",
+    "/app/docker-compose.unraid.yml",
+    "/app/docker-compose.yml"
+]
+DOCKER_COMPOSE_DIR = os.environ.get("CASEDESK_DIR", "/mnt/user/appdata/casedesk")
+
+# Update script path (mounted from host)
+UPDATE_SCRIPT_PATH = "/app/scripts/update.sh"
 
 
 def compare_versions(v1: str, v2: str) -> int:
@@ -181,10 +190,6 @@ async def perform_update(user: dict = Depends(require_admin)):
             "timestamp": datetime.utcnow()
         })
         
-        # Execute docker compose pull
-        # Note: In production, this runs from the host via a mounted socket or similar
-        # For now, we'll return success and let the admin do it manually if needed
-        
         result = {
             "success": True,
             "message": "Update wird vorbereitet...",
@@ -197,83 +202,132 @@ async def perform_update(user: dict = Depends(require_admin)):
             ]
         }
         
-        # Try to execute the update command
-        # This requires Docker socket to be mounted in the container
-        try:
-            # Check if docker socket is available
-            if os.path.exists("/var/run/docker.sock"):
-                # Execute docker compose pull in background
+        # Find the docker-compose file
+        compose_file = None
+        for cf in DOCKER_COMPOSE_FILES:
+            if os.path.exists(cf):
+                compose_file = cf
+                compose_dir = os.path.dirname(cf)
+                break
+        
+        # Method 1: Try update script (if mounted from host)
+        if os.path.exists(UPDATE_SCRIPT_PATH) and os.access(UPDATE_SCRIPT_PATH, os.X_OK):
+            try:
+                logger.info(f"Executing update script: {UPDATE_SCRIPT_PATH}")
                 process = await asyncio.create_subprocess_exec(
-                    "docker", "compose", "-f", DOCKER_COMPOSE_FILE, "pull",
-                    cwd=DOCKER_COMPOSE_DIR,
+                    UPDATE_SCRIPT_PATH,
+                    env={**os.environ, "CASEDESK_DIR": DOCKER_COMPOSE_DIR},
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=600)
+                
+                if process.returncode == 0:
+                    await db.system_settings.update_one(
+                        {"key": "installed_version"},
+                        {"$set": {"version": new_version, "updated_at": datetime.utcnow()}},
+                        upsert=True
+                    )
+                    result["message"] = "Update erfolgreich installiert!"
+                    result["docker_executed"] = True
+                    result["output"] = stdout.decode()[-1000:] if stdout else ""
+                else:
+                    result["success"] = False
+                    result["message"] = "Update-Script fehlgeschlagen"
+                    result["error"] = stderr.decode()[-500:] if stderr else "Unknown error"
+                    
+            except asyncio.TimeoutError:
+                result["success"] = False
+                result["message"] = "Update-Timeout nach 10 Minuten"
+            except Exception as e:
+                logger.error(f"Update script failed: {e}")
+                result["docker_executed"] = False
+                result["manual_required"] = True
+        
+        # Method 2: Try Docker socket directly (if available)
+        elif os.path.exists("/var/run/docker.sock") and compose_file:
+            try:
+                logger.info(f"Using Docker socket with compose file: {compose_file}")
+                
+                # Execute git pull first
+                git_dir = compose_dir if os.path.exists(os.path.join(compose_dir, ".git")) else None
+                if git_dir:
+                    process = await asyncio.create_subprocess_exec(
+                        "git", "pull", "origin", "main",
+                        cwd=git_dir,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    await asyncio.wait_for(process.communicate(), timeout=60)
+                
+                # Docker compose pull
+                process = await asyncio.create_subprocess_exec(
+                    "docker", "compose", "-f", compose_file, "pull",
+                    cwd=compose_dir,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE
                 )
                 stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
                 
                 if process.returncode == 0:
-                    # Pull succeeded, now recreate containers
+                    # Build and recreate containers
                     process = await asyncio.create_subprocess_exec(
-                        "docker", "compose", "-f", DOCKER_COMPOSE_FILE, "up", "-d",
-                        cwd=DOCKER_COMPOSE_DIR,
+                        "docker", "compose", "-f", compose_file, "up", "-d", "--build",
+                        cwd=compose_dir,
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE
                     )
-                    stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=120)
+                    stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
                     
                     if process.returncode == 0:
-                        # Update installed version
                         await db.system_settings.update_one(
                             {"key": "installed_version"},
                             {"$set": {"version": new_version, "updated_at": datetime.utcnow()}},
                             upsert=True
                         )
-                        
                         result["message"] = "Update erfolgreich installiert!"
                         result["docker_executed"] = True
                     else:
-                        result["message"] = "Container-Neustart fehlgeschlagen"
-                        result["error"] = stderr.decode() if stderr else "Unknown error"
                         result["success"] = False
+                        result["message"] = "Container-Neustart fehlgeschlagen"
+                        result["error"] = stderr.decode()[-500:] if stderr else "Unknown error"
                 else:
-                    result["message"] = "Docker Pull fehlgeschlagen"
-                    result["error"] = stderr.decode() if stderr else "Unknown error"
                     result["success"] = False
-            else:
-                # Docker socket not available - provide manual instructions
+                    result["message"] = "Docker Pull fehlgeschlagen"
+                    result["error"] = stderr.decode()[-500:] if stderr else "Unknown error"
+                    
+            except asyncio.TimeoutError:
+                result["success"] = False
+                result["message"] = "Update-Timeout - bitte manuell fortfahren"
+            except Exception as e:
+                logger.error(f"Docker command failed: {e}")
                 result["docker_executed"] = False
                 result["manual_required"] = True
-                result["manual_commands"] = [
-                    f"cd {DOCKER_COMPOSE_DIR}",
-                    f"docker compose -f {DOCKER_COMPOSE_FILE} pull",
-                    f"docker compose -f {DOCKER_COMPOSE_FILE} up -d"
-                ]
-                result["message"] = "Docker-Socket nicht verfügbar. Bitte manuell ausführen."
-                
-                # Still update the version in DB (user will do manual update)
-                await db.system_settings.update_one(
-                    {"key": "installed_version"},
-                    {"$set": {"version": new_version, "updated_at": datetime.utcnow()}},
-                    upsert=True
-                )
         
-        except asyncio.TimeoutError:
-            result["success"] = False
-            result["message"] = "Update-Timeout - bitte manuell fortfahren"
-        except Exception as e:
-            logger.error(f"Docker command failed: {e}")
+        # Method 3: Manual update required
+        else:
             result["docker_executed"] = False
             result["manual_required"] = True
             result["manual_commands"] = [
                 f"cd {DOCKER_COMPOSE_DIR}",
-                f"docker compose -f {DOCKER_COMPOSE_FILE} pull",
-                f"docker compose -f {DOCKER_COMPOSE_FILE} up -d"
+                "git pull origin main",
+                "docker-compose down",
+                "docker-compose build --no-cache",
+                "docker-compose up -d"
             ]
+            result["message"] = "Automatisches Update nicht möglich. Bitte manuell ausführen."
+            
+            # Still update the version in DB
+            await db.system_settings.update_one(
+                {"key": "installed_version"},
+                {"$set": {"version": new_version, "updated_at": datetime.utcnow()}},
+                upsert=True
+            )
         
         # Log result
         await db.system_logs.insert_one({
             "type": "update",
-            "action": "update_completed" if result["success"] else "update_failed",
+            "action": "update_completed" if result.get("docker_executed") else "update_manual_required",
             "from_version": current,
             "to_version": new_version,
             "result": result,
@@ -340,9 +394,19 @@ async def perform_rollback(user: dict = Depends(require_admin)):
                     )
                     await asyncio.wait_for(process.communicate(), timeout=120)
                 
+                # Find compose file for rollback
+                compose_file_rollback = None
+                for cf in DOCKER_COMPOSE_FILES:
+                    if os.path.exists(cf):
+                        compose_file_rollback = cf
+                        break
+                
+                if not compose_file_rollback:
+                    compose_file_rollback = os.path.join(DOCKER_COMPOSE_DIR, "docker-compose.yml")
+                
                 # Restart with old images
                 process = await asyncio.create_subprocess_exec(
-                    "docker", "compose", "-f", DOCKER_COMPOSE_FILE, "up", "-d",
+                    "docker", "compose", "-f", compose_file_rollback, "up", "-d",
                     cwd=DOCKER_COMPOSE_DIR,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE
@@ -366,7 +430,7 @@ async def perform_rollback(user: dict = Depends(require_admin)):
                     f"docker pull ghcr.io/anditrenter/casedesk-ai/frontend:v{previous_version}",
                     f"docker pull ghcr.io/anditrenter/casedesk-ai/ocr:v{previous_version}",
                     f"cd {DOCKER_COMPOSE_DIR}",
-                    f"docker compose -f {DOCKER_COMPOSE_FILE} up -d"
+                    "docker-compose up -d"
                 ]
                 result["message"] = "Docker-Socket nicht verfügbar. Bitte manuell ausführen."
         

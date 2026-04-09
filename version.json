@@ -1,6 +1,16 @@
 {
   "version": "1.5.0",
   "release_date": "2026-04-09",
-  "release_notes": "FIX: Kalender-Ladefehler behoben, KI-Assistent kann Kalendereinträge erstellen, robustere Datumsverarbeitung",
-  "changelog_url": "https://raw.githubusercontent.com/AndiTrenter/CaseDesk-AI/main/CHANGELOG.md"
+  "release_notes": "FIX: Kalender-Ladefehler behoben, KI-Assistent kann Kalendereinträge erstellen, verbessertes Update-System mit Docker-Socket Support",
+  "changelog_url": "https://raw.githubusercontent.com/AndiTrenter/CaseDesk-AI/main/CHANGELOG.md",
+  "update_instructions": {
+    "auto": "Docker-Socket muss im Backend-Container gemountet sein",
+    "manual": [
+      "cd /mnt/user/appdata/casedesk",
+      "git pull origin main",
+      "docker-compose -f docker-compose.unraid.yml down",
+      "docker-compose -f docker-compose.unraid.yml pull",
+      "docker-compose -f docker-compose.unraid.yml up -d"
+    ]
+  }
 }
