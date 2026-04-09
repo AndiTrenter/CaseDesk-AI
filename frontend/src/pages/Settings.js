@@ -6,7 +6,7 @@ import {
   Settings as SettingsIcon, Globe, Shield, Brain, 
   User, Moon, Sun, Check, AlertTriangle, Mail, Plus, Trash2, Download,
   Users, UserPlus, Link, Copy, Clock, X, RefreshCw, History, ArrowDownCircle, 
-  CheckCircle, XCircle, AlertCircle, Eye, EyeOff
+  CheckCircle, XCircle, AlertCircle, Eye, EyeOff, Terminal
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -101,6 +101,9 @@ export default function Settings() {
   const [showChangelogDialog, setShowChangelogDialog] = useState(false);
   const [showUpdateConfirm, setShowUpdateConfirm] = useState(false);
   
+  const [showManualUpdateDialog, setShowManualUpdateDialog] = useState(false);
+  const [manualUpdateCommands, setManualUpdateCommands] = useState([]);
+  
   // Mail connection test state
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionTestResult, setConnectionTestResult] = useState(null);
@@ -155,24 +158,10 @@ export default function Settings() {
       
       if (res.data?.success) {
         if (res.data.manual_required) {
-          // Manual commands needed
-          toast.info('Update vorbereitet! Führen Sie folgende Befehle aus:', {
-            id: toastId,
-            duration: 20000,
-            description: res.data.manual_commands?.join('\n')
-          });
-          toast.info(
-            <div className="space-y-2 text-sm">
-              <p className="font-medium">Manuelle Schritte erforderlich:</p>
-              {res.data.manual_commands?.map((cmd, i) => (
-                <code key={i} className="block bg-black/30 p-2 rounded">{cmd}</code>
-              ))}
-              <p className="text-xs text-gray-400 mt-2">
-                Nach Ausführung laden Sie die Seite neu.
-              </p>
-            </div>,
-            { duration: 30000 }
-          );
+          // Show manual update dialog with commands
+          toast.dismiss(toastId);
+          setManualUpdateCommands(res.data.manual_commands || []);
+          setShowManualUpdateDialog(true);
         } else if (res.data.docker_executed) {
           // Automatic update successful
           toast.success('Update erfolgreich installiert!', { id: toastId });
@@ -1894,6 +1883,81 @@ export default function Settings() {
               <Button onClick={handlePerformUpdate} className="bg-green-600 hover:bg-green-700 text-white">
                 <ArrowDownCircle className="w-4 h-4 mr-2" />
                 Update starten
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Update Instructions Dialog */}
+      <Dialog open={showManualUpdateDialog} onOpenChange={setShowManualUpdateDialog}>
+        <DialogContent className="bg-[#1A1A1A] border-white/10 max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Terminal className="w-5 h-5 text-blue-400" />
+              Manuelle Installation erforderlich
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
+              <p className="text-amber-300 text-sm flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                Automatisches Update nicht möglich - Docker-Socket nicht verfügbar
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <p className="text-gray-300 text-sm">
+                Führe folgende Befehle im <strong>Unraid Terminal</strong> aus:
+              </p>
+              
+              <div className="bg-black/50 rounded-lg p-4 font-mono text-sm space-y-1">
+                {manualUpdateCommands.map((cmd, i) => (
+                  <div key={i} className="text-green-400 hover:bg-white/5 p-1 rounded cursor-pointer"
+                       onClick={() => {
+                         navigator.clipboard.writeText(cmd);
+                         toast.success('Befehl kopiert!');
+                       }}
+                       title="Klicken zum Kopieren">
+                    <span className="text-gray-500 mr-2">$</span>{cmd}
+                  </div>
+                ))}
+              </div>
+              
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="mt-2 border-white/10 text-gray-300"
+                onClick={() => {
+                  navigator.clipboard.writeText(manualUpdateCommands.join('\n'));
+                  toast.success('Alle Befehle kopiert!');
+                }}
+              >
+                <Copy className="w-4 h-4 mr-2" />
+                Alle Befehle kopieren
+              </Button>
+            </div>
+            
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 space-y-2">
+              <p className="text-blue-300 text-sm font-medium">💡 Tipp: Automatische Updates aktivieren</p>
+              <p className="text-gray-400 text-xs">
+                Für automatische Updates füge in deiner <code className="bg-black/30 px-1 rounded">docker-compose.unraid.yml</code> folgende Zeile zum Backend-Service hinzu:
+              </p>
+              <code className="block bg-black/30 p-2 rounded text-xs text-green-400">
+                - /var/run/docker.sock:/var/run/docker.sock:ro
+              </code>
+              <p className="text-gray-500 text-xs mt-2">
+                Oder nutze <a href="https://containrrr.dev/watchtower/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">Watchtower</a> für automatische Container-Updates.
+              </p>
+            </div>
+            
+            <div className="flex justify-end gap-3 pt-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowManualUpdateDialog(false)}
+                className="border-white/10"
+              >
+                Schließen
               </Button>
             </div>
           </div>
