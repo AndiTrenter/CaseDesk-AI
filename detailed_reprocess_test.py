@@ -9,7 +9,7 @@ import tempfile
 import os
 
 # Backend URL
-BACKEND_URL = "https://task-portal-fix.preview.emergentagent.com"
+BACKEND_URL = "https://ai-calendar-debug.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Test credentials

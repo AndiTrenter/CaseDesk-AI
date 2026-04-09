@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/system", tags=["System"])
 
 # Version info - wird beim Build gesetzt
-CURRENT_VERSION = "1.1.6"
-BUILD_DATE = "2026-03-26"
+CURRENT_VERSION = "1.5.0"
+BUILD_DATE = "2026-04-09"
 
 # GitHub raw URLs
 GITHUB_VERSION_URL = "https://raw.githubusercontent.com/AndiTrenter/CaseDesk-AI/main/version.json"

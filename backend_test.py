@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """
-CaseDesk AI v1.1.4 Backend Testing - NEW Excel reading and Word generation
-Test the specific features requested in the review.
+CaseDesk AI v1.5.0 Backend Testing
+Tests the calendar loading error fix and AI event creation functionality
 """
 
 import requests
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
+import os
 
-# Configuration
-BASE_URL = "https://task-portal-fix.preview.emergentagent.com"
-API_BASE = f"{BASE_URL}/api"
+# Backend URL from environment
+BACKEND_URL = "https://ai-calendar-debug.preview.emergentagent.com"
 
 # Test credentials
 TEST_EMAIL = "andi.trenter@gmail.com"
 TEST_PASSWORD = "admin123"
 
-class BackendTester:
+class CaseDeskTester:
     def __init__(self):
         self.session = requests.Session()
         self.auth_token = None
@@ -25,16 +25,13 @@ class BackendTester:
         
     def log_test(self, test_name, success, details="", error=""):
         """Log test result"""
-        result = {
+        status = "✅ PASS" if success else "❌ FAIL"
+        self.test_results.append({
             "test": test_name,
             "success": success,
             "details": details,
-            "error": error,
-            "timestamp": datetime.now().isoformat()
-        }
-        self.test_results.append(result)
-        
-        status = "✅ PASS" if success else "❌ FAIL"
+            "error": error
+        })
         print(f"{status}: {test_name}")
         if details:
             print(f"   Details: {details}")
@@ -42,45 +39,49 @@ class BackendTester:
             print(f"   Error: {error}")
         print()
     
-    def test_login_and_auth(self):
-        """Test 1: Login and get auth token"""
+    def authenticate(self):
+        """Authenticate with test credentials"""
+        print("🔐 Authenticating with test credentials...")
+        
         try:
-            # Test login with form data
+            # Login with form data (as per previous tests)
             login_data = {
                 "email": TEST_EMAIL,
                 "password": TEST_PASSWORD
             }
             
-            response = self.session.post(f"{API_BASE}/auth/login", data=login_data)
+            response = self.session.post(
+                f"{BACKEND_URL}/api/auth/login",
+                data=login_data,
+                timeout=30
+            )
             
             if response.status_code == 200:
                 data = response.json()
-                if "access_token" in data:
-                    self.auth_token = data["access_token"]
-                    self.session.headers.update({"Authorization": f"Bearer {self.auth_token}"})
-                    
-                    user_info = data.get("user", {})
-                    self.log_test(
-                        "Login and Authentication",
-                        True,
-                        f"Successfully logged in as {user_info.get('email', 'unknown')} with role {user_info.get('role', 'unknown')}"
-                    )
+                self.auth_token = data.get("access_token")
+                if self.auth_token:
+                    self.session.headers.update({
+                        "Authorization": f"Bearer {self.auth_token}"
+                    })
+                    self.log_test("Authentication", True, f"Logged in as {TEST_EMAIL}")
                     return True
                 else:
-                    self.log_test("Login and Authentication", False, "", "No access_token in response")
+                    self.log_test("Authentication", False, error="No access token in response")
                     return False
             else:
-                self.log_test("Login and Authentication", False, "", f"HTTP {response.status_code}: {response.text}")
+                self.log_test("Authentication", False, error=f"HTTP {response.status_code}: {response.text}")
                 return False
                 
         except Exception as e:
-            self.log_test("Login and Authentication", False, "", str(e))
+            self.log_test("Authentication", False, error=str(e))
             return False
     
-    def test_health_version(self):
-        """Test 2: Verify health endpoint shows version 1.1.4"""
+    def test_health_endpoint_version(self):
+        """Test GET /api/health returns version 1.5.0"""
+        print("🏥 Testing Health Endpoint Version...")
+        
         try:
-            response = self.session.get(f"{API_BASE}/health")
+            response = self.session.get(f"{BACKEND_URL}/api/health", timeout=30)
             
             if response.status_code == 200:
                 data = response.json()
@@ -88,219 +89,275 @@ class BackendTester:
                 service = data.get("service")
                 status = data.get("status")
                 
-                if version == "1.1.4":
-                    self.log_test(
-                        "Health Endpoint Version Check",
-                        True,
-                        f"Service: {service}, Status: {status}, Version: {version}"
-                    )
-                    return True
+                if version == "1.5.0":
+                    self.log_test("Health Endpoint Version", True, 
+                                f"Version: {version}, Service: {service}, Status: {status}")
                 else:
-                    self.log_test(
-                        "Health Endpoint Version Check",
-                        False,
-                        f"Expected version 1.1.4, got {version}",
-                        f"Version mismatch"
-                    )
-                    return False
+                    self.log_test("Health Endpoint Version", False, 
+                                f"Expected version 1.5.0, got {version}")
             else:
-                self.log_test("Health Endpoint Version Check", False, "", f"HTTP {response.status_code}: {response.text}")
-                return False
+                self.log_test("Health Endpoint Version", False, 
+                            error=f"HTTP {response.status_code}: {response.text}")
                 
         except Exception as e:
-            self.log_test("Health Endpoint Version Check", False, "", str(e))
-            return False
+            self.log_test("Health Endpoint Version", False, error=str(e))
     
-    def test_word_document_generation(self):
-        """Test 3: Test Word Document Generation"""
+    def test_system_version_endpoint(self):
+        """Test GET /api/system/version returns version 1.5.0"""
+        print("🔧 Testing System Version Endpoint...")
+        
         try:
-            # Prepare form data for Word document generation
-            form_data = {
-                "title": "Testbrief",
-                "content": "Dies ist ein Testbrief.\n\nMit mehreren Absätzen.",
-                "template": "letter",
-                "recipient_name": "Max Mustermann",
-                "recipient_address": "Musterstraße 1\n12345 Musterstadt",
-                "sender_name": "Anna Schmidt",
-                "subject": "Betreff: Testnachricht"
-            }
-            
-            response = self.session.post(f"{API_BASE}/documents/generate-word", data=form_data)
+            response = self.session.get(f"{BACKEND_URL}/api/system/version", timeout=30)
             
             if response.status_code == 200:
                 data = response.json()
+                version = data.get("version")
+                build_date = data.get("build_date")
+                release_notes = data.get("release_notes")
                 
-                if data.get("success") and "document_id" in data and "filename" in data:
-                    document_id = data["document_id"]
-                    filename = data["filename"]
-                    message = data.get("message", "")
-                    
-                    self.log_test(
-                        "Word Document Generation",
-                        True,
-                        f"Document created successfully. ID: {document_id}, Filename: {filename}, Message: {message}"
-                    )
-                    return document_id
+                if version == "1.5.0":
+                    self.log_test("System Version Endpoint", True, 
+                                f"Version: {version}, Build: {build_date}")
                 else:
-                    self.log_test(
-                        "Word Document Generation",
-                        False,
-                        "",
-                        f"Unexpected response structure: {data}"
-                    )
-                    return None
+                    self.log_test("System Version Endpoint", False, 
+                                f"Expected version 1.5.0, got {version}")
             else:
-                self.log_test("Word Document Generation", False, "", f"HTTP {response.status_code}: {response.text}")
-                return None
+                self.log_test("System Version Endpoint", False, 
+                            error=f"HTTP {response.status_code}: {response.text}")
                 
         except Exception as e:
-            self.log_test("Word Document Generation", False, "", str(e))
-            return None
+            self.log_test("System Version Endpoint", False, error=str(e))
     
-    def test_document_list_verification(self, expected_document_id=None):
-        """Test 4: Verify the generated document appears in document list"""
+    def test_events_api_calendar_load(self):
+        """Test GET /api/events - Calendar Load Fix v1.5.0"""
+        print("📅 Testing Events API - Calendar Load Fix...")
+        
         try:
-            response = self.session.get(f"{API_BASE}/documents")
+            response = self.session.get(f"{BACKEND_URL}/api/events", timeout=30)
             
             if response.status_code == 200:
-                documents = response.json()
+                events = response.json()
                 
-                if isinstance(documents, list):
-                    total_docs = len(documents)
+                # Should return an array (even if empty)
+                if isinstance(events, list):
+                    # Check if datetime fields are properly serialized as ISO strings
+                    datetime_fields_ok = True
+                    malformed_events = 0
                     
-                    if expected_document_id:
-                        # Look for the specific document we just created
-                        found_document = None
-                        for doc in documents:
-                            if doc.get("id") == expected_document_id:
-                                found_document = doc
-                                break
-                        
-                        if found_document:
-                            self.log_test(
-                                "Document List Verification",
-                                True,
-                                f"Generated document found in list. Total documents: {total_docs}. "
-                                f"Document: {found_document.get('display_name', 'unknown')} "
-                                f"(Type: {found_document.get('document_type', 'unknown')}, "
-                                f"Size: {found_document.get('file_size', 'unknown')} bytes)"
-                            )
-                            return True
-                        else:
-                            self.log_test(
-                                "Document List Verification",
-                                False,
-                                f"Total documents: {total_docs}",
-                                f"Generated document with ID {expected_document_id} not found in list"
-                            )
-                            return False
+                    for event in events:
+                        for field in ['start_time', 'end_time', 'created_at', 'updated_at']:
+                            if field in event and event[field] is not None:
+                                # Check if it's a valid ISO string
+                                try:
+                                    datetime.fromisoformat(event[field].replace('Z', '+00:00'))
+                                except (ValueError, AttributeError):
+                                    datetime_fields_ok = False
+                                    malformed_events += 1
+                                    break
+                    
+                    if datetime_fields_ok:
+                        self.log_test("Events API - Calendar Load", True, 
+                                    f"Returned {len(events)} events, all datetime fields properly serialized")
                     else:
-                        # Just verify the endpoint works
-                        self.log_test(
-                            "Document List Verification",
-                            True,
-                            f"Document list endpoint working. Total documents: {total_docs}"
-                        )
-                        return True
+                        self.log_test("Events API - Calendar Load", False, 
+                                    f"Found {malformed_events} events with malformed datetime fields")
                 else:
-                    self.log_test(
-                        "Document List Verification",
-                        False,
-                        "",
-                        f"Expected list response, got: {type(documents)}"
-                    )
-                    return False
+                    self.log_test("Events API - Calendar Load", False, 
+                                error="Response is not an array")
             else:
-                self.log_test("Document List Verification", False, "", f"HTTP {response.status_code}: {response.text}")
-                return False
+                self.log_test("Events API - Calendar Load", False, 
+                            error=f"HTTP {response.status_code}: {response.text}")
                 
         except Exception as e:
-            self.log_test("Document List Verification", False, "", str(e))
-            return False
+            self.log_test("Events API - Calendar Load", False, error=str(e))
     
-    def test_excel_reading_capability(self):
-        """Test 5: Verify Excel reading capability (check if dependencies are available)"""
+    def test_ai_execute_action_create_event(self):
+        """Test POST /api/ai/execute-action with action_type=create_event"""
+        print("🤖 Testing AI Execute Action - Create Event...")
+        
         try:
-            # Test if we can access the document upload endpoint (which handles Excel files)
-            # We'll test with a simple request to see if the endpoint is available
-            response = self.session.get(f"{API_BASE}/documents")
+            # Test data as specified in the review request
+            action_data = {
+                "title": "Test Termin",
+                "date": "2026-05-20",
+                "start_time": "10:00",
+                "end_time": "11:00"
+            }
+            
+            form_data = {
+                "action_type": "create_event",
+                "action_data": json.dumps(action_data),
+                "confirmed": "true"
+            }
+            
+            response = self.session.post(
+                f"{BACKEND_URL}/api/ai/execute-action",
+                data=form_data,
+                timeout=30
+            )
             
             if response.status_code == 200:
-                # Check if the backend has Excel reading dependencies
-                # We can infer this from the successful response and the fact that
-                # the documents router includes Excel handling functions
-                self.log_test(
-                    "Excel Reading Capability Check",
-                    True,
-                    "Documents endpoint accessible. Excel reading functions (extract_text_from_xlsx, extract_text_from_xls) are implemented in documents router."
-                )
-                return True
+                data = response.json()
+                success = data.get("success", False)
+                
+                if success:
+                    created_event = data.get("created")
+                    if created_event:
+                        event_id = created_event.get("id")
+                        event_title = created_event.get("title")
+                        
+                        # Verify event appears in GET /api/events
+                        events_response = self.session.get(f"{BACKEND_URL}/api/events", timeout=30)
+                        if events_response.status_code == 200:
+                            events = events_response.json()
+                            event_found = any(e.get("id") == event_id for e in events)
+                            
+                            if event_found:
+                                self.log_test("AI Execute Action - Create Event", True, 
+                                            f"Event '{event_title}' created and appears in calendar")
+                                
+                                # Clean up - delete the test event
+                                try:
+                                    self.session.delete(f"{BACKEND_URL}/api/events/{event_id}", timeout=30)
+                                except:
+                                    pass  # Cleanup failure is not critical
+                            else:
+                                self.log_test("AI Execute Action - Create Event", False, 
+                                            "Event created but not found in calendar list")
+                        else:
+                            self.log_test("AI Execute Action - Create Event", False, 
+                                        "Event created but could not verify in calendar")
+                    else:
+                        self.log_test("AI Execute Action - Create Event", False, 
+                                    "Success=true but no created event data")
+                else:
+                    error_msg = data.get("error", "Unknown error")
+                    self.log_test("AI Execute Action - Create Event", False, 
+                                error=f"API returned success=false: {error_msg}")
             else:
-                self.log_test("Excel Reading Capability Check", False, "", f"Documents endpoint not accessible: HTTP {response.status_code}")
-                return False
+                self.log_test("AI Execute Action - Create Event", False, 
+                            error=f"HTTP {response.status_code}: {response.text}")
                 
         except Exception as e:
-            self.log_test("Excel Reading Capability Check", False, "", str(e))
-            return False
+            self.log_test("AI Execute Action - Create Event", False, error=str(e))
+    
+    def test_ai_execute_action_create_task(self):
+        """Test POST /api/ai/execute-action with action_type=create_task"""
+        print("📋 Testing AI Execute Action - Create Task...")
+        
+        try:
+            # Test data as specified in the review request
+            action_data = {
+                "title": "Test Aufgabe",
+                "due_date": "2026-05-25",
+                "priority": "high"
+            }
+            
+            form_data = {
+                "action_type": "create_task",
+                "action_data": json.dumps(action_data),
+                "confirmed": "true"
+            }
+            
+            response = self.session.post(
+                f"{BACKEND_URL}/api/ai/execute-action",
+                data=form_data,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                success = data.get("success", False)
+                
+                if success:
+                    created_task = data.get("created")
+                    if created_task:
+                        task_id = created_task.get("id")
+                        task_title = created_task.get("title")
+                        
+                        # Verify task appears in GET /api/tasks
+                        tasks_response = self.session.get(f"{BACKEND_URL}/api/tasks", timeout=30)
+                        if tasks_response.status_code == 200:
+                            tasks = tasks_response.json()
+                            task_found = any(t.get("id") == task_id for t in tasks)
+                            
+                            if task_found:
+                                self.log_test("AI Execute Action - Create Task", True, 
+                                            f"Task '{task_title}' created successfully")
+                                
+                                # Clean up - delete the test task
+                                try:
+                                    self.session.delete(f"{BACKEND_URL}/api/tasks/{task_id}", timeout=30)
+                                except:
+                                    pass  # Cleanup failure is not critical
+                            else:
+                                self.log_test("AI Execute Action - Create Task", False, 
+                                            "Task created but not found in tasks list")
+                        else:
+                            self.log_test("AI Execute Action - Create Task", False, 
+                                        "Task created but could not verify in tasks list")
+                    else:
+                        self.log_test("AI Execute Action - Create Task", False, 
+                                    "Success=true but no created task data")
+                else:
+                    error_msg = data.get("error", "Unknown error")
+                    self.log_test("AI Execute Action - Create Task", False, 
+                                error=f"API returned success=false: {error_msg}")
+            else:
+                self.log_test("AI Execute Action - Create Task", False, 
+                            error=f"HTTP {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_test("AI Execute Action - Create Task", False, error=str(e))
     
     def run_all_tests(self):
-        """Run all tests in sequence"""
-        print("=" * 60)
-        print("CaseDesk AI v1.1.4 Backend Testing")
-        print("NEW Excel reading and Word generation features")
+        """Run all v1.5.0 tests"""
+        print("🚀 Starting CaseDesk AI v1.5.0 Backend Testing")
         print("=" * 60)
         print()
         
-        # Test 1: Login
-        if not self.test_login_and_auth():
-            print("❌ CRITICAL: Login failed. Cannot proceed with other tests.")
+        # Authentication is required for most endpoints
+        if not self.authenticate():
+            print("❌ Authentication failed - cannot continue with tests")
             return False
         
-        # Test 2: Health check version
-        self.test_health_version()
-        
-        # Test 3: Word document generation
-        document_id = self.test_word_document_generation()
-        
-        # Test 4: Verify document in list
-        self.test_document_list_verification(document_id)
-        
-        # Test 5: Excel reading capability
-        self.test_excel_reading_capability()
+        # Test all v1.5.0 features
+        self.test_health_endpoint_version()
+        self.test_system_version_endpoint()
+        self.test_events_api_calendar_load()
+        self.test_ai_execute_action_create_event()
+        self.test_ai_execute_action_create_task()
         
         # Summary
         print("=" * 60)
-        print("TEST SUMMARY")
+        print("📊 TEST SUMMARY")
         print("=" * 60)
         
-        passed = sum(1 for result in self.test_results if result["success"])
-        total = len(self.test_results)
+        total_tests = len(self.test_results)
+        passed_tests = sum(1 for result in self.test_results if result["success"])
+        failed_tests = total_tests - passed_tests
         
-        print(f"Tests passed: {passed}/{total}")
+        print(f"Total Tests: {total_tests}")
+        print(f"Passed: {passed_tests}")
+        print(f"Failed: {failed_tests}")
+        print(f"Success Rate: {(passed_tests/total_tests)*100:.1f}%")
         print()
         
+        if failed_tests > 0:
+            print("❌ FAILED TESTS:")
+            for result in self.test_results:
+                if not result["success"]:
+                    print(f"  - {result['test']}: {result['error']}")
+            print()
+        
+        print("✅ PASSED TESTS:")
         for result in self.test_results:
-            status = "✅" if result["success"] else "❌"
-            print(f"{status} {result['test']}")
-            if result["error"]:
-                print(f"   Error: {result['error']}")
+            if result["success"]:
+                print(f"  - {result['test']}")
         
-        print()
-        
-        if passed == total:
-            print("🎉 ALL TESTS PASSED!")
-            return True
-        else:
-            print(f"⚠️  {total - passed} TEST(S) FAILED")
-            return False
-
-def main():
-    """Main test execution"""
-    tester = BackendTester()
-    success = tester.run_all_tests()
-    
-    # Exit with appropriate code
-    sys.exit(0 if success else 1)
+        return failed_tests == 0
 
 if __name__ == "__main__":
-    main()
+    tester = CaseDeskTester()
+    success = tester.run_all_tests()
+    sys.exit(0 if success else 1)

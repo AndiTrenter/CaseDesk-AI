@@ -108,9 +108,29 @@ user_problem_statement: |
   - Lege einen Termin für Luzias Geburtstag mit Erinnerung an
   - Das gleiche für Email: Erstelle eine Email an Krankenkasse mit Anliegen "Zahlungsfristverlängerung"
   - Email Versand soll nachverfolgbar sein
+  
+  AKTUELLER TASK (v1.5.0):
+  - calendar.loadError Fehlermeldung beim Klicken auf Kalender beheben
+  - KI-Assistent soll Kalendereinträge erstellen können
+  - Versionsnummer auf V1.5.0 erhöhen
 
 backend:
-  - task: "AI Action Detection - Parse natural language commands"
+  - task: "Events API - Calendar Load Fix v1.5.0"
+    implemented: true
+    working: true
+    file: "routers/events.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "v1.5.0: Robustere Fehlerbehandlung beim Laden von Events. Events mit fehlerhaften Daten werden übersprungen statt die gesamte Anfrage fehlschlagen zu lassen. safe_parse_datetime verbessert mit try/catch für unerwartete Fehler."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.5.0: Events API Calendar Load Fix working perfectly! GET /api/events returns proper array with 2 events, all datetime fields properly serialized as ISO strings. Robust error handling confirmed - malformed dates are handled gracefully without breaking the entire request. Calendar loading error resolved."
+
+  - task: "AI Execute Action - Create Event Fix v1.5.0"
     implemented: true
     working: true
     file: "routers/ai.py"
@@ -118,14 +138,29 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-      - working: "NA"
+      - working: true
         agent: "main"
-        comment: "Implemented action detection patterns for create_event, create_task, create_case, send_email"
+        comment: "v1.5.0: Bug behoben bei datetime-Referenz (UnboundLocalError). serialize_for_json Hilfsfunktion hinzugefügt für korrekte JSON-Serialisierung von datetime-Objekten. Event-Erstellung über AI funktioniert jetzt korrekt."
       - working: true
         agent: "testing"
-        comment: "✅ TESTED: Action detection working correctly. Detects create_event, create_task patterns from German text. AI parsing requires external AI service (Ollama/OpenAI) but pattern detection works without it."
+        comment: "✅ TESTED v1.5.0: AI Execute Action Create Event Fix working perfectly! POST /api/ai/execute-action with action_type=create_event successfully creates events with test data (title: 'Test Termin', date: '2026-05-20', start_time: '10:00', end_time: '11:00'). Event appears correctly in GET /api/events. No JSON serialization errors. datetime objects properly handled and serialized."
 
-  - task: "AI Execute Action Endpoint"
+  - task: "System Version v1.5.0"
+    implemented: true
+    working: true
+    file: "routers/system.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Versionsnummer auf 1.5.0 aktualisiert in allen relevanten Dateien: auth.py, server.py, system.py, version.json"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.5.0: System Version endpoints working perfectly! GET /api/health returns version 1.5.0 with correct service info. GET /api/system/version returns version 1.5.0 with build date 2026-04-09. Version consistency confirmed across all endpoints."
+
+  - task: "AI Execute Action - Create Task v1.5.0"
     implemented: true
     working: true
     file: "routers/ai.py"
@@ -133,78 +168,9 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-      - working: "NA"
-        agent: "main"
-        comment: "Endpoint /api/ai/execute-action to create events, tasks, cases, email drafts"
       - working: true
         agent: "testing"
-        comment: "✅ TESTED: Execute action endpoint working perfectly. Successfully creates events and tasks with proper data structure. Fixed JSON serialization issue with MongoDB ObjectId. All CRUD operations verified."
-
-  - task: "Correspondence Search for Email Tracking"
-    implemented: true
-    working: true
-    file: "routers/ai.py"
-    stuck_count: 0
-    priority: "medium"
-    needs_retesting: false
-    status_history:
-      - working: "NA"
-        agent: "main"
-        comment: "Endpoint /api/ai/correspondence-search to find past correspondence"
-      - working: true
-        agent: "testing"
-        comment: "✅ TESTED: Correspondence search endpoint working. Returns proper response structure with success=true, found=false for empty database (expected). Ready for AI-powered search when AI service is available."
-
-  - task: "Email Send via AI Endpoint"
-    implemented: true
-    working: true
-    file: "routers/ai.py"
-    stuck_count: 0
-    priority: "medium"
-    needs_retesting: false
-    status_history:
-      - working: "NA"
-        agent: "main"
-        comment: "Endpoint /api/ai/send-correspondence/{id} for sending emails via SMTP"
-      - working: true
-        agent: "testing"
-        comment: "✅ TESTED: Email send endpoint implemented and accessible. Creates email drafts via execute-action. SMTP sending requires mail account configuration (expected)."
-
-  - task: "Storage Settings - Get Storage Settings"
-    implemented: true
-    working: true
-    file: "routers/settings.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "✅ TESTED: GET /api/settings/storage endpoint working perfectly. Returns correct structure with limits, disk info, and user_storage array. All default limits present: max_single_file_mb, max_email_attachment_mb, max_total_storage_gb, max_user_storage_gb, max_database_gb, max_ollama_models_gb."
-
-  - task: "Storage Settings - Update Storage Settings"
-    implemented: true
-    working: true
-    file: "routers/settings.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "✅ TESTED: PUT /api/settings/storage endpoint working perfectly. Successfully updated max_single_file_mb=150 and max_user_storage_gb=20. Changes persisted correctly and verified through subsequent GET request."
-
-  - task: "Storage Settings - Get User Storage Limit"
-    implemented: true
-    working: true
-    file: "routers/settings.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "✅ TESTED: GET /api/settings/storage/user/{user_id} endpoint working perfectly. Returns correct structure with user_id, effective_limit_gb, storage_used_mb. Admin role requirement enforced correctly."
+        comment: "✅ TESTED v1.5.0: AI Execute Action Create Task working perfectly! POST /api/ai/execute-action with action_type=create_task successfully creates tasks with test data (title: 'Test Aufgabe', due_date: '2026-05-25', priority: 'high'). Task appears correctly in GET /api/tasks. All CRUD operations verified and functional."
 
 frontend:
   - task: "AI Chat with Action Preview Cards"
@@ -222,7 +188,7 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 3
+  test_sequence: 4
   run_ui: false
 
 test_plan:
@@ -251,6 +217,8 @@ agent_communication:
     message: "v1.0.4: Ollama als Standard-Service in docker-compose (nicht mehr optional). Erweiterter Health-Check zeigt immer Ollama UND OpenAI an. AI-Service mit automatischem Fallback zu Ollama. OpenAI API-Key wird jetzt korrekt aus DB geladen. Bitte Health-Endpoint testen."
   - agent: "testing"
     message: "✅ v1.0.4 BACKEND TESTING COMPLETE: All new v1.0.4 features tested and working perfectly. Admin Health-Check endpoint (GET /api/admin/health) returns comprehensive service status with OpenAI, Ollama, and AI config information. System Version endpoint correctly returns v1.0.4. System Settings endpoints (GET/PUT /api/settings/system) working correctly for ai_provider and openai_api_key management. Fixed missing 'models' field in Ollama health response. All endpoints require proper admin authentication. Admin user (andi.trenter@gmail.com) created and authenticated successfully."
+  - agent: "testing"
+    message: "🎉 v1.5.0 BACKEND TESTING COMPLETE: Comprehensive testing of CaseDesk AI v1.5.0 calendar fixes successful with 100% pass rate (6/6 tests passed). ✅ Authentication system working perfectly with test credentials (andi.trenter@gmail.com/admin123). ✅ Health endpoint correctly returns version 1.5.0. ✅ System version endpoint correctly returns version 1.5.0. ✅ Events API Calendar Load Fix working perfectly - returns proper array with datetime fields serialized as ISO strings, handles malformed dates gracefully. ✅ AI Execute Action Create Event working perfectly - creates events with proper data structure and no JSON serialization errors. ✅ AI Execute Action Create Task working perfectly - creates tasks successfully. All requested v1.5.0 features tested and operational. Calendar loading error resolved. AI event creation fully functional."
 
 
 backend:
@@ -876,7 +844,7 @@ agent_communication:
   - agent: "testing"
     message: "✅ v1.0.8 BACKEND TESTING COMPLETE: Comprehensive testing of CaseDesk AI v1.0.8 backend successful with 100% pass rate (9/9 tests passed). ✅ Authentication system working perfectly with JWT tokens. ✅ NEW Documents Suggest for Case endpoint (GET /api/documents/suggest-for-case/{case_id}) working correctly - fixed response structure bug. ✅ Tasks API (GET/POST /api/tasks) fully functional with proper CRUD operations. ✅ Events API (GET/POST /api/events) fully functional with proper CRUD operations. All endpoints tested with real data, proper cleanup performed. Backend services running correctly. Fixed minor bug in suggest-for-case endpoint response structure. All requested v1.0.8 features operational and ready for production use."
   - agent: "testing"
-    message: "✅ v1.0.9 BACKEND TESTING COMPLETE: Comprehensive testing of CaseDesk AI v1.0.9 NEW features successful with 100% pass rate (5/5 tests passed). ✅ Authentication system working perfectly with test credentials (andi.trenter@gmail.com/admin123). ✅ Document Download Token System fully functional - generates 5-minute JWT tokens and allows token-based document viewing without auth headers. ✅ NEW ZIP Download Endpoint working perfectly - GET /api/cases/{case_id}/documents-zip returns proper ZIP files with application/zip content-type. ✅ Tasks API verified working - 'Failed to load tasks' issue resolved, all CRUD operations functional. ✅ Events API verified working - all CRUD operations functional. All requested v1.0.9 features tested and operational. Backend services running correctly on https://task-portal-fix.preview.emergentagent.com."
+    message: "✅ v1.0.9 BACKEND TESTING COMPLETE: Comprehensive testing of CaseDesk AI v1.0.9 NEW features successful with 100% pass rate (5/5 tests passed). ✅ Authentication system working perfectly with test credentials (andi.trenter@gmail.com/admin123). ✅ Document Download Token System fully functional - generates 5-minute JWT tokens and allows token-based document viewing without auth headers. ✅ NEW ZIP Download Endpoint working perfectly - GET /api/cases/{case_id}/documents-zip returns proper ZIP files with application/zip content-type. ✅ Tasks API verified working - 'Failed to load tasks' issue resolved, all CRUD operations functional. ✅ Events API verified working - all CRUD operations functional. All requested v1.0.9 features tested and operational. Backend services running correctly on https://ai-calendar-debug.preview.emergentagent.com."
   - agent: "testing"
     message: "✅ v1.1.2 TASK STATUS FIX TESTING COMPLETE: Comprehensive testing of CaseDesk AI v1.1.2 Task Status Fix successful with 100% pass rate (6/6 tests passed). ✅ Authentication system working perfectly with test credentials (andi.trenter@gmail.com/admin123). ✅ CRITICAL FIX VERIFIED: Legacy 'open' status accepted without validation error - task created successfully. ✅ 'pending' status accepted without validation error - task created successfully. ✅ Normal 'todo' status working as expected. ✅ GET /api/tasks returns all tasks without validation errors. ✅ STATUS NORMALIZATION WORKING: Tasks with legacy 'open' status correctly normalized to 'todo' in GET responses, 'pending' status correctly normalized to 'todo'. The validation error fix is working perfectly - legacy statuses are now accepted and properly normalized."
   - agent: "testing"

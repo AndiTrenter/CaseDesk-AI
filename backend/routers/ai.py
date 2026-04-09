@@ -13,6 +13,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def serialize_for_json(obj):
+    """Convert datetime objects to ISO strings for JSON serialization"""
+    if isinstance(obj, dict):
+        return {k: serialize_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [serialize_for_json(item) for item in obj]
+    elif isinstance(obj, datetime):
+        return obj.isoformat()
+    return obj
+
+
 # Action detection patterns for German language
 ACTION_PATTERNS = {
     "create_event": [
@@ -845,19 +856,29 @@ async def execute_action(
     
     # FIXED: Use datetime object instead of ISO string for created_at/updated_at
     now = datetime.now(timezone.utc)
+    now_str = now.strftime("%Y-%m-%d")
     
     if action_type == "create_event":
         event_id = str(uuid.uuid4())
         
         # Parse date and time
-        event_date = data.get("date", now[:10])
+        event_date = data.get("date") or now_str
         start_time_str = data.get("start_time", "09:00")
         end_time_str = data.get("end_time", "10:00")
         
+        # Handle time strings with or without seconds
+        if len(start_time_str) == 5:
+            start_time_str += ":00"
+        if len(end_time_str) == 5:
+            end_time_str += ":00"
+        
         # FIXED: Convert to datetime objects instead of strings
-        from datetime import datetime
-        start_datetime = datetime.fromisoformat(f"{event_date}T{start_time_str}:00")
-        end_datetime = datetime.fromisoformat(f"{event_date}T{end_time_str}:00")
+        try:
+            start_datetime = datetime.fromisoformat(f"{event_date}T{start_time_str}")
+            end_datetime = datetime.fromisoformat(f"{event_date}T{end_time_str}")
+        except ValueError as e:
+            logger.error(f"Failed to parse event datetime: {e}")
+            return {"success": False, "error": f"Ungültiges Datum oder Zeit: {e}"}
         
         event = {
             "id": event_id,
@@ -903,6 +924,7 @@ async def execute_action(
                 # Remove _id from reminder_task for JSON serialization
                 if "_id" in reminder_task:
                     del reminder_task["_id"]
+                reminder_task = serialize_for_json(reminder_task)
             except Exception as e:
                 logger.error(f"Reminder creation error: {e}")
         
@@ -913,7 +935,7 @@ async def execute_action(
         return {
             "success": True,
             "action_type": "create_event",
-            "created": event,
+            "created": serialize_for_json(event),
             "reminder_task": reminder_task,
             "message": f"Termin '{data.get('title')}' am {event_date} wurde erstellt."
         }
@@ -925,7 +947,6 @@ async def execute_action(
         due_date_obj = None
         if data.get("due_date"):
             try:
-                from datetime import datetime
                 due_date_str = data.get("due_date")
                 # Handle both "2026-04-10" and "2026-04-10T15:00:00" formats
                 if "T" in due_date_str:
@@ -960,7 +981,7 @@ async def execute_action(
         return {
             "success": True,
             "action_type": "create_task",
-            "created": task,
+            "created": serialize_for_json(task),
             "message": f"Aufgabe '{data.get('title')}' wurde erstellt."
         }
     
@@ -991,7 +1012,7 @@ async def execute_action(
         return {
             "success": True,
             "action_type": "create_case",
-            "created": case,
+            "created": serialize_for_json(case),
             "message": f"Fall '{data.get('title')}' wurde erstellt."
         }
     
@@ -1028,7 +1049,7 @@ async def execute_action(
         return {
             "success": True,
             "action_type": "send_email",
-            "created": correspondence,
+            "created": serialize_for_json(correspondence),
             "message": f"E-Mail-Entwurf an '{data.get('recipient')}' wurde erstellt. Bitte überprüfen und bestätigen Sie den Versand."
         }
     
@@ -1160,7 +1181,7 @@ async def execute_action(
         return {
             "success": True,
             "action_type": "combined_event_task",
-            "created": results,
+            "created": serialize_for_json(results),
             "message": " | ".join(messages)
         }
     

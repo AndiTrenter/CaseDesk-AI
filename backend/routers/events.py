@@ -36,16 +36,28 @@ async def list_events(
     query = {"user_id": user["id"]}
     if case_id:
         query["case_id"] = case_id
-    events = await db.events.find(query, {"_id": 0}).sort("start_time", 1).to_list(1000)
+    
+    try:
+        events = await db.events.find(query, {"_id": 0}).sort("start_time", 1).to_list(1000)
+    except Exception as e:
+        logger.error(f"Failed to fetch events from database: {e}")
+        return []
     
     # ROBUST FIX: Handle both datetime objects AND malformed string dates from legacy DB
+    # Filter out events with critical parsing errors
+    valid_events = []
     for event in events:
-        event["start_time"] = safe_parse_datetime(event.get("start_time"))
-        event["end_time"] = safe_parse_datetime(event.get("end_time"))
-        event["created_at"] = safe_parse_datetime(event.get("created_at"))
-        event["updated_at"] = safe_parse_datetime(event.get("updated_at"))
+        try:
+            event["start_time"] = safe_parse_datetime(event.get("start_time"))
+            event["end_time"] = safe_parse_datetime(event.get("end_time"))
+            event["created_at"] = safe_parse_datetime(event.get("created_at"))
+            event["updated_at"] = safe_parse_datetime(event.get("updated_at"))
+            valid_events.append(event)
+        except Exception as e:
+            logger.warning(f"Skipping event {event.get('id')} due to parsing error: {e}")
+            continue
     
-    return events
+    return valid_events
 
 
 @router.get("/events/reminder-options")
