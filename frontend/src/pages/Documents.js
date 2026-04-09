@@ -243,6 +243,32 @@ export default function Documents() {
     setSuggestions(null);
   };
 
+  // Handle showing AI suggestions for a document from dropdown menu
+  const handleShowSuggestions = async (doc) => {
+    setSuggestionDoc(doc);
+    setSuggestions(null);
+    setSelectedTags([]);
+    setSelectedCaseIds([]);
+    setLoadingSuggestions(true);
+    
+    try {
+      const sugResp = await aiAPI.suggestMetadata(doc.id);
+      if (sugResp.data.success) {
+        setSuggestions(sugResp.data);
+        setSelectedTags(sugResp.data.suggested_tags || []);
+        setSelectedCaseIds((sugResp.data.suggested_cases || []).map(c => c.id));
+      } else {
+        toast.error(sugResp.data.error || 'KI-Vorschläge konnten nicht geladen werden');
+        setSuggestionDoc(null);
+      }
+    } catch (error) {
+      console.error('Suggestion error:', error);
+      toast.error('KI-Vorschläge fehlgeschlagen');
+      setSuggestionDoc(null);
+    }
+    setLoadingSuggestions(false);
+  };
+
   const handleReprocess = async (doc) => {
     setProcessing(prev => ({ ...prev, [doc.id]: true }));
     try {
