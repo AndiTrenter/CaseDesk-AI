@@ -861,23 +861,48 @@ async def execute_action(
     if action_type == "create_event":
         event_id = str(uuid.uuid4())
         
-        # Parse date and time
+        # Parse date and time - handle various input formats
         event_date = data.get("date") or now_str
-        start_time_str = data.get("start_time", "09:00")
-        end_time_str = data.get("end_time", "10:00")
+        
+        # Clean event_date - remove trailing 'T' if present
+        if event_date and event_date.endswith('T'):
+            event_date = event_date[:-1]
+        
+        # Extract date part if full datetime was passed
+        if event_date and 'T' in event_date:
+            event_date = event_date.split('T')[0]
+        
+        # Get time strings with defaults
+        start_time_str = data.get("start_time") or "09:00"
+        end_time_str = data.get("end_time") or "10:00"
+        
+        # Clean time strings - handle "10:00" and "10:00:00" formats
+        start_time_str = str(start_time_str).strip()
+        end_time_str = str(end_time_str).strip()
         
         # Handle time strings with or without seconds
-        if len(start_time_str) == 5:
+        if start_time_str and len(start_time_str) == 5:
             start_time_str += ":00"
-        if len(end_time_str) == 5:
+        if end_time_str and len(end_time_str) == 5:
             end_time_str += ":00"
+        
+        # Fallback if time is empty or invalid
+        if not start_time_str or len(start_time_str) < 5:
+            start_time_str = "09:00:00"
+        if not end_time_str or len(end_time_str) < 5:
+            end_time_str = "10:00:00"
         
         # FIXED: Convert to datetime objects instead of strings
         try:
-            start_datetime = datetime.fromisoformat(f"{event_date}T{start_time_str}")
-            end_datetime = datetime.fromisoformat(f"{event_date}T{end_time_str}")
+            datetime_str = f"{event_date}T{start_time_str}"
+            logger.info(f"Parsing start datetime: {datetime_str}")
+            start_datetime = datetime.fromisoformat(datetime_str)
+            
+            datetime_str = f"{event_date}T{end_time_str}"
+            logger.info(f"Parsing end datetime: {datetime_str}")
+            end_datetime = datetime.fromisoformat(datetime_str)
         except ValueError as e:
-            logger.error(f"Failed to parse event datetime: {e}")
+            logger.error(f"Failed to parse event datetime: {e}, date={event_date}, start={start_time_str}, end={end_time_str}")
             return {"success": False, "error": f"Ungültiges Datum oder Zeit: {e}"}
         
         event = {
