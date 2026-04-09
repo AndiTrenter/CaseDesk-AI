@@ -28,9 +28,76 @@ REMINDER_OPTIONS = {
 }
 
 
+@router.get("/events/repair")
+async def repair_events(user: dict = Depends(require_auth)):
+    """
+    Repair malformed events in the database.
+    Removes or fixes events with invalid datetime formats.
+    """
+    query = {"user_id": user["id"]}
+    events = await db.events.find(query).to_list(1000)
+    
+    repaired = 0
+    deleted = 0
+    
+    for event in events:
+        event_id = event.get("id")
+        needs_update = False
+        should_delete = False
+        
+        # Check and fix datetime fields
+        for field in ["start_time", "end_time", "created_at", "updated_at"]:
+            value = event.get(field)
+            if value is None:
+                continue
+                
+            try:
+                # Try to parse the value
+                parsed = safe_parse_datetime(value)
+                if parsed is None and field in ["start_time", "end_time"]:
+                    # Critical field is invalid - mark for deletion
+                    should_delete = True
+                    break
+                elif parsed != value and not isinstance(value, datetime):
+                    # Value was fixed, need to update
+                    event[field] = parsed
+                    needs_update = True
+            except Exception as e:
+                logger.warning(f"Event {event_id} has invalid {field}: {value} - {e}")
+                if field in ["start_time", "end_time"]:
+                    should_delete = True
+                    break
+        
+        if should_delete:
+            await db.events.delete_one({"id": event_id})
+            deleted += 1
+            logger.info(f"Deleted malformed event: {event_id}")
+        elif needs_update:
+            await db.events.update_one(
+                {"id": event_id},
+                {"$set": {
+                    "start_time": event.get("start_time"),
+                    "end_time": event.get("end_time"),
+                    "created_at": event.get("created_at"),
+                    "updated_at": event.get("updated_at")
+                }}
+            )
+            repaired += 1
+            logger.info(f"Repaired event: {event_id}")
+    
+    return {
+        "success": True,
+        "message": f"Events repariert: {repaired}, gelöscht: {deleted}",
+        "repaired": repaired,
+        "deleted": deleted,
+        "total_checked": len(events)
+    }
+
+
 @router.get("/events")
 async def list_events(
     case_id: str = None,
+    auto_repair: bool = False,
     user: dict = Depends(require_auth)
 ):
     query = {"user_id": user["id"]}
@@ -39,6 +106,7 @@ async def list_events(
     
     try:
         events = await db.events.find(query, {"_id": 0}).sort("start_time", 1).to_list(1000)
+        logger.info(f"Fetched {len(events)} events for user {user['id']}")
     except Exception as e:
         logger.error(f"Failed to fetch events from database: {e}")
         return []
@@ -46,17 +114,40 @@ async def list_events(
     # ROBUST FIX: Handle both datetime objects AND malformed string dates from legacy DB
     # Filter out events with critical parsing errors
     valid_events = []
+    skipped_count = 0
+    
     for event in events:
         try:
-            event["start_time"] = safe_parse_datetime(event.get("start_time"))
-            event["end_time"] = safe_parse_datetime(event.get("end_time"))
+            # Parse all datetime fields
+            start_time = safe_parse_datetime(event.get("start_time"))
+            end_time = safe_parse_datetime(event.get("end_time"))
+            
+            # Skip events with missing critical datetime fields
+            if start_time is None:
+                logger.warning(f"Skipping event {event.get('id')} - invalid start_time: {event.get('start_time')}")
+                skipped_count += 1
+                
+                # Auto-delete malformed events
+                if auto_repair:
+                    await db.events.delete_one({"id": event.get("id")})
+                    logger.info(f"Auto-deleted malformed event: {event.get('id')}")
+                continue
+            
+            event["start_time"] = start_time
+            event["end_time"] = end_time
             event["created_at"] = safe_parse_datetime(event.get("created_at"))
             event["updated_at"] = safe_parse_datetime(event.get("updated_at"))
             valid_events.append(event)
+            
         except Exception as e:
             logger.warning(f"Skipping event {event.get('id')} due to parsing error: {e}")
+            skipped_count += 1
             continue
     
+    if skipped_count > 0:
+        logger.warning(f"Skipped {skipped_count} events due to invalid data")
+    
+    logger.info(f"Returning {len(valid_events)} valid events")
     return valid_events
 
 
