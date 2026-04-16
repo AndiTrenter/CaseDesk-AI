@@ -7,7 +7,7 @@ import asyncio
 import httpx
 import json
 
-BACKEND_URL = "https://ai-calendar-debug.preview.emergentagent.com/api"
+BACKEND_URL = "https://ai-email-parser.preview.emergentagent.com/api"
 TEST_EMAIL = "andi.trenter@gmail.com"
 TEST_PASSWORD = "admin123"
 

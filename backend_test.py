@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 import os
 
 # Backend URL from environment
-BACKEND_URL = "https://ai-calendar-debug.preview.emergentagent.com"
+BACKEND_URL = "https://ai-email-parser.preview.emergentagent.com"
 
 # Test credentials
 TEST_EMAIL = "andi.trenter@gmail.com"
