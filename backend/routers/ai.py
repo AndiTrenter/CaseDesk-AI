@@ -2,6 +2,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Form
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List
+import os
 import uuid
 import logging
 import json
@@ -585,6 +586,43 @@ async def suggest_document_metadata(
     if not doc:
         return {"success": False, "error": "Document not found"}
 
+    # FIX: Safe None handling - ocr_text can be None if processing failed
+    doc_text = (doc.get("ocr_text") or "")[:3000]
+    doc_name = doc.get("display_name") or doc.get("original_filename") or ""
+    doc_summary = doc.get("ai_summary") or ""
+
+    # If no text available, try to extract text on-the-fly
+    if not doc_text and not doc_summary:
+        storage_path = doc.get("storage_path", "")
+        if storage_path and os.path.exists(storage_path):
+            try:
+                import aiofiles
+                async with aiofiles.open(storage_path, 'rb') as f:
+                    content = await f.read()
+                from routers.documents import try_ocr_or_fallback
+                extracted = await try_ocr_or_fallback(
+                    doc.get("original_filename", "document"), content, doc.get("mime_type", "")
+                )
+                if extracted:
+                    doc_text = extracted[:3000]
+                    # Save extracted text for future use
+                    await db.documents.update_one(
+                        {"id": document_id},
+                        {"$set": {"ocr_text": extracted, "ocr_processed": True}}
+                    )
+                    logger.info(f"On-the-fly text extraction for {document_id}: {len(extracted)} chars")
+            except Exception as e:
+                logger.warning(f"On-the-fly extraction failed for {document_id}: {e}")
+
+    # Still no text? Return empty suggestions with a hint
+    if not doc_text and not doc_summary:
+        return {
+            "success": False,
+            "error": "Kein Text im Dokument gefunden. Das Dokument konnte nicht gelesen werden.",
+            "suggested_tags": doc.get("tags") or [],
+            "suggested_cases": []
+        }
+
     # Get existing cases for matching
     cases = await db.cases.find(
         {"user_id": user["id"]},
@@ -599,15 +637,6 @@ async def suggest_document_metadata(
         {"$limit": 50}
     ]
     existing_tags = [t["_id"] async for t in db.documents.aggregate(all_tags_pipeline)]
-
-    doc_text = doc.get("ocr_text", "")[:3000]
-    doc_name = doc.get("display_name", doc.get("original_filename", ""))
-    doc_summary = doc.get("ai_summary", "")
-
-    if not doc_text and not doc_summary:
-        return {"success": True, "suggested_tags": doc.get("tags", []), "suggested_cases": []}
-
-    user_language = "de"
 
     cases_str = "\n".join([f"- ID:{c['id']} | {c['title']} | {c.get('description','')[:100]}" for c in cases]) if cases else "Keine Fälle vorhanden"
     tags_str = ", ".join(existing_tags) if existing_tags else "Keine"
@@ -1388,7 +1417,7 @@ async def generate_email_with_ai(
             if doc:
                 doc_name = context.get("document_name") or doc.get("display_name") or doc.get("original_filename")
                 doc_summary = context.get("document_summary") or doc.get("ai_summary") or ""
-                doc_text = doc.get("ocr_text", "")[:2000]
+                doc_text = (doc.get("ocr_text") or "")[:2000]
                 context_info = f"\n\nKONTEXT - DOKUMENT '{doc_name}':\nZusammenfassung: {doc_summary}\nInhalt (Auszug): {doc_text}"
         
         if email_id:

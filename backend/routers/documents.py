@@ -385,7 +385,7 @@ async def upload_document(
         "mime_type": file.content_type or "application/octet-stream",
         "size": len(content),
         "document_type": document_type,
-        "ocr_text": None,
+        "ocr_text": "",
         "ocr_processed": False,
         "ai_analyzed": False,
         "tags": [],
@@ -495,7 +495,7 @@ async def reprocess_document(document_id: str, force: bool = False, user: dict =
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
     
-    ocr_text = document.get("ocr_text")
+    ocr_text = document.get("ocr_text") or ""
     
     # Reprocess if no text OR if force flag is set
     if (not ocr_text or force) and document.get("storage_path") and os.path.exists(document["storage_path"]):

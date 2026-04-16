@@ -258,12 +258,20 @@ export default function Documents() {
         setSelectedTags(sugResp.data.suggested_tags || []);
         setSelectedCaseIds((sugResp.data.suggested_cases || []).map(c => c.id));
       } else {
-        toast.error(sugResp.data.error || 'KI-Vorschläge konnten nicht geladen werden');
-        setSuggestionDoc(null);
+        const errorMsg = sugResp.data.error || 'KI-Vorschläge konnten nicht geladen werden';
+        toast.error(errorMsg);
+        // If there's no text but we still have tags/cases in response, show them
+        if (sugResp.data.suggested_tags?.length > 0) {
+          setSuggestions(sugResp.data);
+          setSelectedTags(sugResp.data.suggested_tags || []);
+        } else {
+          setSuggestionDoc(null);
+        }
       }
     } catch (error) {
       console.error('Suggestion error:', error);
-      toast.error('KI-Vorschläge fehlgeschlagen');
+      const msg = error.response?.data?.detail || error.response?.data?.error || 'KI-Vorschläge fehlgeschlagen. Bitte versuchen Sie "Erneut analysieren".';
+      toast.error(msg);
       setSuggestionDoc(null);
     }
     setLoadingSuggestions(false);

@@ -426,7 +426,7 @@ Inhalt:
             "size": attachment["size"],
             "storage_path": attachment["storage_path"],
             "document_type": "other",
-            "ocr_text": None,
+            "ocr_text": "",
             "ocr_processed": False,
             "ai_analyzed": False,
             "tags": [],

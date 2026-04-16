@@ -817,20 +817,35 @@ frontend:
         agent: "testing"
         comment: "✅ TESTED v1.1.4: Health endpoint correctly returns version 1.1.4. GET /api/health shows {'status': 'healthy', 'service': 'casedesk-backend', 'version': '1.1.4'}. Authentication system working perfectly with test credentials (andi.trenter@gmail.com/admin123)."
 
+backend:
+  - task: "Suggest-Metadata None Handling Bug Fix v1.5.1"
+    implemented: true
+    working: true
+    file: "routers/ai.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED v1.5.1: Suggest-Metadata None Handling Bug Fix working perfectly! Comprehensive testing with 100% pass rate (6/6 tests passed). ✅ Authentication system working perfectly with test credentials (andi.trenter@gmail.com/admin123). ✅ Health endpoint correctly shows version 1.5.1. ✅ Document upload endpoint working perfectly - uploads files and extracts text correctly. ✅ CRITICAL BUG FIX VERIFIED: suggest-metadata endpoint now safely handles None ocr_text values using (doc.get('ocr_text') or '') pattern. No more TypeError: 'NoneType' object is not subscriptable. ✅ Tested with empty files, binary files, and corrupted documents - all handled gracefully without 500 errors. ✅ Reprocess endpoint also working correctly with force=true flag. ✅ On-the-fly text extraction implemented when no text available. The None handling bug fix is fully operational and prevents crashes when documents have None ocr_text values."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 14
+  test_sequence: 15
   run_ui: false
 
 test_plan:
   current_focus:
-    - "AI Chat with Action Preview Cards"
+    - "Suggest-Metadata None Handling Bug Fix v1.5.1"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "testing"
+    message: "🎉 v1.5.1 SUGGEST-METADATA BUG FIX TESTING COMPLETE: Comprehensive testing of CaseDesk AI v1.5.1 suggest-metadata None handling bug fix successful with 100% pass rate (6/6 tests passed). ✅ System setup and authentication working perfectly with test credentials (andi.trenter@gmail.com/admin123). ✅ Health endpoint correctly returns version 1.5.1. ✅ Document upload endpoint working perfectly - uploads files and extracts text correctly. ✅ CRITICAL BUG FIX VERIFIED: suggest-metadata endpoint (POST /api/documents/suggest-metadata) now safely handles None ocr_text values using the (doc.get('ocr_text') or '') pattern instead of crashing with TypeError: 'NoneType' object is not subscriptable. ✅ Tested with multiple edge cases: empty files, binary files, and corrupted documents - all handled gracefully without 500 errors. ✅ Reprocess endpoint (POST /api/documents/{id}/reprocess?force=true) also working correctly. ✅ On-the-fly text extraction implemented when no text available. The None handling bug fix is fully operational and prevents crashes when email attachments or documents have None ocr_text values. All requested bug fix scenarios tested and verified working."
   - agent: "testing"
     message: "✅ v1.0.4 FRONTEND TESTING COMPLETE: All requested features tested and working. Login successful with andi.trenter@gmail.com/admin123. Health Dashboard shows both Ollama and OpenAI services with 'Aktiv' indicators (OpenAI active, Ollama unavailable due to container not reachable). Settings > KI-Konfiguration allows switching between Ollama/OpenAI with OpenAI API key input field visible. Settings > Updates tab correctly displays version 1.0.4. Only infrastructure issue: Ollama container not reachable (not a UI/frontend issue). Screenshots captured for all tested features."
   - agent: "main"
@@ -851,3 +866,5 @@ agent_communication:
     message: "🔍 v1.1.3 BACKEND TESTING COMPLETE: Tested CaseDesk AI v1.1.3 NEW document format support with 60% success rate (3/5 tests passed). ✅ Authentication system working perfectly with test credentials (andi.trenter@gmail.com/admin123). ✅ Health endpoint correctly shows version 1.1.3. ✅ Document upload endpoint working perfectly - uploads files and extracts text correctly. ❌ CRITICAL ISSUES FOUND: 1) VERSION MISMATCH - Health endpoint shows v1.1.3 but system version endpoint shows v1.0.6, creating inconsistency. 2) DOCUMENT REPROCESS BUG - POST /api/documents/{id}/reprocess?force=true fails with 'No text to process' even when text extraction succeeds (logs confirm 582 chars extracted). Root cause: endpoint logic error where AI analysis failure causes entire reprocess to fail, even when text extraction succeeds. Backend partially functional but has critical bugs requiring fixes."
   - agent: "testing"
     message: "🎉 v1.1.4 BACKEND TESTING COMPLETE: Comprehensive testing of CaseDesk AI v1.1.4 NEW Excel reading and Word generation features successful with 100% pass rate (5/5 tests passed). ✅ Authentication system working perfectly with test credentials (andi.trenter@gmail.com/admin123). ✅ Health endpoint correctly shows version 1.1.4. ✅ NEW Word Document Generation endpoint working perfectly - creates Word documents with letter template, proper formatting, and all form parameters processed correctly. ✅ Generated documents appear correctly in document list. ✅ Excel reading capability confirmed - functions for .xlsx and .xls files implemented. ✅ CRITICAL BUGS FIXED: 1) System version endpoint now correctly returns v1.1.4 (version mismatch resolved). 2) Document reprocess endpoint now works correctly - returns success when text extraction succeeds regardless of AI analysis outcome. All requested v1.1.4 features tested and operational. Backend fully functional."
+  - agent: "main"
+    message: "v1.5.0 BUG FIX: Fixed critical None handling bug in suggest_document_metadata endpoint. When email attachments are imported, ocr_text was initialized as None. The suggest-metadata endpoint crashed with TypeError when trying None[:3000]. Fixed: 1) ocr_text None→'' in email_service.py and documents.py 2) Safe None handling with (or '') pattern in ai.py suggest-metadata, reprocess, and background_sync 3) Added on-the-fly text extraction in suggest-metadata when no text available 4) Better error messages in frontend Documents.js"

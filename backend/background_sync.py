@@ -410,8 +410,8 @@ class BackgroundEmailSync:
             if not document:
                 return
             
-            # Get text content (OCR text or original)
-            content = document.get("ocr_text", "")
+            # Get text content (OCR text or original) - handle None safely
+            content = document.get("ocr_text") or ""
             if not content:
                 logger.debug(f"No text content for AI analysis in document {doc_id}")
                 return
