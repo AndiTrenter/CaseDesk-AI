@@ -1,7 +1,7 @@
 {
   "version": "1.5.1",
-  "release_date": "2026-04-09",
-  "release_notes": "FIX: Kalender-Event-Erstellung via KI-Assistent, Datum-Parsing für 'morgen' und andere relative Daten korrigiert",
+  "release_date": "2026-04-16",
+  "release_notes": "FIX: KI-Vorschläge bei E-Mail-Anhängen fehlgeschlagen - None-Handling behoben, automatische Text-Extraktion hinzugefügt",
   "changelog_url": "https://raw.githubusercontent.com/AndiTrenter/CaseDesk-AI/main/CHANGELOG.md",
   "update_instructions": {
     "auto": "Docker-Socket muss im Backend-Container gemountet sein",

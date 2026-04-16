@@ -1,5 +1,25 @@
 # CaseDesk AI - Changelog
 
+## Version 1.5.1 (2026-04-16) - BUGFIX: KI-Vorschläge bei E-Mail-Anhängen
+
+### 🚨 Kritische Fixes
+- **BEHOBEN**: `KI-Vorschläge fehlgeschlagen` bei E-Mail-Anhängen
+  - **Root Cause**: `ocr_text` wurde als `None` initialisiert. Der `suggest-metadata` Endpoint crashte mit `TypeError: 'NoneType' object is not subscriptable` bei `None[:3000]`
+  - `ocr_text` wird jetzt als `""` statt `None` initialisiert (email_service.py, documents.py)
+  - Sicheres None-Handling mit `(doc.get("ocr_text") or "")` Pattern überall
+
+### ✨ Verbesserungen
+- **Automatische Text-Extraktion**: Wenn ein Dokument keinen Text hat, versucht der `suggest-metadata` Endpoint automatisch Text zu extrahieren (On-the-fly OCR)
+- **Bessere Fehlermeldungen**: Statt generischem "fehlgeschlagen" zeigt die App jetzt "Kein Text im Dokument gefunden" an
+
+### 📦 Dateien geändert
+- `backend/routers/ai.py` (None-Handling + On-the-fly Text-Extraktion)
+- `backend/email_service.py` (ocr_text: None → "")
+- `backend/routers/documents.py` (ocr_text: None → "" + sicheres Reprocess)
+- `backend/background_sync.py` (None-Handling bei AI-Analyse)
+- `frontend/src/pages/Documents.js` (bessere Fehlermeldungen)
+- `version.json` (Release-Notes aktualisiert)
+
 ## Version 1.4.0 (2026-04-08) - KRITISCHER BUGFIX RELEASE
 
 ### 🚨 Kritische Fixes
